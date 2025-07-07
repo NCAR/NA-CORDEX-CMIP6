@@ -2,7 +2,7 @@
 
 ### High-Resolution Climate Projections for North America
 
-As global climate models (GCMs) continue to advance, they remain limited in spatial detail—capturing patterns at scales too coarse to inform decisions about local infrastructure, water resources, or extreme event risks. That’s where regional downscaling comes in. By applying regional climate models (RCMs) over limited domains, we can translate global-scale projections into actionable insights at the community and watershed level, capturing critical features like mountain ranges, coastlines, and land–atmosphere interactions.
+As global climate models (GCMs) continue to advance, they remain limited in spatial detail—capturing patterns at scales too coarse to inform decisions about local infrastructure, water resources, or extreme event risks. By applying regional climate models (RCMs) over limited domains, we can translate global-scale projections into actionable insights at the community and watershed level, capturing critical features like mountain ranges, coastlines, and land–atmosphere interactions.
 
 ### The NA-CORDEX Framework
 
