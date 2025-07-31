@@ -16,32 +16,26 @@ This repository contains general information, workflow scripts, and post-process
 
 
 ### Simulation Goals:
-A historical simulation for 70 years (1950-2020).
-Two future simulations : SSP2-4.5 and SSP3-7.0 (2020-2100)
-Target is 7-10 GCMs : (700-1000 total years)
-MPI-ESM2-1-HR
-NorESM2-MM
-CESM2
-TBD
+We plan to conduct a 70-year historical simulation (1950–2020) and two future scenario simulations (2020–2100) under SSP2-4.5 and SSP3-7.0. The target ensemble includes 7–10 GCMs, totaling 700–1000 simulation years, with initial models including MPI-ESM2-1-HR, NorESM2-MM, and CESM2.
 
 ### WRF Version: 4.6.1
 This model was compiled on NCAR's Derecho high-performance computing machine, and can be found at the following location (/glade/u/home/wrfhelp/derecho_pre_compiled_code/). Namelists for ongoing simulations are provided in this repo and will be updated.
 
 ### WRF Physics Configuration: 
-Cumulus : Kain-Fritsch (10)
-Microphysics : Thompson (8) 
-LW/SW Radiation : RRTMG (4) 
-PBL : Yonsei University (1) 
-Surface : Revised MM5 (1) 
-Land Surface Model : Noaa-MP (4) 
+* Cumulus : Kain-Fritsch (10)
+* Microphysics : Thompson (8) 
+* LW/SW Radiation : RRTMG (4) 
+* PBL : Yonsei University (1) 
+* Surface : Revised MM5 (1) 
+* Land Surface Model : Noaa-MP (4) 
 
 ### Spectral Nudging: 
-GUV: 3E-04
-GT: 3E-04
-GPH: 3E-04
-GQ: 0.0
+* GUV: 3E-04
+* GT: 3E-04
+* GPH: 3E-04
+* GQ: 0.0
 
 ### Other physics/dynamics options:
-Fractional sea ice = 1
-Seaice_thickness_default: 1
-RADT : 12
+* Fractional sea ice = 1
+* Seaice_thickness_default: 1
+* RADT : 12
