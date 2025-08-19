@@ -59,9 +59,9 @@ wrfout_hour_fname = "wrfout_hour_d01_"  # Leading string of wrfout files with ho
 wrfout_fx_fname   = "wrfout_5day_d01_"  # Leading string of wrfout files with LANDFRAC and HGT
 
 # path to wrfoutput
-wrfout_path       = "/glade/derecho/scratch/jsallen/NA-CORDEX-CMIP6/MPI-ESM1-2-HR_HIST_002/wrf_d01/1977_chunk"
+wrfout_path       = ""
 # path to wrfinput for fixed fields (land fraction and terrain height)
-wrfinp_path       = "/glade/derecho/scratch/jsallen/NA-CORDEX-CMIP6/MPI-ESM1-2-HR_HIST_002/wrf_d01/1977_chunk" 
+wrfinp_path       = "" 
 
 # -------------------------------
 # END OF USER DEFINED VARIABLES
