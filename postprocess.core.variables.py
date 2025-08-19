@@ -800,20 +800,20 @@ def clean_fx(ds):
 # Call functions
 # --------------
 # Variables with accumulated quantities
-#clean_rsds(ds_acc_hr)
-#clean_rlds(ds_acc_hr)
-#clean_pr(ds_acc_hr)
+clean_rsds(ds_acc_hr)
+clean_rlds(ds_acc_hr)
+clean_pr(ds_acc_hr)
 
 # Variables that don't need time-step from previous file
-#clean_evspsbl(ds_hr)
-#clean_tas(ds_hr)
-#clean_hurs(ds_hr)
-#clean_ps(ds_hr)
-#clean_psl(ds_hr)
-#clean_huss(ds_hr)
-#clean_evspsbl(ds_hr)
-#clean_sfcWind(ds_hr, ds_fx)
-#clean_clt(ds_hr)
+clean_evspsbl(ds_hr)
+clean_tas(ds_hr)
+clean_hurs(ds_hr)
+clean_ps(ds_hr)
+clean_psl(ds_hr)
+clean_huss(ds_hr)
+clean_evspsbl(ds_hr)
+clean_sfcWind(ds_hr, ds_fx)
+clean_clt(ds_hr)
 
 # Time invariant variables
 clean_fx(ds_fx_inp)
