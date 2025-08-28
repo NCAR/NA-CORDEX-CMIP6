@@ -51,8 +51,8 @@ increment: '03'
 
 
 # ===============================================
-  Specify input and output directory information
-  and the input and output filename templates
+#  Specify input and output directory information
+#  and the input and output filename templates
 # ===============================================
 
 
