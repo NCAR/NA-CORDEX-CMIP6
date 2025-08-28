@@ -1,0 +1,72 @@
+# ==============
+  Specify years and months of interest
+# ==============
+
+# Indicate continuous years by setting continuous_years to True, False otherwise
+# just make sure to have the appropriate year information specified.  The
+# Python script will select which settings to read in based on this value.
+continuous_years: True
+
+# start, end, increment
+start_year: '1970'
+end_year: '1980'
+year_increment: 1
+
+# or indicate a list of specific years
+# inline format
+years:  ['1970', '1980']
+
+# or extended format
+#years:
+#  - '1970'
+#  -  '1973'
+#  -  '1981'
+
+
+# inline
+months_list: ['01', '03', '05', '07', '12']
+
+# or
+# months_list:
+#  - 01
+#  - 05
+
+# ==============
+  Specify input and output directory information
+  and the input and output file templates
+# ==============
+
+# Specifically set a dir path
+input_dir: '/glade/u/minnawin/tas'
+
+# or set the environment variable
+# input_dir: !ENV '$INPUT_DIR'
+
+
+# using the year and month placeholders, which will be replaced by the
+# years and months (from settings above) in the Python script
+input_filename_template: "tas_NAM_12_ERA5_evaluation_{$year}!_{$month}!.nc"
+
+output_dir: '/glade/u/minnawin/NA_CORDEX/output/tas'
+
+# using year and month placeholders based on the year and month settings
+# above. Substitution with actual year and month will be performed in the Python
+# script
+output_filename_template: "tas_NAM_12_ERA5_evaluation_{$year}!_{$month}!.png"
+
+
+
+# ==============
+  Plot specifics
+# ==============
+# Plotting information for 3-panels
+panel1_title: 'Great Lakes'
+panel2_title: 'Entire Region'
+panel3_title: 'Near Boulder, CO'
+panel1_line_marker_color: '#ffff0000'
+panel2_line_marker_color: '#ffffffff'
+panel3_line_marker_color: "orange"
+
+# orientation of panels vertical or horizontal
+panel_orientation: 'horizontal'
+plot_type: 'png'
