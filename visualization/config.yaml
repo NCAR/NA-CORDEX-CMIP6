@@ -1,5 +1,5 @@
 # =========================
-  Specify years of interest
+# Specify years of interest
 # =========================
 
 # Indicate years by list (vs. start/stop/increment) setting years_by_list to True, False otherwise.
@@ -61,29 +61,32 @@ increment: '03'
 #========================
 
 # Specifically set a full dir path
-input_dir: '/glade/u/minnawin/tas'
+input_dir: '/Users/minnawin/NA-CORDEX/Data/wrf_d01'
 
 # or use an environment variable that is already set (via .bash_profile, .bashrc, or export)
 # input_dir: !ENV '$INPUT_DIR'
 
 # Use year and month placeholders. The Python script will replace these placeholders by the
 # years and months settings (from above).
-input_filename_template: "tas_NAM_12_ERA5_evaluation_{$year}!_{$month}!.nc"
+input_filename_template: "wrfrst_d01_{$year!}-{$month!}-{$day!}_00:00:00"
 
 #========================
 # Output dir and filename
 #========================
-output_dir: '/glade/u/minnawin/NA_CORDEX/output/tas'
+output_dir: '/Users/minnawin/NA-CORDEX/NA-CORDEX-CMIP6/output'
 
 # Use the year and month placeholders based on the year and month settings
 # (specified above). Substitution with actual year and month will be performed in the Python
 # script
-output_filename_template: "tas_NAM_12_ERA5_evaluation_{$year}!_{$month}!.png"
+output_filename_template: "wrfrst_d01_{"
 
-
+# ==================
+# Data variable of interest
+# ==================
+data_var: 'T2'
 
 # ==============
-  Plot specifics
+#  Plot specifics
 # ==============
 # Plotting information for 3-panels
 panel1_title: 'Great Lakes'
