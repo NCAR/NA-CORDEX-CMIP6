@@ -1,56 +1,80 @@
-# ==============
-  Specify years and months of interest
-# ==============
+# =========================
+  Specify years of interest
+# =========================
 
-# Indicate continuous years by setting continuous_years to True, False otherwise
-# just make sure to have the appropriate year information specified.  The
-# Python script will select which settings to read in based on this value.
-continuous_years: True
+# Indicate years by list (vs. start/stop/increment) setting years_by_list to True, False otherwise.
+# Make sure to have the appropriate year information specified.  The
+# Python script will select which settings to use, based on this value.
+years_by_list: True
 
-# start, end, increment
+
+# list of specific years 
+years:
+  - '1970'
+  - '1973'
+  - '1981'
+
+# same as above, except inline format
+#years:  ['1970', '1973','1981']
+
+# or indicate years by start, end, increment
 start_year: '1970'
 end_year: '1980'
 year_increment: 1
 
-# or indicate a list of specific years
-# inline format
-years:  ['1970', '1980']
 
-# or extended format
-#years:
-#  - '1970'
-#  -  '1973'
-#  -  '1981'
+# ===============================================
+# Specify months of interest
+# ===============================================
+
+# Specify months either by a list of months, or by start/end/increment
+# Set months_by_list to True to specify a list, False otherwise.
+# Python script will determine which settings to use, based on the value of
+# months_by_list.
+months_by_list: True
+
+months_list:
+  - '01'
+  - '03'
+  - '05'
+  - '07'
+  - '12'
+
+# same as above, except using inline format
+#months_list: ['01', '03', '05', '07', '12']
 
 
-# inline
-months_list: ['01', '03', '05', '07', '12']
+# months by start/end/increment
+month_start: '01'
+month_end: '12'
+increment: '03'
 
-# or
-# months_list:
-#  - 01
-#  - 05
 
-# ==============
+# ===============================================
   Specify input and output directory information
-  and the input and output file templates
-# ==============
+  and the input and output filename templates
+# ===============================================
 
-# Specifically set a dir path
+# Specifically set a full dir path
 input_dir: '/glade/u/minnawin/tas'
 
-# or set the environment variable
+#========================
+# Input dir and filename
+#========================
+# or use an environment variable that is already set (via .bash_profile, .bashrc, or export)
 # input_dir: !ENV '$INPUT_DIR'
 
-
-# using the year and month placeholders, which will be replaced by the
-# years and months (from settings above) in the Python script
+# Use year and month placeholders. The Python script will replace these placeholders by the
+# years and months settings (from above).
 input_filename_template: "tas_NAM_12_ERA5_evaluation_{$year}!_{$month}!.nc"
 
+#========================
+# Output dir and filename
+#========================
 output_dir: '/glade/u/minnawin/NA_CORDEX/output/tas'
 
-# using year and month placeholders based on the year and month settings
-# above. Substitution with actual year and month will be performed in the Python
+# Use the year and month placeholders based on the year and month settings
+# (specified above). Substitution with actual year and month will be performed in the Python
 # script
 output_filename_template: "tas_NAM_12_ERA5_evaluation_{$year}!_{$month}!.png"
 
