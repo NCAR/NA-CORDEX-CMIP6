@@ -46,8 +46,8 @@ months_list:
 
 # months by start/end/increment
 month_start: '01'
-month_end: '12'
-increment: '03'
+month_end:  '12'
+month_increment: '03'
 
 
 # ===============================================
@@ -61,14 +61,14 @@ increment: '03'
 #========================
 
 # Specifically set a full dir path
-input_dir: '/Users/minnawin/NA-CORDEX/Data/wrf_d01'
+#input_dir: '/Users/minnawin/NA-CORDEX/Data/wrf_d01'
 
 # or use an environment variable that is already set (via .bash_profile, .bashrc, or export)
-# input_dir: !ENV '$INPUT_DIR'
+input_dir:  ${INPUT_DIR}
 
 # Use year and month placeholders. The Python script will replace these placeholders by the
 # years and months settings (from above).
-input_filename_template: "wrfrst_d01_{$year!}-{$month!}-{$day!}_00:00:00"
+input_filename_template: "wrfrst_d01_{year}-{month}-{day}_00:00:00"
 
 #========================
 # Output dir and filename
@@ -78,7 +78,7 @@ output_dir: '/Users/minnawin/NA-CORDEX/NA-CORDEX-CMIP6/output'
 # Use the year and month placeholders based on the year and month settings
 # (specified above). Substitution with actual year and month will be performed in the Python
 # script
-output_filename_template: "wrfrst_d01_{"
+output_filename_template: "wrfrst_d01_{data_var}_{year}.png"
 
 # ==================
 # Data variable of interest
