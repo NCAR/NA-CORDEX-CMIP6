@@ -55,12 +55,14 @@ increment: '03'
   and the input and output filename templates
 # ===============================================
 
-# Specifically set a full dir path
-input_dir: '/glade/u/minnawin/tas'
 
 #========================
 # Input dir and filename
 #========================
+
+# Specifically set a full dir path
+input_dir: '/glade/u/minnawin/tas'
+
 # or use an environment variable that is already set (via .bash_profile, .bashrc, or export)
 # input_dir: !ENV '$INPUT_DIR'
 
