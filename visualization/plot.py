@@ -1,141 +1,14 @@
+# ============================*
+# ** Copyright UCAR (c) 2025
+# ** University Corporation for Atmospheric Research (UCAR)
+# ** National Center for Atmospheric Research (NCAR)
+# ** P.O.Box 3000, Boulder, Colorado, 80307-3000, USA
+# ============================*
+
 import os
-import sys
-from typing import Iterator
-
-import yaml
-from collections import namedtuple
 from matplotlib import pyplot as plt
-import netCDF4 as nc
-import xarray as xr
+import util
 
-
-
-def parse_config(config_file):
-    '''
-        Parses the YAML configuration file
-
-        Args:
-            config_file: the name of the YAML config file
-
-        Returns:
-            settings: a dictionary representation of the settings
-    '''
-
-    # Check that the config file exists
-    if  not os.path.exists(config_file):
-        raise FileExistsError(f"Config file '{config_file}' does not exist, check your config file.")
-
-    with open(config_file, 'r') as file:
-        settings = yaml.safe_load(file)
-
-    return settings
-
-def get_input_files(settings:dict):
-    '''
-        Create the names of the input filenames based on the list or the start,stop
-        information provided in the config file.
-
-        Args:
-           @param settings: a dictionary representation of the settings in the config file
-
-        Returns:
-           a list of input files including full path
-    '''
-
-    # Use the INPUT_DIR env variable
-    input_dir = os.getenv('INPUT_DIR')
-
-    # If INPUT_DIR env var not specified, read list from config file
-    if not input_dir:
-        # use the specified input directory
-        input_dir = settings['input_dir']
-        print(f"using specified input directory, no environment set: {input_dir}")
-
-        # Check for non-existent and empty input directory
-        try:
-           os.path.exists(input_dir)
-           if not os.listdir(input_dir):
-               sys.exit(f"ERROR \n {input_dir} is empty. Please check your config file.")
-        except  FileNotFoundError:
-           print("Directory is non-existent")
-
-    # All the years either by values specified in the YAML config file or
-    # by start,end, increment values specified in the YAML config file.
-
-    if settings['years_by_list']:
-        all_years = settings['years']
-        print(f" all years, specified in config: {all_years}")
-    else:
-        print("generate list of years from start, end, increment")
-        year_start = int(settings['start_year'])
-        year_end = int(settings['end_year']) +1
-        year_increment = settings['year_increment']
-        all_years = [cur_yr  for cur_yr  in range(year_start, year_end, year_increment)]
-
-# All the months, either specified in the YAML config or create based on
-# start,end, increment values specified in YAML config file.
-    if settings['months_by_list']:
-        print("use specified list of months from config file")
-        all_months = settings['months_list']
-    else:
-        print("generate list of all months based on start,end, increment")
-        month_start = int(settings['month_start'])
-        month_end = int(settings['month_end']) + 1
-        month_increment = int(settings['month_increment'])
-        all_months = [cur for cur in range(month_start, month_end, month_increment)]
-
-    all_dates:namedtuple = get_dates_by_start_end(all_years, all_months)
-
-# Generate the full-path filenames of input data files
-    missing_input_files = []
-    all_input_files = []
-    for i in range(len(all_dates) ):
-        print(f"year: {all_dates[i].year}, month: {all_dates[i].month}")
-        substituted_year_month = settings['input_filename_template'].replace('${YEAR}', all_dates[i].year).replace('${'
-                                                                                                             'MONTH}', all_dates[i].month)
-        fname_extension = settings['input_filename_extension']
-        if fname_extension:
-            filename = substituted_year_month + fname_extension
-            full_filename = os.path.join(input_dir, filename)
-        else:
-            full_filename = os.path.join(input_dir, substituted_year_month)
-
-        print(f"full input filename: {full_filename}")
-        # Verify file exists, if not, keep a list of missing files and print them later
-        if not os.path.exists(full_filename):
-            missing_input_files.append(full_filename)
-        else:
-            all_input_files.append(full_filename)
-
-    if len(missing_input_files) > 0:
-      print(f" Missing input files: {missing_input_files}")
-
-    return all_input_files
-
-def get_dates_by_start_end(year_list, month_list) -> list[namedtuple]:
-    """
-         Determine all the dates (years and months)
-
-    Args:
-        Input:
-           @param year_list:  a list of all years of interest
-           @param month_list: a list of all months of interest
-    Returns:
-            a list of named tuples containing with all combination of years
-            with months
-    """
-
-
-    YEARMONTH = namedtuple("YEARMONTH", ["year", "month"])
-    all_dates = []
-
-
-    for cur_year in year_list:
-        for cur_month in month_list:
-            y_m = YEARMONTH(cur_year, cur_month)
-            all_dates.append(y_m)
-
-    return all_dates
 
 
 def make_time_series_plots(all_input_files:list, settings:dict) -> None:
@@ -153,41 +26,126 @@ def make_time_series_plots(all_input_files:list, settings:dict) -> None:
              None, generates a figure with three time-series plots/panels
     """
 
-    data_by_day: xr.DataArray = extract_data(all_input_files)
-
-
-def extract_data(all_input_files: list) -> xr.DataArray:
-    """
-          Extract data as an Xarray DataArray, then resample to the daily mean
-          temperature or other specified variable ( variable name specified in the
-          netCDF file).
-
-    :param all_input_files:
-    :return:
-
-          Args:
-          @param all_input_files:  A list of all the data files (full filepath)
-
-          Returns:
-             an Xarray DataArray containing resampled mean daily data
-
-    """
-    # Extract the data from all the input data files
-    variable_of_interest = settings['data_var']
-    ncdata = xr.open_mfdataset(all_input_files,
-    concat_dim = 'time', combine = 'nested', chunks = {'time': 1, 'lat': 236, 'lon': 376}, data_vars = 'all',)[data_var]
-    # aggregation method: mean, median, or sum
-    if not settings['aggregation_method']:
-
-        aggregate = 'mean'
+    ncdata_tuple = util.extract_and_resample(settings, all_input_files)
+    # Axis labels and x-tick orientations are the same for all subplots
+    if not  settings['x_axis_label']:
+        x_axis_label = 'Time'
     else:
-        aggregate = settings['aggregation_method']
-    print(f"aggregate by : {aggregate}")
+        x_axis_label = settings['x_axis_label']
+
+    if not settings['y_axis_label']:
+        if ncdata_tuple.units == 'C':
+            y_axis_label = ncdata_tuple.orig_data.long_name + " (degrees " + ncdata_tuple.units + ")"
+        else:
+            y_axis_label = ncdata_tuple.orig_data.long_name + " (" + ncdata_tuple.units + ")"
+
+    else:
+       y_axis_label = settings['y_axis_label']
+
+    # x-tick label rotation (90 for easier reading, 0 for horizontal labels).
+    # If unspecified, use default of horizontal labels.
+    if not settings['x_tick_rotation']:
+        x_tick_rotation = 0
+    else:
+        x_tick_rotation = settings['x_tick_rotation']
+
+    # Set the orientation of the three time-series plots: horizontal or
+    # vertical.  Vertical is the default.
+    panel_orientation = settings['panel_orientation']
+
+    # three axes as a list
+    ax = [0,1,2]
+
+    if panel_orientation == 'horizontal':
+        # 1 row, 3 columns
+        fig, (ax[0], ax[1], ax[2]) = plt.subplots(1, 3)
+    else:
+        # 3 rows, 1 column (vertically stacked)
+        fig, (ax[0], ax[1], ax[2])  = plt.subplots(3)
+
+    # figure size
+    fig.set_figwidth(settings['fig_width'])
+    fig.set_figheight( settings['fig_height'])
+
+
+    # Generate plots in the order specified in the config file
+    # If the entire region is first, then it will be the top plot (vertical orientation)
+    # or left-most (horizontal orientation).
+    areas_of_interest = settings['areas_of_interest']
+    for idx, area in enumerate(areas_of_interest):
+        if area == 'region':
+            region_of_interest = util.slice_data(ncdata_tuple, settings,  criteria="region")
+            ax[idx].set_title(settings['region_title'])
+            ax[idx].set_ylabel(y_axis_label)
+            ax[idx].set_xlabel(x_axis_label)
+            plt.sca(ax[idx])
+            plt.xticks(rotation=x_tick_rotation)
+            ax[idx].plot(region_of_interest.time, region_of_interest)
+
+        elif area == 'entire':
+            entire_domain = util.slice_data(ncdata_tuple, settings)
+            ax[idx].set_title(settings['entire_title'])
+            ax[idx].set_ylabel(y_axis_label)
+            ax[idx].set_xlabel(x_axis_label)
+            plt.sca(ax[idx])
+            plt.xticks(rotation=x_tick_rotation)
+            ax[idx].plot(entire_domain.time, entire_domain)
+
+        elif area == 'point':
+            point_of_interest  = util.slice_data( ncdata_tuple, settings, criteria="point")
+            ax[idx].set_title(settings['point_title'])
+            ax[idx].set_ylabel(y_axis_label)
+            ax[idx].set_xlabel(x_axis_label)
+            plt.sca(ax[idx])
+            plt.xticks(rotation=x_tick_rotation)
+            ax[idx].plot(point_of_interest.time, point_of_interest)
+
+    # Save the plot
+    output_name = create_output_name(settings)
+    plt.savefig(output_name)
+
+    # plt.show()
+
+
+def create_output_name(settings:dict ) -> str:
+    ''''
+        Create the output filename with full path
+
+        Args:
+            @param settings: The dictionary representation of the settings in the
+                                       configuration file.
+        Returns:
+            the name of the output file (with full path)
+    '''
+
+    # Use the OUTPUT_DIR env variable if set
+    output_dir = os.getenv('OUTPUT_DIR')
+
+    # If OUTPUT_DIR env var not specified, read list from config file
+    if not output_dir:
+        output_dir = settings['output_dir']
+        # If output directory does not exist, create it
+        os.makedirs(output_dir, exist_ok=True)
+
+    # create the plot filename including the full path
+    fname = settings['output_filename_template']
+    plot_name = fname + '.png'
+    full_plot_filename = os.path.join(output_dir, plot_name)
+
+    return full_plot_filename
 
 if __name__ == "__main__":
+
+    # Read in the YAML config file that resides in the same directory as this file.
+    current_directory = os.getcwd()
     yaml_file = "config.yaml"
-    print(f"Evaluate yaml config file {yaml_file}")
-    settings:dict = parse_config(yaml_file)
-    all_input_files: list = get_input_files(settings)
+    file_path = os.path.join(current_directory, yaml_file)
+    settings: dict = util.parse_config(yaml_file)
+
+    # Get input data
+    all_input_files: list = util.get_input_files(settings)
+
+    # Generate time-series plots
     make_time_series_plots(all_input_files, settings)
 
+    print("Plotting complete.")
