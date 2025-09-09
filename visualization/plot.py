@@ -6,6 +6,7 @@
 # ============================*
 
 import os
+import sys
 from matplotlib import pyplot as plt
 import util
 
@@ -28,12 +29,12 @@ def make_time_series_plots(all_input_files:list, settings:dict) -> None:
 
     ncdata_tuple = util.extract_and_resample(settings, all_input_files)
     # Axis labels and x-tick orientations are the same for all subplots
-    if not  settings['x_axis_label']:
+    if  settings['x_axis_label'] is None:
         x_axis_label = 'Time'
     else:
         x_axis_label = settings['x_axis_label']
 
-    if not settings['y_axis_label']:
+    if settings['y_axis_label'] is None:
         if ncdata_tuple.units == 'C':
             y_axis_label = ncdata_tuple.orig_data.long_name + " (degrees " + ncdata_tuple.units + ")"
         else:
@@ -44,7 +45,7 @@ def make_time_series_plots(all_input_files:list, settings:dict) -> None:
 
     # x-tick label rotation (90 for easier reading, 0 for horizontal labels).
     # If unspecified, use default of horizontal labels.
-    if not settings['x_tick_rotation']:
+    if settings['x_tick_rotation'] is None:
         x_tick_rotation = 0
     else:
         x_tick_rotation = settings['x_tick_rotation']
@@ -122,10 +123,15 @@ def create_output_name(settings:dict ) -> str:
     output_dir = os.getenv('OUTPUT_DIR')
 
     # If OUTPUT_DIR env var not specified, read list from config file
-    if not output_dir:
-        output_dir = settings['output_dir']
-        # If output directory does not exist, create it
-        os.makedirs(output_dir, exist_ok=True)
+    if output_dir is None:
+
+        # if the output directory setting is unspecified, exit
+        if settings['output_dir'] is None:
+            sys.exit("No output directory specified as an ENV var or in the config file.")
+        else:
+           output_dir = settings['output_dir']
+           # If output directory does not exist, create it
+           os.makedirs(output_dir, exist_ok=True)
 
     # create the plot filename including the full path
     fname = settings['output_filename_template']

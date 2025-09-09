@@ -77,6 +77,7 @@ input_filename_extension: .nc
 # Output dir and filename
 #========================
 output_dir: '/Users/minnawin/NA-CORDEX/output'
+#output_dir:
 
 # Use the year and month placeholders based on the year and month settings
 # (specified above). Substitution with actual year and month will be performed in the Python
@@ -87,13 +88,10 @@ output_filename_template: "tas_NAM-12_ERA5_evaluation_r1ip1f1_NCAR_WRF461_v1-r1_
 # Data variable of interest
 # ==================
 data_var: 'tas'
-# aggregate by mean or median (if unspecified, the default is mean)
-aggregation_method: mean
-
 
 # If temp is in Kelvin, convert to degrees Celsius
 # default is True
-convert_to_celsius: True
+convert_to_celsius: False
 
 # ==============
 #  Plot specifics
@@ -102,8 +100,8 @@ convert_to_celsius: True
 # "Areas" of interest (plotting will be in the order in which these are specified).
 #
 areas_of_interest:
-  - 'region'
   - 'entire'
+  - 'region'
   - 'point'
 
 # Plotting information for 3-panels
@@ -140,9 +138,6 @@ y_axis_label:
 
 # x_axis tick orientation: value in degrees
 x_tick_rotation: 0
-
-# Convert to degrees Celsius, default is True if unset.
-convert_to_Celsius: True
 
 # orientation of panels 'vertical 'or 'horizontal' (if undefined, the default is vertical)
 # 'horizontal' is 1 column, 3 rows of time-series plots and

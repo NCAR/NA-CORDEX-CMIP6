@@ -53,9 +53,12 @@ def get_input_files(settings:dict):
     input_dir = os.getenv('INPUT_DIR')
 
     # If INPUT_DIR env var not specified, read list from config file
-    if not input_dir:
-        # use the specified input directory
-        input_dir = settings['input_dir']
+    if input_dir is None:
+        if settings['input_dir'] in None:
+            sys.exit("No input dir specified as ENV var or in config file.")
+        else:
+            # use the specified input directory
+            nput_dir = settings['input_dir']
 
         # Check for non-existent and empty input directory
         try:
@@ -160,42 +163,36 @@ def extract_and_resample(settings:dict, all_input_files: list) -> namedtuple:
     """
     # Extract the data from all the input data files
     variable_of_interest = settings['data_var']
-    ncdata = xr.open_mfdataset( all_input_files,  concat_dim='time', combine='nested', chunks={'time': 1, 'lat': 236, 'lon': 376}, data_vars='all', )[variable_of_interest]
+    ncdata = xr.open_mfdataset(all_input_files,  concat_dim='time', combine='nested', chunks={'time': 1, 'lat': 236, 'lon': 376}, data_vars='all', )[variable_of_interest]
 
     # lats and lons
     lat:xr.DataArray = ncdata.lat
     lon:xr.DataArray = ncdata.lon
 
-    # Aggregation method: mean, or median. Use mean if this setting is unspecified.
-    if not settings['aggregation_method']:
-        aggregate = 'mean'
-    else:
-        aggregate = settings['aggregation_method']
-
-    convert_to_celsius = settings['convert_to_celsius']
-
-    # First, resample data for daily mean or median temperature
-    if aggregate == 'median':
-        ncdata_day_K = ncdata.resample(time='D').median()
-    else:
-        ncdata_day_K = ncdata.resample(time='D').mean()
-
+    # Aggregation, for temperature get the mean
     # Resample the data for daily mean or median temperature
-    if aggregate == 'median':
-        ncdata_day_K = ncdata.resample(time='D').median()
-    else:
-        ncdata_day_K = ncdata.resample(time='D').mean()
+    ncdata_day_K = ncdata.resample(time='D').mean()
 
-    # Convert temperature from Kelvin to degrees Celsius if requested.
+    # Convert units from K to degrees C if setting not specified
+    if settings['convert_to_celsius'] is None:
+        convert_to_celsius = True
+    else:
+        convert_to_celsius = settings['convert_to_celsius']
+
+    # Define the named tuple containing all the useful information for plotting
     DATA_BY_DAY = namedtuple("DATA_BY_DAY", ["data_day", "units", "lat", "lon", "orig_data"])
-    if convert_to_celsius :
-        ncdata_day_C = ncdata_day_K - KELVIN_TO_CELSIUS
-        data_C = DATA_BY_DAY(ncdata_day_C, "C", lat, lon, ncdata)
-        return data_C
+
+    if convert_to_celsius:
+        ncdata_day = ncdata_day_K - KELVIN_TO_CELSIUS
+        units = "C"
     else:
         # Data in Kelvin
-        data_K  = DATA_BY_DAY(ncdata_day_K, 'K', lat, lon, ncdata)
-        return data_K
+        ncdata_day = ncdata_day_K
+        units = "K"
+
+    data = DATA_BY_DAY(ncdata_day, units, lat, lon, ncdata)
+
+    return data
 
 
 def slice_data(ncdata:namedtuple, settings: dict, criteria='full')->xr.DataArray:
