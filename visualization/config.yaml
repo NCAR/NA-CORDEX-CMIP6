@@ -107,17 +107,6 @@ region_title: 'Great Lakes'
 entire_title: 'Entire Region'
 point_title: 'KBDU Boulder, CO'
 
-# For different colorer lines for each panel, explicitly specify a color
-region_line_color: '#ffff0000'
-entire_line_color: '#ffffffff'
-point_line_color: "orange"
-
-# or use the same color for all three (in this example, the region line color variable
-# is set with an '&' and referenced by '*" preceding the variable name
-#region_line_color: &lcolor '#ffff0000'
-#entire_line_color: *lcolor
-#point_line_color: *lcolor
-
 # Define Great Lakes as lat,lon format based on upper and lower left and right
 # points.
 region_upper_left: [50.2, -89.5]
@@ -145,6 +134,9 @@ plot_type: 'png'
 
 fig_width: 12
 fig_height: 11
+
+# Line color for all time-series subplots
+line_color: "#4B0092"
 
 
 
