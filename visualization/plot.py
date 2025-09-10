@@ -9,7 +9,8 @@ import os
 import sys
 from matplotlib import pyplot as plt
 import util
-
+import argparse
+import pathlib
 
 
 def make_time_series_plots(all_input_files:list, settings:dict) -> None:
@@ -72,6 +73,7 @@ def make_time_series_plots(all_input_files:list, settings:dict) -> None:
     # Generate plots in the order specified in the config file
     # If the entire region is first, then it will be the top plot (vertical orientation)
     # or left-most (horizontal orientation).
+    line_color = settings['line_color']
     areas_of_interest = settings['areas_of_interest']
     for idx, area in enumerate(areas_of_interest):
         if area == 'region':
@@ -81,7 +83,7 @@ def make_time_series_plots(all_input_files:list, settings:dict) -> None:
             ax[idx].set_xlabel(x_axis_label)
             plt.sca(ax[idx])
             plt.xticks(rotation=x_tick_rotation)
-            ax[idx].plot(region_of_interest.time, region_of_interest)
+            ax[idx].plot(region_of_interest.time, region_of_interest, color=line_color)
 
         elif area == 'entire':
             entire_domain = util.slice_data(ncdata_tuple, settings)
@@ -90,7 +92,7 @@ def make_time_series_plots(all_input_files:list, settings:dict) -> None:
             ax[idx].set_xlabel(x_axis_label)
             plt.sca(ax[idx])
             plt.xticks(rotation=x_tick_rotation)
-            ax[idx].plot(entire_domain.time, entire_domain)
+            ax[idx].plot(entire_domain.time, entire_domain, color=line_color)
 
         elif area == 'point':
             point_of_interest  = util.slice_data( ncdata_tuple, settings, criteria="point")
@@ -99,7 +101,10 @@ def make_time_series_plots(all_input_files:list, settings:dict) -> None:
             ax[idx].set_xlabel(x_axis_label)
             plt.sca(ax[idx])
             plt.xticks(rotation=x_tick_rotation)
-            ax[idx].plot(point_of_interest.time, point_of_interest)
+            ax[idx].plot(point_of_interest.time, point_of_interest, color=line_color)
+
+    # Reduce overlapping titles
+    plt.tight_layout()
 
     # Save the plot
     output_name = create_output_name(settings)
@@ -142,11 +147,15 @@ def create_output_name(settings:dict ) -> str:
 
 if __name__ == "__main__":
 
-    # Read in the YAML config file that resides in the same directory as this file.
-    current_directory = os.getcwd()
-    yaml_file = "config.yaml"
-    file_path = os.path.join(current_directory, yaml_file)
-    settings: dict = util.parse_config(yaml_file)
+    # Get the YAML config file path
+    parser = argparse.ArgumentParser(description='Parsing YAML config')
+    parser.add_argument(
+        'config_file', type=str,
+        help='the full path to config file'
+        )
+    config_file = parser.parse_args().config_file
+
+    settings: dict = util.parse_config(config_file)
 
     # Get input data
     all_input_files: list = util.get_input_files(settings)
