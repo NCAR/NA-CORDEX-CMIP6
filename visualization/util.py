@@ -54,7 +54,7 @@ def get_input_files(settings:dict):
 
     # If INPUT_DIR env var not specified, read list from config file
     if input_dir is None:
-        if settings['input_dir'] in None:
+        if settings['input_dir'] is None:
             sys.exit("No input dir specified as ENV var or in config file.")
         else:
             # use the specified input directory
