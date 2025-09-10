@@ -15,6 +15,12 @@ from collections import namedtuple
 import argparse
 
 
+"""
+   Description:
+   utility methods for reading and parsing a YAML config file,
+   extracting, resampling, and slicing input data
+"""
+
 # Globals
 KELVIN_TO_CELSIUS = 273.15
 
@@ -39,7 +45,7 @@ def read_config_from_command_line():
     return args.Path
 
 def parse_config(config_file):
-    '''
+    """
         Parses the YAML configuration file
 
         Args:
@@ -47,7 +53,7 @@ def parse_config(config_file):
 
         Returns:
             settings: a dictionary representation of the settings
-    '''
+    """
 
     # Check that the config file exists
     if  not os.path.exists(config_file):
@@ -58,9 +64,9 @@ def parse_config(config_file):
 
     return settings
 
-def get_input_files(settings:dict):
-    '''
-        Create the names of the input filenames based on the list or the start,stop
+def get_input_files(settings:dict) ->list:
+    """
+        Create the names of the input filenames based on the list or the start, stop, and step
         information provided in the config file.
 
         Args:
@@ -68,7 +74,7 @@ def get_input_files(settings:dict):
 
         Returns:
            a list of input files including full path
-    '''
+    """
 
     # Use the INPUT_DIR env variable
     input_dir = os.getenv('INPUT_DIR')
@@ -148,8 +154,8 @@ def get_dates_by_start_end(settings: dict, year_list, month_list) -> list[namedt
     Args:
         Input:
             @param settings: the dictionary representation of the config settings
-           @param year_list:  a list of all years of interest
-           @param month_list: a list of all months of interest
+            @param year_list:  a list of all years of interest
+            @param month_list: a list of all months of interest
     Returns:
             a list of named tuples with combination of years
             with months
