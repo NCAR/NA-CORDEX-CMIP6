@@ -97,7 +97,7 @@ def get_input_files(settings:dict):
         year_start = int(settings['start_year'])
         year_end = int(settings['end_year']) +1
         year_increment = settings['year_increment']
-        all_years = [cur_yr  for cur_yr  in range(year_start, year_end, year_increment)]
+        all_years = [str(cur_yr) for cur_yr  in range(year_start, year_end, year_increment)]
 
 # All the months, either specified in the YAML config or create based on
 # start, end, and increment values specified in YAML config file.
@@ -107,7 +107,7 @@ def get_input_files(settings:dict):
         month_start = int(settings['month_start'])
         month_end = int(settings['month_end']) + 1
         month_increment = int(settings['month_increment'])
-        all_months = [cur for cur in range(month_start, month_end, month_increment)]
+        all_months = [str(cur).zfill(2) for cur in range(month_start, month_end, month_increment)]
 
     all_dates:namedtuple = get_dates_by_start_end(settings, all_years, all_months)
 
@@ -118,7 +118,7 @@ def get_input_files(settings:dict):
         substituted_year_month = (
             settings['input_filename_template'].
             replace('${YEAR}', all_dates[i].year).
-            replace('${MONTH}', all_dates[i].month))
+            replace('${MONTH}', all_dates[i].month) )
         fname_extension = settings['input_filename_extension']
         if fname_extension:
             filename = substituted_year_month + fname_extension
@@ -133,7 +133,11 @@ def get_input_files(settings:dict):
             all_input_files.append(full_filename)
 
     if len(missing_input_files) > 0:
-      print(f" Missing input files: {missing_input_files}")
+      print(f"WARNING: Missing input files: {missing_input_files}")
+
+    if len(all_input_files) == 0:
+      print("ERROR: No input files found for specified time(s), please check your configuration file.")
+      sys.exit(1)
 
     return all_input_files
 
