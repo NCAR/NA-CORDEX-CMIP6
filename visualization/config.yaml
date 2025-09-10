@@ -64,7 +64,6 @@ input_dir:  ${INPUT_DIR}
 
 # or specify an input directory:
 #input_dir: /Users/minnawin/NA-CORDEX/Data/processed
-#input_dir: /Users/minnawin/empty
 
 # Use year and month placeholders. The Python script will replace these placeholders by the
 # years and months settings (from above).
@@ -73,11 +72,11 @@ input_filename_template: "tas_NAM-12_ERA5_evaluation_r1i1p1f1_NCAR_WRF461_v1-r1_
 # Specify the input filename extension, if unspecified, assume there is no filename
 # extension for netCDF files.
 input_filename_extension: .nc
+
 #========================
 # Output dir and filename
 #========================
 output_dir: '/Users/minnawin/NA-CORDEX/output'
-#output_dir:
 
 # Use the year and month placeholders based on the year and month settings
 # (specified above). Substitution with actual year and month will be performed in the Python
@@ -98,36 +97,35 @@ convert_to_celsius: False
 # ==============
 
 # "Areas" of interest (plotting will be in the order in which these are specified).
-#
 areas_of_interest:
   - 'entire'
   - 'region'
   - 'point'
 
-# Plotting information for 3-panels
+# Titles
 region_title: 'Great Lakes'
 entire_title: 'Entire Region'
 point_title: 'KBDU Boulder, CO'
 
-# For different colorer lines for each panel, explicitly specifiy a color
+# For different colorer lines for each panel, explicitly specify a color
 region_line_color: '#ffff0000'
 entire_line_color: '#ffffffff'
 point_line_color: "orange"
 
-# or use the same color for all three
+# or use the same color for all three (in this example, the region line color variable
+# is set with an '&' and referenced by '*" preceding the variable name
 #region_line_color: &lcolor '#ffff0000'
 #entire_line_color: *lcolor
 #point_line_color: *lcolor
 
-# Define Great Lakes as lat,lon  format
-# lat in degrees North
-# lon in degrees East
+# Define Great Lakes as lat,lon format based on upper and lower left and right
+# points.
 region_upper_left: [50.2, -89.5]
 region_lower_left: [43.3,  -95.685]
 region_upper_right: [ 44.0, -75.1,]
 region_lower_right: [39.4, -82.6]
 
-# Boulder Municipal Airport
+# Boulder Municipal Airport (KBDU)
 point_lat: 40.04
 point_lon: -105.23
 
