@@ -12,10 +12,31 @@ import yaml
 import xarray as xr
 import numpy as np
 from collections import namedtuple
+import argparse
 
 
 # Globals
 KELVIN_TO_CELSIUS = 273.15
+
+def read_config_from_command_line():
+    """
+        Read the YAML config file from the command line
+
+        Args:
+
+        Returns:
+            The full path to the config file
+    """
+    # Create Parser
+    parser = argparse.ArgumentParser(description='Read in config file')
+
+    # Add arguments
+    parser.add_argument('Path', metavar='path', type=str,
+                        help='the full path to config file')
+
+    # Execute the parse_args() method
+    args = parser.parse_args()
+    return args.Path
 
 def parse_config(config_file):
     '''
@@ -30,7 +51,7 @@ def parse_config(config_file):
 
     # Check that the config file exists
     if  not os.path.exists(config_file):
-        raise FileExistsError(f"Config file '{config_file}' does not exist, check your config file.")
+        raise FileExistsError("Config file ", config_file, " does not exist, check your config file.")
 
     with open(config_file, 'r') as file:
         settings = yaml.safe_load(file)
@@ -58,7 +79,7 @@ def get_input_files(settings:dict):
             sys.exit("No input dir specified as ENV var or in config file.")
         else:
             # use the specified input directory
-            nput_dir = settings['input_dir']
+            input_dir = settings['input_dir']
 
         # Check for non-existent and empty input directory
         try:
