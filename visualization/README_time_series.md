@@ -164,25 +164,25 @@ Configurable settings (YAML config file):
                   point_lon: -105.23
 
       **Labelling the x- and y-axis**
-
-        - **x_axis_label**
-          - if unspecified, set to "Time"
+    
+       - **x_axis_label**
+         - if unspecified, set to "Time"
 
                   x_axis_label:
 
-          - specifying a custom label
+         - specifying a custom label
     
                   x_axis_label: "Year and month"
 
 
-        - **y_axis_label**
-          - if unspecified, use the long name (from data) and the units
+      - **y_axis_label**
+         - if unspecified, use the long name (from data) and the units
 
-                  x_axis_label:
+                  y_axis_label:
 
-          - specifying a custom label
+         - specifying a custom label
 
-                  x_axis_label: "Temperature in degrees Celsius"
+                  y_axis_label: "Temperature in degrees Celsius"
   
         
 
@@ -208,21 +208,24 @@ Configurable settings (YAML config file):
                  fig_height: 11
 
       - **line_color**
-         - the color of the line in the time-series plot
-         - the color applies to all three subplots/panels
-         - values can be specified by:
-            - color name 
-            - hexadecimal value
+        - the color of the line in the time-series plot
+        - the color applies to all three subplots/panels
+        - values can be specified by:
+          - color name
        
-                 line_color: "#4B0092"
+                  line_color: "purple"
+              
+          - hexadecimal value
+       
+                  line_color: "#4B0092"
 
-           A colorblind-friendly purple
+            - A hexadecimal value for a colorblind-friendly purple
       
 Getting started
 -
 
 - copy the config.yaml file to your working directory
-- rename config.yaml *if desired* to a more descriptive name
+- rename config.yaml *if desired*, to a more descriptive name
 - modify the following for your data:
   - filename_template
   - input_dir
@@ -253,7 +256,7 @@ Getting started
 
  **Generate A Plot**
 
- - use the npl-2025b conda environment on the NCAR HPC's
+ - use the npl-2025b conda environment available on the NCAR HPCs
  - clone the code from the Github repository and save it to the appropriate directory (hereafter referred to as $HOME)
  - from the command line:
 
@@ -262,4 +265,6 @@ Getting started
 
      - replace */path/to/your* with the actual path to where the config.yaml file is located
      - *$HOME* refers to the directory where the NA-CORDEX-CMIP6 code was saved
+     - the config.yaml file does not need to reside in the same directory as the plot.py module
+       
 
