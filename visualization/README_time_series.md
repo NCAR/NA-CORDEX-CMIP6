@@ -26,6 +26,9 @@ Files
 - *util.py*
    - utility functions
    - reading and parsing the YAML config file
+   - resampling data
+   - converting temperature units in the data
+   - slicing data
  
 - *plot.py*
    - creates the three time-series plots based on settings in the YAML config file
