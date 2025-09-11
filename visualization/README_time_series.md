@@ -3,8 +3,8 @@ Generating time-series plots for three areas of interest
 
 Background
 -
-Generate three time-series plots for temperature data from netCDF NA-CORDEX post-processed data. The
-data is resampled to a daily mean.
+Generate three time-series plots for temperature data from netCDF NA-CORDEX post-processed data. Two lines are 
+plotted: the 5-day mean temperature (as more prominent, darker line), and the hourly temperature. 
 
 The three areas of interest are:
 - the entire data domain
