@@ -222,15 +222,44 @@ Getting started
 -
 
 - copy the config.yaml file to your working directory
-- rename it if desired to a more descriptive name
+- rename config.yaml *if desired* to a more descriptive name
 - modify the following for your data:
   - filename_template
+  - input_dir
+  - output_dir
+  - output_filename_template
+  - data_var
+    - if the temperature variable is different from that specified in the example config file
 
-- Best practice is to utilize environment variables (ENV var) set via .bash_profile, .bashrc, or export commands (for BASH shell).
-   - use appropriate alternatives for other shells
-   - set the ENV variables for INPUT_DIR and OUTPUT_DIR
-- 
+- set up the INPUT_DIR and OUTPUT_DIR environment variables if not specifying these explicitly
+    - for BASH shell, some possible methods
+       - .bashrc
+       - .bash_profile
+       - sourcing a file that defines these
+     
+         setup_env.bash
+     
+              #!/bin/bash
+
+              export INPUT_DIR=/glade/u/home/username/project/Data/postprocessed
+              export OUTPUT_DIR=/glade/u/home/username/project/Output/plots
+  
 
 
+         and sourcing at the command line:
 
+              source setup_env.bash
+
+
+ **Generate A Plot**
+
+ - use the npl-2025b conda environment on the NCAR HPC's
+ - clone the code from the Github repository and save it to the appropriate directory (hereafter referred to as $HOME)
+ - from the command line:
+
+            python $HOME/NA-CORDEX-CMIP6/visualization/plot.py /path/to/your/config.yaml
+
+
+     - replace */path/to/your* with the actual path to where the config.yaml file is located
+     - *$HOME* refers to the directory where the NA-CORDEX-CMIP6 code was saved
 
