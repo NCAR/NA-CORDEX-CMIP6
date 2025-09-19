@@ -227,9 +227,13 @@ Configurable settings (YAML config file):
       - **line_width**
         - the width of the 5-day mean temperature line
 
+                 line_width: 1
+
       - **alpha_value**
         - the level of transparency of the hourly temperature line
         - values <1 result in more transparency (fainter line)
+
+                 alpha : 0.2
       
 Getting started
 -
