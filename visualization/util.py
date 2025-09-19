@@ -174,9 +174,8 @@ def get_dates_by_start_end(settings: dict, year_list, month_list) -> list[namedt
 
 def extract_and_resample(settings:dict, all_input_files: list) -> namedtuple:
     """
-          Extract data as an Xarray DataArray, then resample to the daily mean
-          temperature or other specified variable ( variable name specified in the
-          netCDF file).
+          Extract data as an Xarray DataArray, then resample to the 5-day mean
+          temperature (variable name specified in the netCDF file).
 
           Args:
           @param settings:  the dictionary representation of the settings in the YAML
@@ -185,12 +184,13 @@ def extract_and_resample(settings:dict, all_input_files: list) -> namedtuple:
 
           Returns:
              a named tuple of :
-               - an Xarray DataArray containing resampled mean (or median) daily data
-             in Kelvin or degrees Celsius
+               - an Xarray DataArray containing resampled 5-day mean data
+               - an Xarray DataArray containing the hourly data
+              in Kelvin or degrees Celsius
               - the units for temperature as "K" or "C"
               - an Xarray DataArray of lats
               - an Xarray DataArray of lons
-              - the original data, before resampling
+              - the original data, before resampling and converting units
     """
     # Extract the data from all the input data files
     variable_of_interest = settings['data_var']
@@ -200,9 +200,10 @@ def extract_and_resample(settings:dict, all_input_files: list) -> namedtuple:
     lat:xr.DataArray = ncdata.lat
     lon:xr.DataArray = ncdata.lon
 
-    # Aggregation, for temperature get the mean
-    # Resample the data for daily mean or median temperature
-    ncdata_day_K = ncdata.resample(time='D').mean()
+    # Aggregation, for temperature get the 5 day mean and hourly data
+    ncdata_5day_K = ncdata.resample(time='5D').mean()
+    ncdata_by_hr_K = ncdata.resample(time='h').ffill()
+
 
     # Convert units from K to degrees C if setting not specified
     if settings['convert_to_celsius'] is None:
@@ -211,22 +212,25 @@ def extract_and_resample(settings:dict, all_input_files: list) -> namedtuple:
         convert_to_celsius = settings['convert_to_celsius']
 
     # Define the named tuple containing all the useful information for plotting
-    DATA_BY_DAY = namedtuple("DATA_BY_DAY", ["data_day", "units", "lat", "lon", "orig_data"])
+    DATA_BY_DAY_HR = namedtuple("DATA_BY_DAY_HR", ["data_5day",  "data_by_hour","units", "lat", "lon", "orig_data"])
 
     if convert_to_celsius:
-        ncdata_day = ncdata_day_K - KELVIN_TO_CELSIUS
+        ncdata_5day = ncdata_5day_K - KELVIN_TO_CELSIUS
+        ncdata_by_hour = ncdata_by_hr_K - KELVIN_TO_CELSIUS
         units = "C"
     else:
         # Data in Kelvin
-        ncdata_day = ncdata_day_K
+        ncdata_5day = ncdata_5day_K
+        ncdata_by_hour = ncdata_by_hr_K
+        # ncdata_by_hour = ncdata
         units = "K"
 
-    data = DATA_BY_DAY(ncdata_day, units, lat, lon, ncdata)
+    data_tuple = DATA_BY_DAY_HR(ncdata_5day, ncdata_by_hour,  units, lat, lon, ncdata)
 
-    return data
+    return data_tuple
 
 
-def slice_data(ncdata:namedtuple, settings: dict, criteria='full')->xr.DataArray:
+def slice_data(ncdata:namedtuple, settings: dict, criteria='full')->tuple[xr.DataArray]:
     """
           Subset the data for an area of interest, such as a region or specific point.
           These are specified by a list of lats and lons or a lat,lon pair (for a
@@ -238,20 +242,25 @@ def slice_data(ncdata:namedtuple, settings: dict, criteria='full')->xr.DataArray
                                     lon (Xarray DataArray).
           @param settings: dictionary representation of the settings in the config
                                     file
-          @param criteria: the area of interest, either "full", "region", or "point"
-                                  Default is "full" (full domain), "region'  is a region defined
-                                  by points specified in the YAML config file, and
-                                  "point" is a specific point (i.e. station,  city, etc.) that
-                                  is specified in the YAML config file.
+          @param criteria: the area of interest, either  'all', "region" or "point"
+                                  - "all" is the entire domain
+                                  - "region'  is a region defined by points specified in the YAML config file
+                                  - "point" is a specific point (i.e. station,  city, etc.) that
+                                     is specified in the YAML config file.
           Returns:
-             an Xarray DataArray with the resampled data for the specified domain or point
+              a tuple of:
+               - an Xarray DataArray for the resampled/sliced 5-day average temp for the specified domain or point
+               - an Xarray DataArray for the sliced hourly temperature (raw data) for the specified domain or point
 
     """
 
     # Retrieve the Xarray DataArray data from the named tuple
 
-    # data sampled by day
-    data = ncdata.data_day
+    # data sampled by 5day mean
+    data_5d = ncdata.data_5day
+
+    # data hourly
+    data_h = ncdata.data_by_hour
 
     # data before sampling
     orig_data = ncdata.orig_data
@@ -264,20 +273,31 @@ def slice_data(ncdata:namedtuple, settings: dict, criteria='full')->xr.DataArray
         target_lon = settings['point_lon']
 
         # Distance from each grid point to target location
-        dist = np.sqrt(
-            (data['lat'] - target_lat)**2 +
-            (data['lon'] - target_lon)**2
+        dist_5day = np.sqrt(
+            (data_5d['lat'] - target_lat)**2 +
+            (data_5d['lon'] - target_lon)**2
+            )
+
+        dist_by_hr = np.sqrt(
+            (data_h['lat'] - target_lat)**2 +
+            (data_h['lon'] - target_lon)**2
             )
 
         # lats and lons are indexed, so get corresponding lat and lon
         # values via unravel_index().
-        flat_index = dist.argmin()
-        dims = dist.shape
+        flat_index_5d = dist_5day.argmin()
+        dims_5d = dist_5day.shape
+
+        flat_index_h = dist_by_hr.argmin()
+        dims_h = dist_by_hr.shape
 
         # indices of the minimum distance value in the distance array, dist
-        j,i = np.unravel_index(flat_index, dims)
-        temp_point = data[:, j,i]
-        return temp_point
+        j,i = np.unravel_index(flat_index_5d, dims_5d)
+        temp_point_5d = data_5d[:, j,i]
+
+        j_h, i_h = np.unravel_index(flat_index_h, dims_h)
+        temp_point_by_hr = data_h[:,j_h, i_h]
+        return temp_point_5d,  temp_point_by_hr
 
     elif criteria == 'region':
         # Create a 'box' from the min and max lons and lats
@@ -296,18 +316,47 @@ def slice_data(ncdata:namedtuple, settings: dict, criteria='full')->xr.DataArray
         min_lat = min(region_lats)
         min_lon = min(region_lons)
 
-        region_temp = data.where(
+        region_temp_5d = data_5d.where(
             (lat >= min_lat) &
             (lat <= max_lat) &
             (lon >= min_lon) &
             (lon <= max_lon)
             ).mean(dim=('y', 'x'), skipna=True)
 
-        return region_temp
+        region_temp_by_hr = data_h.where(
+            (lat >= min_lat) &
+            (lat <= max_lat) &
+            (lon >= min_lon) &
+            (lon <= max_lon)
+            ).mean(dim=('y','x'), skipna=True)
+
+        return region_temp_5d, region_temp_by_hr
 
     else:
-        # Return the full domain's data
-        return data.mean(dim=('y', 'x'), skipna=True)
+        #'all'
+        min_lat = data_5d['lat'].min().values.min()
+        min_lon = data_5d['lon'].min().values.min()
+        max_lat = data_5d['lat'].max().values.max()
+        max_lon = data_5d['lon'].max().values.max()
+
+        full_domain_5d = data_5d.where(
+            (lat >= min_lat) &
+            (lat <= max_lat) &
+            (lon >= min_lon) &
+            (lon <= max_lon)
+            ).mean(dim=('y', 'x'), skipna=True)
+
+        full_domain_by_hr = data_h.where(
+            (lat >= min_lat) &
+            (lat <= max_lat) &
+            (lon >= min_lon) &
+            (lon <= max_lon)
+            ).mean(dim=('y', 'x'), skipna=True)
+
+        return full_domain_5d, full_domain_by_hr
+
+
+
 
 
 
