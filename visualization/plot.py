@@ -7,13 +7,14 @@
 
 import os
 import sys
+
+from jupyter_lsp.specs import PalantirPythonLanguageServer
 from matplotlib import pyplot as plt
 import util
 import argparse
-import pathlib
 
 
-def make_time_series_plots(all_input_files:list, settings:dict) -> None:
+def make_time_series_plots(all_input_files: list, settings: dict) -> None:
     """
          Generate the three time series plots: full domain, Great Lakes region,and Boulder Airport
          in either horizontal (1 row, 3 across) or vertical (1 column, 3 down)
@@ -30,7 +31,7 @@ def make_time_series_plots(all_input_files:list, settings:dict) -> None:
 
     ncdata_tuple = util.extract_and_resample(settings, all_input_files)
     # Axis labels and x-tick orientations are the same for all subplots
-    if  settings['x_axis_label'] is None:
+    if settings['x_axis_label'] is None:
         x_axis_label = 'Time'
     else:
         x_axis_label = settings['x_axis_label']
@@ -42,7 +43,7 @@ def make_time_series_plots(all_input_files:list, settings:dict) -> None:
             y_axis_label = ncdata_tuple.orig_data.long_name + " (" + ncdata_tuple.units + ")"
 
     else:
-       y_axis_label = settings['y_axis_label']
+        y_axis_label = settings['y_axis_label']
 
     # x-tick label rotation (90 for easier reading, 0 for horizontal labels).
     # If unspecified, use default of horizontal labels.
@@ -56,52 +57,75 @@ def make_time_series_plots(all_input_files:list, settings:dict) -> None:
     panel_orientation = settings['panel_orientation']
 
     # three axes as a list
-    ax = [0,1,2]
+    ax = [0, 1, 2]
 
     if panel_orientation == 'horizontal':
         # 1 row, 3 columns
         fig, (ax[0], ax[1], ax[2]) = plt.subplots(1, 3)
     else:
         # 3 rows, 1 column (vertically stacked)
-        fig, (ax[0], ax[1], ax[2])  = plt.subplots(3)
+        fig, (ax[0], ax[1], ax[2]) = plt.subplots(3)
 
     # figure size
     fig.set_figwidth(settings['fig_width'])
-    fig.set_figheight( settings['fig_height'])
-
+    fig.set_figheight(settings['fig_height'])
 
     # Generate plots in the order specified in the config file
     # If the entire region is first, then it will be the top plot (vertical orientation)
     # or left-most (horizontal orientation).
     line_color = settings['line_color']
+    line_width = settings['line_width']
+    alpha_value = settings['alpha']
     areas_of_interest = settings['areas_of_interest']
     for idx, area in enumerate(areas_of_interest):
         if area == 'region':
-            region_of_interest = util.slice_data(ncdata_tuple, settings,  criteria="region")
+            region_of_interest_5day, region_of_interest_by_hour = util.slice_data(
+                ncdata_tuple, settings,
+                criteria="region",
+                )
+
             ax[idx].set_title(settings['region_title'])
             ax[idx].set_ylabel(y_axis_label)
             ax[idx].set_xlabel(x_axis_label)
             plt.sca(ax[idx])
             plt.xticks(rotation=x_tick_rotation)
-            ax[idx].plot(region_of_interest.time, region_of_interest, color=line_color)
+            ax[idx].plot(
+                region_of_interest_5day.time, region_of_interest_5day, color=line_color,
+                linewidth=line_width,
+                )
+            ax[idx].plot(
+                region_of_interest_by_hour.time, region_of_interest_by_hour, color=line_color, linewidth=1,
+                alpha=alpha_value,
+                )
 
         elif area == 'entire':
-            entire_domain = util.slice_data(ncdata_tuple, settings)
+            entire_domain_5d, entire_domain_by_hour = util.slice_data(ncdata_tuple, settings, criteria="all")
             ax[idx].set_title(settings['entire_title'])
             ax[idx].set_ylabel(y_axis_label)
             ax[idx].set_xlabel(x_axis_label)
             plt.sca(ax[idx])
             plt.xticks(rotation=x_tick_rotation)
-            ax[idx].plot(entire_domain.time, entire_domain, color=line_color)
+            ax[idx].plot(entire_domain_5d.time, entire_domain_5d, color=line_color, linewidth=line_width)
+            ax[idx].plot(
+                entire_domain_by_hour.time, entire_domain_by_hour, color=line_color, linewidth=1,
+                alpha=alpha_value,
+                )
 
         elif area == 'point':
-            point_of_interest  = util.slice_data( ncdata_tuple, settings, criteria="point")
+            point_of_interest_5d, point_of_interest_by_hour = util.slice_data(
+                ncdata_tuple, settings,
+                criteria="point",
+                )
             ax[idx].set_title(settings['point_title'])
             ax[idx].set_ylabel(y_axis_label)
             ax[idx].set_xlabel(x_axis_label)
             plt.sca(ax[idx])
             plt.xticks(rotation=x_tick_rotation)
-            ax[idx].plot(point_of_interest.time, point_of_interest, color=line_color)
+            ax[idx].plot(point_of_interest_5d.time, point_of_interest_5d, color=line_color, linewidth=line_width)
+            ax[idx].plot(
+                point_of_interest_by_hour.time, point_of_interest_by_hour, color=line_color, linewidth=1,
+                alpha=alpha_value,
+                )
 
     # Reduce overlapping titles
     plt.tight_layout()
@@ -113,7 +137,7 @@ def make_time_series_plots(all_input_files:list, settings:dict) -> None:
     # plt.show()
 
 
-def create_output_name(settings:dict ) -> str:
+def create_output_name(settings: dict) -> str:
     ''''
         Create the output filename with full path
 
@@ -134,9 +158,9 @@ def create_output_name(settings:dict ) -> str:
         if settings['output_dir'] is None:
             sys.exit("No output directory specified as an ENV var or in the config file.")
         else:
-           output_dir = settings['output_dir']
-           # If output directory does not exist, create it
-           os.makedirs(output_dir, exist_ok=True)
+            output_dir = settings['output_dir']
+            # If output directory does not exist, create it
+            os.makedirs(output_dir, exist_ok=True)
 
     # create the plot filename including the full path
     fname = settings['output_filename_template']
@@ -145,13 +169,13 @@ def create_output_name(settings:dict ) -> str:
 
     return full_plot_filename
 
-if __name__ == "__main__":
 
+if __name__ == "__main__":
     # Get the YAML config file path
     parser = argparse.ArgumentParser(description='Parsing YAML config')
     parser.add_argument(
         'config_file', type=str,
-        help='the full path to config file'
+        help='the full path to config file',
         )
     config_file = parser.parse_args().config_file
 
