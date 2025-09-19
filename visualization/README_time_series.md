@@ -223,6 +223,13 @@ Configurable settings (YAML config file):
                   line_color: "#4B0092"
 
             - A hexadecimal value for a colorblind-friendly purple
+
+      - **line_width**
+        - the width of the 5-day mean temperature line
+
+      - **alpha_value**
+        - the level of transparency of the hourly temperature line
+        - values <1 result in more transparency (fainter line)
       
 Getting started
 -
