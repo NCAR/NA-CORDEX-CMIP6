@@ -76,7 +76,8 @@ input_filename_extension: .nc
 #========================
 # Output dir and filename
 #========================
-output_dir: '/Users/username/NA-CORDEX/output'
+output_dir: ${OUTPUT_DIR}
+#output_dir: '/Users/username/NA-CORDEX/output'
 
 # Use the year and month placeholders based on the year and month settings
 # (specified above). Substitution with actual year and month will be performed in the Python
@@ -136,7 +137,10 @@ plot_type: 'png'
 fig_width: 12
 fig_height: 11
 
-# Line color for all time-series subplots
-# color-blind friendly purple
+# Line color and width for all time-series subplots
 line_color: "#4B0092"
+line_width: 1
 
+# For the hourly line, indicate the transparency, values below 1 are more
+# transparent
+alpha : 0.2
