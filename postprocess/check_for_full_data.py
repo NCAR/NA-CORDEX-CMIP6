@@ -88,8 +88,8 @@ def check_dirs_for_data()-> bool:
         all_files = os.listdir(cur_dir)
         for cur_file in all_files:
             # Make sure we are only considering files with expected filename patterns.
-            unique_expression = "(.*\d{4})-\d{1,2}-\d{1,2}_\d{2}:\d{2}:\d{2}.*"
-            result = re.search(unique_expression,  cur_file)
+            # unique_expression = "(.*\d{4})-\d{1,2}-\d{1,2}_\d{2}:\d{2}:\d{2}.*"
+            result = re.search(r'(.*\d{4})-\d{1,2}-\d{1,2}_\d{2}:\d{2}:\d{2}.*',  cur_file)
             if result:
                 filename = result.group(1)
                 unique_filename_dates.add(filename)
