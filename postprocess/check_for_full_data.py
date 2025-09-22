@@ -101,6 +101,7 @@ def check_dirs_for_data()-> bool:
     # Check that all the expected filename patterns have been found for every
     # chunk directory (i.e. all the files named wrfout_d01_<date-time>,
     # wrfout_hour_d01_<date-time>, etc. are in each chunk directory)
+    # If any chunk directory has missing files, return False
 
     keys =  dir_to_unique_filenames.keys()
     for k in keys:
@@ -113,8 +114,10 @@ def check_dirs_for_data()-> bool:
         all_files_present = check_for_all_files(k, dir_to_unique_filenames)
         if not all_files_present:
             return False
-        else:
-            return True
+
+    # If we get here, all criteria are met for finding all the files in every chunk
+    # directory
+    return True
 
 
 def check_for_all_files(chunk_dir:str, dir_fnames:dict) -> bool:
