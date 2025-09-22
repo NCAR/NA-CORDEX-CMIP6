@@ -17,12 +17,24 @@ import re
     
 """
 
-#---------------------------
+#**************************
+# **** Set the following ****
+#**************************
+
 # Directory information
-#----------------------------
 # BASEDIR = '/glade/derecho/scratch/jsallen/NA-CORDEX-CMIP6/ERA5_HIST_E03/wrf_d01'
 BASEDIR = '/Users/minnawin/NA-CORDEX/Data/wrf_d01'
 POST_PROCESS_DIR = '/path/to/NA-CORDEX-CMIP6/postprocess'
+
+# Number of years for the simulation (e.g. simulation runs for 1977, 1987, 1997, 2007
+# is a total of 30 years)
+TOTAL_YEARS_IN_SIMULATION = 15
+
+# collect the seventh year of each decade
+SEVENTH_YEAR_OF_DECADE = False
+
+# increment of year, set to 1 for every year, 10 for every decade, etc.
+YEAR_INCREMENT = 15
 
 #--------------------------
 # Plotting Information
@@ -38,33 +50,16 @@ CMORIZE_SCRIPT = '/path/to/cmorize.compress.sh'
 POST_PROCESS_SCRIPT = 'postprocess.core.variables.py'
 
 
-#--------------------------------------
-# Other useful information
-#--------------------------------------
 
-# Number of years for the simulation (e.g. simulation runs for 1977, 1987, 1997, 2007
-# is a total of 30 years)
-TOTAL_YEARS_IN_SIMULATION = 15
-
+# CONSTANT values
 EXPECTED_NUM_FILES = 365
 EXPECTED_NUM_FILES_LEAP_YEAR = 366
-
-
-# Simulation information
-
-# collect the seventh year of each decade
-SEVENTH_YEAR_OF_DECADE = False
-
-# increment of year, set to 1 for every year, 10 for every decade, etc.
-YEAR_INCREMENT = 15
-
-# Filename patterns: wrfout_d01_<date-time>, wrfout_afwa_d01_<date-time>,
-# ..., wrfrst_d01_<date-time>
 EXPECTED_NUM_FILENAME_PATTERNS = 6
 
 def check_dirs_for_data()-> bool:
     """
-
+     Args:
+         None
      Returns
         bool: True if all files present to constitute a full year of data for each chunk
                  directory
@@ -104,15 +99,12 @@ def check_dirs_for_data()-> bool:
 
     # Check that all the expected filename patterns have been found for every
     # chunk directory (i.e. all the files named wrfout_d01_<date-time>,
-    # wrfout_hour_d01_<date-time>, etc. )
+    # wrfout_hour_d01_<date-time>, etc. are in each chunk directory)
 
     keys =  dir_to_unique_filenames.keys()
-    num_expected_filename_patterns = 2
     for k in keys:
-        # if len(dir_to_unique_filenames[k]) != EXPECTED_NUM_FILENAME_PATTERNS:
-        if len(dir_to_unique_filenames[k]) != num_expected_filename_patterns:
+        if len(dir_to_unique_filenames[k]) != EXPECTED_NUM_FILENAME_PATTERNS:
             return False
-
 
         # Check for the expected number of files (filename + date + time) in this
         # chunk directory.
@@ -162,7 +154,7 @@ def check_for_all_files(chunk_dir:str, dir_fnames:dict) -> bool:
 
     # This is the equivalent to the Unix/Linux command:
     #     find . -name "wrfout_d01_*" |wc -l
-    #  for each filename pattern
+    #  for every filename pattern
     for cur_file_pattern  in all_files_for_chunkdir:
        filepath = os.path.join(chunk_dir, cur_file_pattern )
        search_pattern = filepath + "*"
@@ -175,7 +167,7 @@ def check_for_all_files(chunk_dir:str, dir_fnames:dict) -> bool:
            if num_files != EXPECTED_NUM_FILES_LEAP_YEAR:
                return False
 
-    # if we get here, all criteria met (all the files for each filename pattern were
+    # if we get here, all criteria met (i.e. all the files for each filename pattern were
     # present).
     return True
 
@@ -238,8 +230,7 @@ def check_for_all_chunk_dirs()  -> bool:
         return None
 
 
-
-def is_leap_year(year:[str, int]) -> bool:
+def is_leap_year(year:str|int) -> bool:
     """
          Determines whether the input year is a Leap Year using the formula:
          - Evenly divisible by 4 (e.g. 2020, 2024) is a Leap Year,   but if it is evenly divisible by 100,
@@ -280,11 +271,16 @@ if __name__ == "__main__":
 
     if check_dirs_for_data():
         print("All data found, invoke postprocessing... ")
-        # Check if all post processing is done
+
+        # invoke postprocessing script
+
+        # invoke plotting
+        # set the env variables for the start, end, increment and other plot parameters
+
+
     else:
         print("Incomplete data")
-        # Call the plotting
-        # check if plotting is already done for this
+
 
 
 
