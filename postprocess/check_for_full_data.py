@@ -28,13 +28,13 @@ POST_PROCESS_DIR = '/path/to/NA-CORDEX-CMIP6/postprocess'
 
 # Number of years for the simulation (e.g. simulation runs for 1977, 1987, 1997, 2007
 # is a total of 30 years)
-TOTAL_YEARS_IN_SIMULATION = 15
+TOTAL_YEARS_IN_SIMULATION = 40
 
 # collect the seventh year of each decade
-SEVENTH_YEAR_OF_DECADE = False
+SEVENTH_YEAR_OF_DECADE = True
 
 # increment of year, set to 1 for every year, 10 for every decade, etc.
-YEAR_INCREMENT = 15
+YEAR_INCREMENT = 10
 
 #--------------------------
 # Plotting Information
@@ -49,7 +49,9 @@ PLOT_CONFIG = '/full/path/to/config.yaml'
 CMORIZE_SCRIPT = '/path/to/cmorize.compress.sh'
 POST_PROCESS_SCRIPT = 'postprocess.core.variables.py'
 
-
+#**************************
+#End of setting values
+# **************************
 
 # CONSTANT values
 EXPECTED_NUM_FILES = 365
@@ -88,7 +90,6 @@ def check_dirs_for_data()-> bool:
         all_files = os.listdir(cur_dir)
         for cur_file in all_files:
             # Make sure we are only considering files with expected filename patterns.
-            # unique_expression = "(.*\d{4})-\d{1,2}-\d{1,2}_\d{2}:\d{2}:\d{2}.*"
             result = re.search(r'(.*\d{4})-\d{1,2}-\d{1,2}_\d{2}:\d{2}:\d{2}.*',  cur_file)
             if result:
                 filename = result.group(1)
@@ -195,19 +196,16 @@ def check_for_all_chunk_dirs()  -> bool:
     # directories: YYYY_chunk (specifically YYY7_chunk).
     # Create a list of the chunk directories with their
     # full path only if ALL the expected dirs are present.
-    chunkdir_expression = "(\d{4})_chunk"
-    chunkdir7yr_expression = "(\d{3}7)_chunkdir"
-
     chunk_dirs = os.listdir(BASEDIR)
     chunk_dirs.sort()
     chunk_years = []
     for dir in chunk_dirs:
         if SEVENTH_YEAR_OF_DECADE:
             # YYY7_chunk
-            match = re.search(chunkdir7yr_expression, dir)
+            match = re.search(r'(\d{4})_chun', dir)
         else:
             # YYYY_chunk
-            match = re.match(chunkdir_expression, dir)
+            match = re.match(r'(\d{3}7)_chunkdi', dir)
         if match:
             chunk_years.append(match.group(1))
         else:
