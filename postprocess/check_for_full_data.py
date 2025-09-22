@@ -162,10 +162,10 @@ def check_for_all_files(chunk_dir:str, dir_fnames:dict) -> bool:
        num_files = len(glob.glob(search_pattern))
        year = re.match(r".*_(\d{4})", cur_file_pattern).group(1)
        if is_leap_year(year):
-           if num_files != EXPECTED_NUM_FILES:
+           if num_files != EXPECTED_NUM_FILES_LEAP_YEAR:
                return False
        else:
-           if num_files != EXPECTED_NUM_FILES_LEAP_YEAR:
+           if num_files != EXPECTED_NUM_FILES:
                return False
 
     # if we get here, all criteria met (i.e. all the files for each filename pattern were
