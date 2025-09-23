@@ -1,6 +1,8 @@
 import os
+import sys
 import glob
 import re
+import subprocess
 
 """
     Monitor the wrf_d01 directory for complete data (one year of data). 
@@ -22,9 +24,9 @@ import re
 #**************************
 
 # Directory information
-# BASEDIR = '/glade/derecho/scratch/jsallen/NA-CORDEX-CMIP6/ERA5_HIST_E03/wrf_d01'
-BASEDIR = '/Users/minnawin/NA-CORDEX/Data/wrf_d01'
-POST_PROCESS_DIR = '/path/to/NA-CORDEX-CMIP6/postprocess'
+
+BASEDIR = '/glade/derecho/scratch/jsallen/NA-CORDEX-CMIP6/ERA5_HIST_E03/wrf_d01'
+PARENTDIR = os.path.dirname(BASEDIR)
 
 # Number of years for the simulation (e.g. simulation runs for 1977, 1987, 1997, 2007
 # is a total of 30 years)
@@ -47,29 +49,39 @@ PLOT_CONFIG = '/full/path/to/config.yaml'
 # other Python script locations
 #--------------------------------------
 CMORIZE_SCRIPT = '/path/to/cmorize.compress.sh'
-POST_PROCESS_SCRIPT = 'postprocess.core.variables.py'
+POST_PROCESS_SCRIPT = '/path/to/postprocess.core.variables.py'
 
-#**************************
-#End of setting values
-# **************************
+#*******************************
+# **** End Set the following ****
+#******************************
+
 
 # CONSTANT values
 EXPECTED_NUM_FILES = 365
 EXPECTED_NUM_FILES_LEAP_YEAR = 366
 EXPECTED_NUM_FILENAME_PATTERNS = 6
 
-def check_dirs_for_data()-> bool:
+def check_dirs_for_data()-> dict:
     """
-     Args:
-         None
-     Returns
-        bool: True if all files present to constitute a full year of data for each chunk
-                 directory
+         Check for expected chunk directories and complete data within each
+         chunk directory. Exit as soon as criteria is unmet.
+
+         Args:
+             None
+
+         Returns:
+
+              all_files :       a dictionary of the chunk dirs (keys) and a list of years
+                                 (values)  corresponding to the complete data in all chunk
+                                  dirs
+
+
     """
 
     complete_chunk_dirs: list = check_for_all_chunk_dirs()
     if complete_chunk_dirs is None:
-        return False
+        print("Incomplete number of chunk dirs")
+        sys.exit(0)
 
     # Check all the files in each chunk directory and determine if we have
     # one year of files (based on the number of files meeting a filename pattern)
@@ -101,36 +113,45 @@ def check_dirs_for_data()-> bool:
     # Check that all the expected filename patterns have been found for every
     # chunk directory (i.e. all the files named wrfout_d01_<date-time>,
     # wrfout_hour_d01_<date-time>, etc. are in each chunk directory)
-    # If any chunk directory has missing files, return False
-
+    # If any chunk directory has missing files, exit from this script.
+    all_files = {}
     keys =  dir_to_unique_filenames.keys()
     for k in keys:
-        if len(dir_to_unique_filenames[k]) != EXPECTED_NUM_FILENAME_PATTERNS:
-            return False
+        if len(dir_to_unique_filenames[k]) >= EXPECTED_NUM_FILENAME_PATTERNS:
+            print("Insufficient number of filename patterns.")
+            sys.exit(0)
 
         # Check for the expected number of files (filename + date + time) in this
         # chunk directory.
 
-        all_files_present = check_for_all_files(k, dir_to_unique_filenames)
+        all_files_present:dict  = check_for_all_files(k, dir_to_unique_filenames)
         if not all_files_present:
-            return False
+            print("Not all files are present")
+            sys.exit(0)
+        else:
+            # build up the final all_files dictionary by appending the all_files_present
+            # from each chunk directory
+             all_files = {**all_files, **all_files_present}
 
-    # If we get here, all criteria are met for finding all the files in every chunk
-    # directory
-    return True
+    return all_files
 
 
-def check_for_all_files(chunk_dir:str, dir_fnames:dict) -> bool:
+def check_for_all_files(chunk_dir:str, dir_fnames:dict) -> list:
     """
-           ***PRE-CONDITION***:
-
+           PRE-CONDITION:
+           ***************
            all the expected filename patterns have been found for every
            chunk directory (i.e. all the files named wrfout_d01_<date-time>,
            wrfout_hour_d01_<date-time>, etc. )
 
+           ***************
+
             For this chunk directory, check for the expected number of files for each
             filename pattern/type:
            365 for a non Leap Year, 366 for a Leap Year.
+
+           Save the list of filenames as values to the corresponding chunk dir (key) in
+           a dictionary.
 
            Args:
                chunk_dir: the full path to the current chunk dir which is under examination
@@ -140,11 +161,11 @@ def check_for_all_files(chunk_dir:str, dir_fnames:dict) -> bool:
                a list of all the unique filename patterns with year only as values.
 
            Returns:
-               Boolean- True if all the expected files in the chunk directory are present,
-               (expected files have specific filename patterns and each pattern should
-               have 365 files for a non Leap Year, 366 files for a Leap Year)
+               all_files:   a dictionary with the chunk dir as key and
+                the list of years (derived from the filenames)
 
     """
+
 
     # Patterns for filenames are of the form:
     #              "wrfout_d01_*",
@@ -154,26 +175,38 @@ def check_for_all_files(chunk_dir:str, dir_fnames:dict) -> bool:
     #              "wrfout_afwa_d01_*",
     #              "wrfrst_d01_*"
 
-    all_files_for_chunkdir = dir_fnames[chunk_dir]
+    all_file_patterns_for_chunkdir = dir_fnames[chunk_dir]
 
     # This is the equivalent to the Unix/Linux command:
     #     find . -name "wrfout_d01_*" |wc -l
     #  for every filename pattern
-    for cur_file_pattern  in all_files_for_chunkdir:
+    valid_years = []
+    all_files = {}
+    for cur_file_pattern  in all_file_patterns_for_chunkdir:
        filepath = os.path.join(chunk_dir, cur_file_pattern )
        search_pattern = filepath + "*"
        num_files = len(glob.glob(search_pattern))
        year = re.match(r".*_(\d{4})", cur_file_pattern).group(1)
        if is_leap_year(year):
-           if num_files != EXPECTED_NUM_FILES_LEAP_YEAR:
-               return False
+           if num_files == EXPECTED_NUM_FILES_LEAP_YEAR:
+               # Thus far, criteria is met, store the year as a list
+               valid_years.append(year)
+           else:
+               print("Insufficient number of files in this chunk dir")
+               sys.exit(0)
        else:
-           if num_files != EXPECTED_NUM_FILES:
-               return False
+           if num_files == EXPECTED_NUM_FILES:
+               # Thus far, criteria is met, store the year as a list
+               valid_years.append(year)
+           else:
+                print("Insufficient number of files in this chunk dir")
+                sys.exit(0)
 
-    # if we get here, all criteria met (i.e. all the files for each filename pattern were
-    # present).
-    return True
+       # Thus far, criteria is met, assign the list of files to the chunk dir key
+       all_files[chunk_dir] = valid_years
+
+    return all_files
+
 
 def check_for_all_chunk_dirs()  -> bool:
     """
@@ -187,10 +220,12 @@ def check_for_all_chunk_dirs()  -> bool:
                 YYY7_chunk for chunks corresponding to the 7th year of the
                 decade
 
-        Args: None, using global vars above to search for data and relevant scripts
+        Args: None, using global vars  to search for data and relevant scripts
 
         Returns:
             a list of all the chunk directories
+
+            as soon as an expected chunk directory is NOT found, the script exits
 
 
     """
@@ -205,14 +240,15 @@ def check_for_all_chunk_dirs()  -> bool:
     for dir in chunk_dirs:
         if SEVENTH_YEAR_OF_DECADE:
             # YYY7_chunk
-            match = re.search(r'(\d{4})_chun', dir)
+            match = re.search(r'(\d{4})_chunk', dir)
         else:
             # YYYY_chunk
-            match = re.match(r'(\d{3}7)_chunkdi', dir)
+            match = re.match(r'(\d{3}7)_chunk', dir)
         if match:
             chunk_years.append(match.group(1))
         else:
-            return None
+            print("Missing one or more expected chunk directories")
+            sys.exit(0)
 
     # Verify the chunk years span the same number of years specified in
     # TOTAL_YEARS_IN_SIMULATION
@@ -228,7 +264,8 @@ def check_for_all_chunk_dirs()  -> bool:
         chunk_dir_path: list = [os.path.join(BASEDIR, cur_chunk)  for cur_chunk in chunk_dirs]
         return chunk_dir_path
     else:
-        return None
+        print("Missing one or more expected chunk directories")
+        sys.exit(0)
 
 
 def is_leap_year(year:str|int) -> bool:
@@ -262,25 +299,80 @@ def is_leap_year(year:str|int) -> bool:
         # not evenly divisible by 4 -> Not Leap Year
         return False
 
+
+def invoke_postprocessing(all_files: dict) -> int:
+    """
+     Invoke the postprocess.core.variables.py script
+     which expects two arguments: year month (no zero padding)
+
+     Args:
+     @param all_files:  dictionary with the list of files (values) for each
+                                chunk directory (keys)
+     Returns:
+         0 if successfully runs, a non-zero value otherwise
+
+    """
+    # verify that the cmorize.compress.sh file is in the same directory as this
+    # script
+    CMORIZE_SCRIPT = '/path/to/cmorize.compress.sh'
+    POST_PROCESS_SCRIPT = '/path/to/postprocess.core.variables.py'
+
+    # Check to make sure necessary scripts exist
+    # if not os.path.exists(CMORIZE_SCRIPT):
+    #     print("cmorize.compress.sh script not found")
+    #     sys.exit(0)
+    # if not os.path.exists(POST_PROCESS_SCRIPT):
+    #     print("postprocess.core.variables.py not found")
+    #     sys.exit(0)
+
+    cur_dir = os.getcwd()
+    if  os.path.dirname(CMORIZE_SCRIPT) != os.path.dirname(POST_PROCESS_SCRIPT):
+        print("cmorize.compress.sh does not reside in same dir as postprocees.core.variables.py")
+        sys.exit(0)
+
+    # get the 2D list  of all values (years) in the all_files dict
+    # and flatten before passing into the invoke_postprocessing function
+    all_years_2d: list = all_files.values()
+    all_years_flattened = []
+    for year_list in all_years_2d:
+        for cur_year in year_list:
+            all_years_flattened.append(cur_year)
+
+    # for each chunk directory, run the the
+
+    months = range(1,13)
+    for cur_year in all_years_flattened:
+        print(f" cur year: {(cur_year)}")
+        for cur_month in months:
+            arguments = [str(cur_year), str(cur_month)]
+            print(f"Invoking postprocess script for  {cur_year} {cur_month}")
+            print(f"subprocess.run(['python', POST_PROCESS_SCRIPT]+ arguments, capture_output=True, text=True)")
+            # result = subprocess.run(['python', POST_PROCESS_SCRIPT]+ arguments, capture_output=True, text=True)
+
+
+    return 0
+
+
 if __name__ == "__main__":
 
-    # Testing for Leap Year function
-    # list_of_years = ["2000", 2020, 2024, 2028, "1900",1977, 1990, 2100,"2200", "2104"]
-    # leaps_or_not = [is_leap_year(yr) for yr in list_of_years]
-    # expected = [True, True,True, True, False, False, False, False, False, True]
-    # assert leaps_or_not == expected
+    # Checking for complete data in all chunk directories.
+    all_files =  check_dirs_for_data()
 
-    if check_dirs_for_data():
-        print("All data found, invoke postprocessing... ")
-
-        # invoke postprocessing script
-
-        # invoke plotting
-        # set the env variables for the start, end, increment and other plot parameters
-
-
+    # Postprocessing
+    # if len(all_files.keys()) > 0:
+    if bool(all_files):
+       print("All data found, invoke postprocessing... ")
+       # invoke postprocessing script
+       invoke_postprocessing(all_files)
     else:
-        print("Incomplete data")
+       print("Incomplete data")
+       sys.exit(0)
+
+    # Generate plots
+    # set the env variables for the start, end, increment and other plot parameters
+
+
+
 
 
 
