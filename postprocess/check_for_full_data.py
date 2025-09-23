@@ -117,7 +117,7 @@ def check_dirs_for_data()-> dict:
     all_files = {}
     keys =  dir_to_unique_filenames.keys()
     for k in keys:
-        if len(dir_to_unique_filenames[k]) >= EXPECTED_NUM_FILENAME_PATTERNS:
+        if len(dir_to_unique_filenames[k]) == EXPECTED_NUM_FILENAME_PATTERNS:
             print("Insufficient number of filename patterns.")
             sys.exit(0)
 
