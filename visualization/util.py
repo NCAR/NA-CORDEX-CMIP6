@@ -95,6 +95,26 @@ def get_input_files(settings:dict) ->list:
         except  FileNotFoundError:
             print(f"Directory {input_dir} is non-existent. Please check your config file.")
 
+
+    # if INPUT_FILENAME_TEMPLATE env var is unspecified, read it from the config
+    # file
+    input_filename_template = os.getenv('INPUT_FILE_TEMPLATE')
+    if input_filename_template is None:
+        sys.exit("No input filename template is specified as an ENV var or in the config file")
+    else:
+        # use what is specified in the config file
+        input_filename_template = settings['input_filename_template']
+
+    # if OUTPUT_FILENAME_TEMPLATE env var is unspecified, read it from the config
+    # file
+    output_filename_template = os.getenv('OUTPUT_FILE_TEMPLATE')
+    if output_filename_template is None:
+        sys.exit("No output filename template is specified as an ENV var or in the config file")
+    else:
+        # use what is specified in the config file
+        output_filename_template = settings['output_filename_template']
+
+
     # Retrieve the years of interest, either by values specified in the YAML config
     # file or by start, end, and increment values specified in the YAML config file.
     if settings['years_by_list']:
@@ -122,7 +142,7 @@ def get_input_files(settings:dict) ->list:
     all_input_files = []
     for i in range(len(all_dates) ):
         substituted_year_month = (
-            settings['input_filename_template'].
+            input_filename_template.
             replace('${YEAR}', all_dates[i].year).
             replace('${MONTH}', all_dates[i].month) )
         fname_extension = settings['input_filename_extension']
@@ -193,7 +213,17 @@ def extract_and_resample(settings:dict, all_input_files: list) -> namedtuple:
               - the original data, before resampling and converting units
     """
     # Extract the data from all the input data files
-    variable_of_interest = settings['data_var']
+
+    # If the DATA_VAR env is not set, use the value from the config file
+    variable_of_interest = os.getenv('DATA_VAR')
+
+    if variable_of_interest is None:
+        if settings['data_var'] is None:
+            sys.exit("No data variable has been specified as ENV var or in config file.")
+        else:
+           # Use what is specified in the config file
+           variable_of_interest = settings['data_var']
+
     ncdata = xr.open_mfdataset(all_input_files,  concat_dim='time', combine='nested', chunks={'time': 1, 'lat': 236, 'lon': 376}, data_vars='all', )[variable_of_interest]
 
     # lats and lons
@@ -222,7 +252,6 @@ def extract_and_resample(settings:dict, all_input_files: list) -> namedtuple:
         # Data in Kelvin
         ncdata_5day = ncdata_5day_K
         ncdata_by_hour = ncdata_by_hr_K
-        # ncdata_by_hour = ncdata
         units = "K"
 
     data_tuple = DATA_BY_DAY_HR(ncdata_5day, ncdata_by_hour,  units, lat, lon, ncdata)
