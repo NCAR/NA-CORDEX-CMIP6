@@ -1,8 +1,17 @@
+# ============================*
+# ** Copyright UCAR (c) 2025
+# ** University Corporation for Atmospheric Research (UCAR)
+# ** National Science Foundation National Center for Atmospheric Research (NCAR)
+# ** P.O.Box 3000, Boulder, Colorado, 80307-3000, USA
+# ============================*
+
 import os
 import sys
 import glob
 import re
 import subprocess
+import util
+import plot
 
 """
     Monitor the wrf_d01 directory for complete data (one year of data). 
@@ -26,7 +35,6 @@ import subprocess
 # Directory information
 
 BASEDIR = '/glade/derecho/scratch/jsallen/NA-CORDEX-CMIP6/ERA5_HIST_E03/wrf_d01'
-PARENTDIR = os.path.dirname(BASEDIR)
 
 # Number of years for the simulation (e.g. simulation runs for 1977, 1987, 1997, 2007
 # is a total of 30 years)
@@ -41,19 +49,26 @@ YEAR_INCREMENT = 10
 #--------------------------
 # Plotting Information
 #--------------------------
-PLOT_DIR = '/path/to/NA-CORDEX-CMIP6/visualization/plot.py'
-PLOT_CONFIG = '/full/path/to/config.yaml'
+PLOT_DIR = '/path/to/NA-CORDEX/NA-CORDEX-CMIP6/postprocess/plot.py'
+PLOT_CONFIG = '/full/path/to/NA-CORDEX-CMIP6/postprocess/config.yaml'
+
+INPUT_DIR = '/path/to/postprocessed/data'
+OUTPUT_DIR = 'path/to/output/plots'
+INPUT_FNAME_TEMPLATE = "tas_NAM-12_ERA5_evaluation_r1i1p1f1_NCAR_WRF461_v1-r1_hr_${YEAR}-${MONTH}"
+OUTPUT_FNAME_TEMPLATE = "5day_mean_and_hourly_tas_NAM-12_ERA5_evaluation_r1ip1f1_NCAR_WRF461_v1-r1_hr"
+DATA_VAR = "tas"
+
 
 #-------------------------------------
 # bash script and
 # other Python script locations
 #--------------------------------------
-CMORIZE_SCRIPT = '/path/to/cmorize.compress.sh'
-POST_PROCESS_SCRIPT = '/path/to/postprocess.core.variables.py'
+CMORIZE_SCRIPT = '/path/to/NA-CORDEX-CMIP6/postprocess/cmorize.compress.sh'
+POST_PROCESS_SCRIPT = '/path/to/NA-CORDEX-CMIP6/postprocess/postprocess.core.variables.py'
 
-#*******************************
-# **** End Set the following ****
-#******************************
+#*********************************
+# **** End of Set the following ****
+#*********************************
 
 
 # CONSTANT values
@@ -244,11 +259,13 @@ def check_for_all_chunk_dirs()  -> bool:
         else:
             # YYYY_chunk
             match = re.match(r'(\d{3}7)_chunk', dir)
-        if match:
-            chunk_years.append(match.group(1))
-        else:
+
+        if not match:
             print("Missing one or more expected chunk directories")
             sys.exit(0)
+
+        chunk_years.append(match.group(1))
+
 
     # Verify the chunk years span the same number of years specified in
     # TOTAL_YEARS_IN_SIMULATION
@@ -309,28 +326,25 @@ def invoke_postprocessing(all_files: dict) -> int:
      @param all_files:  dictionary with the list of files (values) for each
                                 chunk directory (keys)
      Returns:
-         0 if successfully runs, a non-zero value otherwise
+         flattened_years: a list of years that correspond to all the postprocessed data
 
     """
     # verify that the cmorize.compress.sh file is in the same directory as this
     # script
-    CMORIZE_SCRIPT = '/path/to/cmorize.compress.sh'
-    POST_PROCESS_SCRIPT = '/path/to/postprocess.core.variables.py'
 
     # Check to make sure necessary scripts exist
-    # if not os.path.exists(CMORIZE_SCRIPT):
-    #     print("cmorize.compress.sh script not found")
-    #     sys.exit(0)
-    # if not os.path.exists(POST_PROCESS_SCRIPT):
-    #     print("postprocess.core.variables.py not found")
-    #     sys.exit(0)
+    if not os.path.exists(CMORIZE_SCRIPT):
+        print("cmorize.compress.sh script not found")
+        sys.exit(0)
+    if not os.path.exists(POST_PROCESS_SCRIPT):
+        print("postprocess.core.variables.py not found")
+        sys.exit(0)
 
-    cur_dir = os.getcwd()
     if  os.path.dirname(CMORIZE_SCRIPT) != os.path.dirname(POST_PROCESS_SCRIPT):
         print("cmorize.compress.sh does not reside in same dir as postprocees.core.variables.py")
         sys.exit(0)
 
-    # get the 2D list  of all values (years) in the all_files dict
+    # get the 2D list of all values (years) in the all_files dict
     # and flatten before passing into the invoke_postprocessing function
     all_years_2d: list = all_files.values()
     all_years_flattened = []
@@ -338,38 +352,84 @@ def invoke_postprocessing(all_files: dict) -> int:
         for cur_year in year_list:
             all_years_flattened.append(cur_year)
 
-    # for each chunk directory, run the the
-
+    # for each year and month (all months Jan-Dec), invoke the
+    # postprocess.core.variables.py script
     months = range(1,13)
     for cur_year in all_years_flattened:
-        print(f" cur year: {(cur_year)}")
         for cur_month in months:
             arguments = [str(cur_year), str(cur_month)]
-            print(f"Invoking postprocess script for  {cur_year} {cur_month}")
+            print(f"Invoking postprocess script for  {cur_year} {cur_month}:")
             print(f"subprocess.run(['python', POST_PROCESS_SCRIPT]+ arguments, capture_output=True, text=True)")
+
+            # !!ToDo!! uncomment when ready to run
             # result = subprocess.run(['python', POST_PROCESS_SCRIPT]+ arguments, capture_output=True, text=True)
 
+    return all_years_flattened
+
+def generate_plots(all_years:list):
+    """
+          Generate the plots by invoking methods in plot.py
+
+          Args:
+             all_files: The list of all years of data
+
+          Returns:
+              0 if no errors were encountered
+
+
+    """
+
+    # Get the config settings from the YAML config file
+    settings:dict = util.parse_config(PLOT_CONFIG)
+
+    # override settings for the filename templates (input and output, etc.),
+    # using the user-specified values in the global variable section
+    # (at the top of this script) and input param
+    settings['input_dir'] = INPUT_DIR
+    settings['input_filename_template'] = INPUT_FNAME_TEMPLATE
+    settings['output_filename_template'] = OUTPUT_FNAME_TEMPLATE
+    settings['output_dir'] = OUTPUT_DIR
+    settings['years_by_list'] = True
+    settings['months_by_list'] = True
+    settings['years'] = all_years
+    settings['data_var'] = 'tas'
+
+    # complete data will have data for every month
+    all_months = range(1,13)
+    zfilled_months = [str(cur).zfill(2) for cur in all_months]
+    settings['months_list'] = zfilled_months
+
+    # retrieve input files using updated settings
+    all_input_files: list = util.get_input_files(settings)
+
+    # invoke the plotting function from plot.py
+    plot.make_time_series_plots(all_input_files, settings)
 
     return 0
 
 
 if __name__ == "__main__":
 
-    # Checking for complete data in all chunk directories.
-    all_files =  check_dirs_for_data()
+    # Postprocess and generate plots
 
-    # Postprocessing
-    # if len(all_files.keys()) > 0:
+    # Checking for expected chunk directories and complete data in all chunk
+    # directories.
+    all_files:dict =  check_dirs_for_data()
     if bool(all_files):
        print("All data found, invoke postprocessing... ")
-       # invoke postprocessing script
-       invoke_postprocessing(all_files)
+
+       # Postprocessing via postprocess.core.variables.py
+       all_years:list =  invoke_postprocessing(all_files)
+
+       # Generate plots via plot.py and config.yaml
+       print("Now generate plots from postprocessed data")
+       generate_plots(all_years)
+
+    # Not necessary, only useful for development
     else:
        print("Incomplete data")
-       sys.exit(0)
 
-    # Generate plots
-    # set the env variables for the start, end, increment and other plot parameters
+
 
 
 
