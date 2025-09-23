@@ -1,14 +1,12 @@
 # ============================*
 # ** Copyright UCAR (c) 2025
 # ** University Corporation for Atmospheric Research (UCAR)
-# ** National Center for Atmospheric Research (NCAR)
+# ** National Science Foundation  National Center for Atmospheric Research (NCAR)
 # ** P.O.Box 3000, Boulder, Colorado, 80307-3000, USA
 # ============================*
 
 import os
 import sys
-
-from jupyter_lsp.specs import PalantirPythonLanguageServer
 from matplotlib import pyplot as plt
 import util
 import argparse
