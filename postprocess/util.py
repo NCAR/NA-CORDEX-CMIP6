@@ -141,11 +141,10 @@ def get_input_files(settings:dict) ->list:
             all_input_files.append(full_filename)
 
     if len(missing_input_files) > 0:
-      print(f"WARNING: Missing input files: {missing_input_files}")
+      sys.exit(f"WARNING: Missing input files: {missing_input_files}, exiting from plotting")
 
     if len(all_input_files) == 0:
-      print("ERROR: No input files found for specified time(s), please check your configuration file.")
-      sys.exit(1)
+      sys.exit("ERROR: No input files found for specified time(s), please check your configuration file.")
 
     return all_input_files
 
