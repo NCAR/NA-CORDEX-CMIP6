@@ -67,7 +67,9 @@ def parse_config(config_file):
 def get_input_files(settings:dict) ->list:
     """
         Create the names of the input filenames based on the list or the start, stop, and step
-        information provided in the config file.
+        information provided in the config file or via another script that overrides
+        settings.
+        .
 
         Args:
            @param settings: a dictionary representation of the settings in the config file
@@ -141,7 +143,7 @@ def get_input_files(settings:dict) ->list:
             all_input_files.append(full_filename)
 
     if len(missing_input_files) > 0:
-      sys.exit(f"WARNING: Missing input files: {missing_input_files}, exiting from plotting")
+      sys.exit(f"Missing input files: {missing_input_files}, exiting from plotting")
 
     if len(all_input_files) == 0:
       sys.exit("ERROR: No input files found for specified time(s), please check your configuration file.")
