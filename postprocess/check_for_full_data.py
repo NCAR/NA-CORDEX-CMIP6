@@ -455,16 +455,6 @@ def plots_already_exist(output_filename_expr:str, years:list, months:list) -> bo
     return False
 
 
-
-
-
-
-
-
-
-    # hard code this for now
-    return False
-
 def plots_ok(settings:dict) -> list:
     """
          Check that all the expected plots exist in the plot output directory
