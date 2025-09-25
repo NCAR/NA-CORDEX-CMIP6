@@ -50,12 +50,17 @@ Checking for all raw data, invoking postprocessing, and invoking plotting
   
         find . -name "wrfout_d01_/*  |wc -l " 
   
-       for each filename pattern and determine if the number of files meets the criteria for required number
+       for each filename pattern and determine if the number of files meets the criteria for a full dataset
   - generate a dictionary collecting this information:
      - full path of chunk directories (as the key)
      - list of years corresponding to the data (as values)
   
 
 ### Postprocessing 
+
+- check that the user specified path for both the postprocess.core.variables.py and cmortize.compress.sh scripts exist
+- verify that the above two scripts are located in the same directory
+- *NOTE* currently printing the command for postprocessing
+   - uncomment actual command to perform postprocessing
 
 ### Plotting
