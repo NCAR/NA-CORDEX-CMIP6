@@ -32,12 +32,15 @@ import plot
 # **** Set the following ****
 #**************************
 
-# Directory information
+#------------------------------------
+# Chunk Directory information
+# for preprocessed/raw data
+#------------------------------------
 
 BASEDIR = '/glade/derecho/scratch/jsallen/NA-CORDEX-CMIP6/ERA5_HIST_E03/wrf_d01'
 
 # Number of years for the simulation (e.g. simulation runs for 1977, 1987, 1997, 2007
-# is a total of 30 years)
+# is a total of 30 years).
 TOTAL_YEARS_IN_SIMULATION = 40
 
 # collect the seventh year of each decade
@@ -49,22 +52,32 @@ YEAR_INCREMENT = 10
 #--------------------------
 # Plotting Information
 #--------------------------
-PLOT_DIR = '/path/to/NA-CORDEX/NA-CORDEX-CMIP6/postprocess/plot.py'
-PLOT_CONFIG = '/full/path/to/NA-CORDEX-CMIP6/postprocess/config.yaml'
+PLOT_INPUT_DIR = '/glade/derecho/scratch/jsallen/NA-CORDEX-CMIP6/ERA5_HIST_E03/postprocess/tas'
 
-INPUT_DIR = '/path/to/postprocessed/data'
-OUTPUT_DIR = 'path/to/output/plots'
+PLOT_CONFIG = '/glade/u/home/minnawin/NA-CORDEX/develop/NA-CORDEX-CMIP6/postprocess/config.yaml'
+
 INPUT_FNAME_TEMPLATE = "tas_NAM-12_ERA5_evaluation_r1i1p1f1_NCAR_WRF461_v1-r1_hr_${YEAR}-${MONTH}"
-OUTPUT_FNAME_TEMPLATE = "5day_mean_and_hourly_tas_NAM-12_ERA5_evaluation_r1ip1f1_NCAR_WRF461_v1-r1_hr"
-DATA_VAR = "tas"
+
+
+# the appropriate YEAR is substituted for the ${YEAR}, based on
+# the postprocessed data's year
+PLOT_FNAME_TEMPLATE = "5day_mean_and_hourly_tas_NAM-12_ERA5_evaluation_r1ip1f1_NCAR_WRF461_v1-r1_hr_${YEAR}"
+
+# in config.yaml, this is set to 'tas', uncomment and set this to any other variable
+# to override the setting in the YAML config
+# DATA_VAR = "tas"
+
+PLOT_OUTPUT_DIR = '/glade/u/home/minnawin/NA-CORDEX/Output/plots'
+
 
 
 #-------------------------------------
 # bash script and
 # other Python script locations
 #--------------------------------------
-CMORIZE_SCRIPT = '/path/to/NA-CORDEX-CMIP6/postprocess/cmorize.compress.sh'
-POST_PROCESS_SCRIPT = '/path/to/NA-CORDEX-CMIP6/postprocess/postprocess.core.variables.py'
+CMORIZE_SCRIPT = '/glade/u/home/minnawin/NA-CORDEX/NA-CORDEX-CMIP6/postprocess/cmorize.compress.sh'
+
+POST_PROCESS_SCRIPT = '/glade/u/home/minnawin/NA-CORDEX/NA-CORDEX-CMIP6/postprocess/postprocess.core.variables.py'
 
 #*********************************
 # **** End of Set the following ****
@@ -94,9 +107,9 @@ def check_dirs_for_data()-> dict:
     """
 
     complete_chunk_dirs: list = check_for_all_chunk_dirs()
+
     if complete_chunk_dirs is None:
-        print("Incomplete number of chunk dirs")
-        sys.exit(0)
+        sys.exit("Incomplete number of chunk dirs")
 
     # Check all the files in each chunk directory and determine if we have
     # one year of files (based on the number of files meeting a filename pattern)
@@ -133,16 +146,14 @@ def check_dirs_for_data()-> dict:
     keys =  dir_to_unique_filenames.keys()
     for k in keys:
         if len(dir_to_unique_filenames[k]) == EXPECTED_NUM_FILENAME_PATTERNS:
-            print("Insufficient number of filename patterns.")
-            sys.exit(0)
+            sys.exit("Insufficient number of filename patterns.")
 
         # Check for the expected number of files (filename + date + time) in this
         # chunk directory.
 
         all_files_present:dict  = check_for_all_files(k, dir_to_unique_filenames)
         if not all_files_present:
-            print("Not all files are present")
-            sys.exit(0)
+            sys.exit("Not all files are present")
         else:
             # build up the final all_files dictionary by appending the all_files_present
             # from each chunk directory
@@ -207,15 +218,13 @@ def check_for_all_files(chunk_dir:str, dir_fnames:dict) -> list:
                # Thus far, criteria is met, store the year as a list
                valid_years.append(year)
            else:
-               print("Insufficient number of files in this chunk dir")
-               sys.exit(0)
+               sys.exit("Insufficient number of files in this chunk dir")
        else:
            if num_files == EXPECTED_NUM_FILES:
                # Thus far, criteria is met, store the year as a list
                valid_years.append(year)
            else:
-                print("Insufficient number of files in this chunk dir")
-                sys.exit(0)
+                sys.exit("Insufficient number of files in this chunk dir")
 
        # Thus far, criteria is met, assign the list of files to the chunk dir key
        all_files[chunk_dir] = valid_years
@@ -261,8 +270,7 @@ def check_for_all_chunk_dirs()  -> bool:
             match = re.match(r'(\d{3}7)_chunk', dir)
 
         if not match:
-            print("Missing one or more expected chunk directories")
-            sys.exit(0)
+            sys.exit("Missing one or more expected chunk directories")
 
         chunk_years.append(match.group(1))
 
@@ -281,8 +289,7 @@ def check_for_all_chunk_dirs()  -> bool:
         chunk_dir_path: list = [os.path.join(BASEDIR, cur_chunk)  for cur_chunk in chunk_dirs]
         return chunk_dir_path
     else:
-        print("Missing one or more expected chunk directories")
-        sys.exit(0)
+        sys.exit("Missing one or more expected chunk directories")
 
 
 def is_leap_year(year:str|int) -> bool:
@@ -334,15 +341,12 @@ def invoke_postprocessing(all_files: dict) -> int:
 
     # Check to make sure necessary scripts exist
     if not os.path.exists(CMORIZE_SCRIPT):
-        print("cmorize.compress.sh script not found")
-        sys.exit(0)
+        sys.exit("cmorize.compress.sh script not found")
     if not os.path.exists(POST_PROCESS_SCRIPT):
-        print("postprocess.core.variables.py not found")
-        sys.exit(0)
+        sys.exit("postprocess.core.variables.py not found")
 
     if  os.path.dirname(CMORIZE_SCRIPT) != os.path.dirname(POST_PROCESS_SCRIPT):
-        print("cmorize.compress.sh does not reside in same dir as postprocees.core.variables.py")
-        sys.exit(0)
+        sys.exit("cmorize.compress.sh does not reside in same dir as postprocees.core.variables.py")
 
     # get the 2D list of all values (years) in the all_files dict
     # and flatten before passing into the invoke_postprocessing function
@@ -361,7 +365,7 @@ def invoke_postprocessing(all_files: dict) -> int:
             print(f"Invoking postprocess script for  {cur_year} {cur_month}:")
             print(f"subprocess.run(['python', POST_PROCESS_SCRIPT]+ arguments, capture_output=True, text=True)")
 
-            # !!ToDo!! uncomment when ready to run
+            # !!TODO!! uncomment when ready to run
             # result = subprocess.run(['python', POST_PROCESS_SCRIPT]+ arguments, capture_output=True, text=True)
 
     return all_years_flattened
@@ -385,10 +389,10 @@ def generate_plots(all_years:list):
     # override settings for the filename templates (input and output, etc.),
     # using the user-specified values in the global variable section
     # (at the top of this script) and input param
-    settings['input_dir'] = INPUT_DIR
+    settings['input_dir'] = PLOT_INPUT_DIR
     settings['input_filename_template'] = INPUT_FNAME_TEMPLATE
-    settings['output_filename_template'] = OUTPUT_FNAME_TEMPLATE
-    settings['output_dir'] = OUTPUT_DIR
+    settings['output_filename_template'] = PLOT_FNAME_TEMPLATE
+    settings['output_dir'] = PLOT_OUTPUT_DIR
     settings['years_by_list'] = True
     settings['months_by_list'] = True
     settings['years'] = all_years
@@ -402,11 +406,79 @@ def generate_plots(all_years:list):
     # retrieve input files using updated settings
     all_input_files: list = util.get_input_files(settings)
 
-    # invoke the plotting function from plot.py
-    plot.make_time_series_plots(all_input_files, settings)
+    # check if plots already exist before invoking plot generation
+
+    if not plots_already_exist(PLOT_FNAME_TEMPLATE, all_years, all_months):
+        # invoke the plotting function from plot.py
+        plot.make_time_series_plots(all_input_files, settings)
+    else:
+        # Not necessary, but useful information
+        print("All plots already exist, skip creating these plots.")
 
     return 0
 
+def plots_already_exist(output_filename_expr:str, years:list, months:list) -> bool:
+    """
+       Check if plots were already created for this set of data and
+       conditions.
+
+       Args:
+         output_filename_expr: the plot filename template
+         years:
+
+      Returns:
+          True if all existing plots for this data already exist, False otherwise
+    """
+
+    # Generate a list of expected plot filenames by getting the static portion of
+    # the filename template (i.e. all text except for the '${YEAR}' portion of the template).
+    match = re.match(r'(.*)_\$', output_filename_expr)
+    partial_expression = match.group(1)
+
+    expected_files = []
+    for y in years:
+        constructed_fname = partial_expression + "_" + str(y) + ".png"
+        expected_files.append(constructed_fname)
+
+    # keep track of expected files that are found in the list of actual files
+    actual_plot_files = os.listdir(PLOT_OUTPUT_DIR)
+    num_found = 0
+    for expected in expected_files:
+        if expected in actual_plot_files:
+            num_found += 1
+
+    if num_found  == len(expected_files):
+        # ALL the plots that are to going to be generated already exist.
+        return True
+
+    # Not all plot files were already created
+    return False
+
+
+
+
+
+
+
+
+
+    # hard code this for now
+    return False
+
+def plots_ok(settings:dict) -> list:
+    """
+         Check that all the expected plots exist in the plot output directory
+
+         Args:
+
+         settings: a dictionary representation of the settings in the config.yaml file
+                       and updated/overridden values set in this script
+
+         Returns:
+             missing_plots:  a list of missing plots
+
+    """
+    pass
 
 if __name__ == "__main__":
 
@@ -422,16 +494,8 @@ if __name__ == "__main__":
        all_years:list =  invoke_postprocessing(all_files)
 
        # Generate plots via plot.py and config.yaml
-       print("Now generate plots from postprocessed data")
+       print("Generating plots from postprocessed data...")
        generate_plots(all_years)
-
-    # Not necessary, only useful for development
-    else:
-       print("Incomplete data")
-
-
-
-
 
 
 
