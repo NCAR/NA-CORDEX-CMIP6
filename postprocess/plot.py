@@ -154,9 +154,40 @@ def create_output_name(settings: dict) -> str:
             # If output directory does not exist, create it
             os.makedirs(output_dir, exist_ok=True)
 
-    # create the plot filename including the full path
+
+    # create the plot filename from the output_filename_template setting
+    # including the full path
     fname = settings['output_filename_template']
-    plot_name = fname + '.png'
+
+    # All the months, either specified in the YAML config or create based on
+    # start, end, and increment values specified in YAML config file.
+
+    # Retrieve the years of interest, either by values specified in the YAML config
+    # file or by start, end, and increment values specified in the YAML config file.
+    if settings['years_by_list']:
+        all_years = settings['years']
+        all_years = [str(cur_yr) for cur_yr in all_years]
+    else:
+        year_start = int(settings['start_year'])
+        year_end = int(settings['end_year']) + 1
+        year_increment = settings['year_increment']
+        all_years = [str(cur_yr) for cur_yr in range(year_start, year_end, year_increment)]
+
+    if settings['months_by_list']:
+        all_months = settings['months_list']
+    else:
+        month_start = int(settings['month_start'])
+        month_end = int(settings['month_end']) + 1
+        month_increment = int(settings['month_increment'])
+        all_months = [str(cur).zfill(2) for cur in range(month_start, month_end, month_increment)]
+
+    # substitute the year and month in the output file
+    for y in all_years:
+        for m in all_months:
+            substituted_year_month  = (fname.replace('${YEAR}', y).replace('${MONTH}', m))
+
+    plot_name = substituted_year_month  + '.png'
+    print(f" plot name from output template: {plot_name}")
     full_plot_filename = os.path.join(output_dir, plot_name)
 
     return full_plot_filename
