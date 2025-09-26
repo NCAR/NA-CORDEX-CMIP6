@@ -241,6 +241,7 @@ def check_for_all_files(chunk_dir:str, dir_fnames:dict) -> list:
     valid_years = []
     all_files = {}
     missing_files = []
+    missing = False
 
     for cur_file_pattern in all_file_patterns_for_chunkdir:
         #  Extract the year portion of the filename pattern and use to consider only
@@ -261,6 +262,7 @@ def check_for_all_files(chunk_dir:str, dir_fnames:dict) -> list:
                    # Thus far, criteria is met, store the year as a list
                    valid_years.append(file_year)
                else:
+                   missing = True
                    for m in range(1, 13):
                        if m == 2:
                            days_in_month = DAYS_IN_MONTH['02_leap']
@@ -271,15 +273,12 @@ def check_for_all_files(chunk_dir:str, dir_fnames:dict) -> list:
                           expected_full_file = os.path.join(BASEDIR, chunk_dir, expected_file)
                           if expected_full_file not in matched_files_found:
                               missing_files.append(expected_full_file)
-
-                   print(f"WARNING: in {chunk_dir}, these files are missing {missing_files}")
-                   sys.exit(1)
-
             else:
                if num_files == EXPECTED_NUM_FILES:
                    # Thus far, criteria is met, store the year as a list
                    valid_years.append(file_year)
                else:
+                   missing = True
                    for m in range(1, 13):
                        days_in_month = DAYS_IN_MONTH[str(m).zfill(2)]
                        for d in range(1, days_in_month + 1):
@@ -288,9 +287,10 @@ def check_for_all_files(chunk_dir:str, dir_fnames:dict) -> list:
                            if expected_full_file not in matched_files_found:
                                missing_files.append(expected_full_file)
 
-                   print(f"WARNING: in {chunk_dir}, there are {len(missing_files)} missing files"
-                            f" {missing_files}")
-                   sys.exit(1)
+    if missing:
+        print(f"WARNING: ithere are {len(missing_files)} missing files n {chunk_dir}: ")
+        print(f" {missing_files}")
+        sys.exit(1)
 
 
     # Thus far, all criteria is met, assign the list of files to the chunk_dir key
