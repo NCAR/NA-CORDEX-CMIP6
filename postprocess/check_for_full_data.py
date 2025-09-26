@@ -151,7 +151,6 @@ def check_dirs_for_data()-> dict:
 
             if result:
                 filename = result.group(1)
-                print(f"adding {filename} to unique_filename_dates")
                 unique_filename_dates.add(filename)
 
         # Collect a list of unique filenames for each chunk directory.
@@ -241,6 +240,7 @@ def check_for_all_files(chunk_dir:str, dir_and_fname_patterns:dict) -> list:
     start_year_increment = ORDINAL_START_YEAR - 1
     adjusted_first_year = first_year + start_year_increment
     years_of_interest = [yr for yr in range(adjusted_first_year, adjusted_last_year)]
+    print(f"postprocessing for {years_of_interest}")
 
     missing_years = []
     for expected in years_of_interest:
