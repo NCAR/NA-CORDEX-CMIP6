@@ -272,7 +272,8 @@ def check_for_all_files(chunk_dir:str, dir_fnames:dict) -> list:
                           if expected_full_file not in matched_files_found:
                               missing_files.append(expected_full_file)
 
-                   sys.exit(f"WARNING: in {chunk_dir}, these files are missing {missing_files}")
+                   print(f"WARNING: in {chunk_dir}, these files are missing {missing_files}")
+                   sys.exit(1)
 
             else:
                if num_files == EXPECTED_NUM_FILES:
@@ -284,11 +285,12 @@ def check_for_all_files(chunk_dir:str, dir_fnames:dict) -> list:
                        for d in range(1, days_in_month + 1):
                            expected_file = cur_file_pattern + '-' + str(m).zfill(2) + '-' + str(d).zfill(2) + hms
                            expected_full_file = os.path.join(BASEDIR, chunk_dir, expected_file)
-                           print(f"expected_full_file: {expected_full_file}")
                            if expected_full_file not in matched_files_found:
                                missing_files.append(expected_full_file)
 
-                   sys.exit(f"WARNING: in {chunk_dir}, these files are missing {missing_files}")
+                   print(f"WARNING: in {chunk_dir}, there are {len(missing_files)} missing files"
+                            f" {missing_files}")
+                   sys.exit(1)
 
 
     # Thus far, all criteria is met, assign the list of files to the chunk_dir key
@@ -348,7 +350,6 @@ def check_for_all_chunk_dirs()  -> bool:
     first_year = int(chunk_years[0])
     expected_last_year:int = first_year + TOTAL_YEARS_IN_SIMULATION
     expected_years:list = [i for i in range(first_year, expected_last_year+1, YEAR_INCREMENT)]
-    print(f"expected years: {expected_years}")
     missing_dirs = []
     for cur_yr in chunk_years:
         print(f"cur yr: {cur_yr}")
