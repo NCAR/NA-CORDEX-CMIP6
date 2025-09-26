@@ -289,8 +289,9 @@ def check_for_all_files(chunk_dir:str, dir_fnames:dict) -> list:
 
     if missing:
         print(f"WARNING: ithere are {len(missing_files)} missing files n {chunk_dir}: ")
-        print(f" {missing_files}")
-        sys.exit(1)
+        for file in missing_files:
+           print(f" {file}")
+        sys.exit(f"Exiting due to missing files")
 
 
     # Thus far, all criteria is met, assign the list of files to the chunk_dir key
