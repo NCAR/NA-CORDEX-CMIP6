@@ -45,7 +45,7 @@ TOTAL_YEARS_IN_SIMULATION = 40
 
 # For each simulation, number of years
 # e.g. for 1977_chunk, the start year is 1977, last year is 1989 which is 12 years
-NUMBER_OF_YEARS_WITHIN_SIMULATION = 13
+NUMBER_OF_YEARS_WITHIN_SIMULATION = 10
 
 # collect the seventh year of each decade
 SEVENTH_YEAR_OF_DECADE = True
@@ -288,9 +288,9 @@ def check_for_all_files(chunk_dir:str, dir_fnames:dict) -> list:
                                missing_files.append(expected_full_file)
 
     if missing:
-        print(f"WARNING: ithere are {len(missing_files)} missing files n {chunk_dir}: ")
+        print(f"!!! WARNING: there are {len(missing_files)} missing files in {chunk_dir}!!!")
         for file in missing_files:
-           print(f" {file}")
+           print(f" Missing {file}\n")
         sys.exit(f"Exiting due to missing files")
 
 
