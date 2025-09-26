@@ -59,6 +59,12 @@ YEAR_INCREMENT = 10
 # year as the starting year
 ORDINAL_START_YEAR = 2
 
+# Filename patterns to exclude from consideration, leave as
+# empty file if all patterns are to be included
+# The number of expected patterns will be automatically adjusted
+# based on the number of patterns to exclude
+EXCLUDE_FILENAME_PATTERNS = ["wrfrst_d01"]
+
 #--------------------------
 # Plotting Information
 #--------------------------
@@ -92,7 +98,7 @@ POST_PROCESS_SCRIPT = '/glade/u/home/minnawin/NA-CORDEX/NA-CORDEX-CMIP6/postproc
 # CONSTANT values
 EXPECTED_NUM_FILES = 365
 EXPECTED_NUM_FILES_LEAP_YEAR = 366
-EXPECTED_NUM_FILENAME_PATTERNS = 6
+EXPECTED_NUM_FILENAME_PATTERNS = 5
 DAYS_IN_MONTH = {'01': 30, '02':28, '02_leap': 29, '03':31, '04':30, '05':31,
     '06':30, '07':31, '08':31, '09':30, '10':31, '11':30, '12':31   }
 
@@ -127,7 +133,9 @@ def check_dirs_for_data()-> dict:
     #     "wrfout_pres_d01_YYYY-MM-DD_hh:mm:SS",
     #     "wrfout_zlev_d01_YYYY-MM-DD_hh:mm:SS",
     #     "wrfout_afwa_d01_YYYY-MM-DD_hh:mm:SS",
-    #     "wrfrst_d01_YYYY-MM-DD_hh:mm:SS"
+    #     "wrfrst_d01_YYYY-MM-DD_hh:mm:SS" <- excluding via the
+    #         EXCLUDE_FILE_PATTERNS
+
 
     dir_of_unique_filenames: dict = {}
 
@@ -137,6 +145,11 @@ def check_dirs_for_data()-> dict:
         all_files = os.listdir(cur_dir)
         for cur_file in all_files:
             # Make sure we are only considering files with expected filename patterns.
+            for exclude in EXCLUDE_FILENAME_PATTERNS:
+                expression = exclude + "\d{4})-\d{1,2}-\d{1,2}_\d{2}:\d{2}:\d{2}.*"
+                match = re.match(expression, cur_file)
+                if match:
+                    break
             result = re.search(r'(.*\d{4})-\d{1,2}-\d{1,2}_\d{2}:\d{2}:\d{2}.*',  cur_file)
             if result:
                 filename = result.group(1)
@@ -149,10 +162,11 @@ def check_dirs_for_data()-> dict:
     # chunk directory (i.e. all the files named wrfout_d01_<date-time>,
     # wrfout_hour_d01_<date-time>, etc. are in each chunk directory)
     # If any chunk directory has missing files, exit from this script.
+    expected_num_filename_patterns = EXPECTED_NUM_FILENAME_PATTERNS - len(EXCLUDE_FILENAME_PATTERNS)
     all_files = {}
     keys =  dir_of_unique_filenames.keys()
     for k in keys:
-        if len(dir_of_unique_filenames[k]) == EXPECTED_NUM_FILENAME_PATTERNS:
+        if len(dir_of_unique_filenames[k]) == expected_num_filename_patterns:
             sys.exit("Insufficient number of filename patterns.")
 
         # Check for the expected number of files (filename + date + time) in this
