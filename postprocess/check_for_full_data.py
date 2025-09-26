@@ -254,9 +254,9 @@ def check_for_all_files(chunk_dir:str, dir_fnames:dict) -> list:
 
             matched_files_found:list = glob.glob(search_pattern)
             num_files = len(matched_files_found)
+            hms: str = "_00:00:00"
 
             if is_leap_year(file_year):
-               hms:str = "_00:00:00"
                if num_files == EXPECTED_NUM_FILES_LEAP_YEAR:
                    # Thus far, criteria is met, store the year as a list
                    valid_years.append(file_year)
@@ -352,7 +352,6 @@ def check_for_all_chunk_dirs()  -> bool:
     expected_years:list = [i for i in range(first_year, expected_last_year+1, YEAR_INCREMENT)]
     missing_dirs = []
     for cur_yr in chunk_years:
-        print(f"cur yr: {cur_yr}")
         if int(cur_yr) not  in expected_years:
             missing_dirs.append(cur_yr)
 
