@@ -59,11 +59,12 @@ YEAR_INCREMENT = 10
 # year as the starting year
 ORDINAL_START_YEAR = 2
 
-# Filename patterns to exclude from consideration, leave as
-# empty file if all patterns are to be included
-# The number of expected patterns will be automatically adjusted
-# based on the number of patterns to exclude
-EXCLUDE_FILENAME_PATTERNS = ["wrfrst_d01"]
+#   ***  NOTE ***
+# The following filenames with filename patterns:
+#     wrfout_5day_d01_YYYY-MM-DD_00:00:00
+#     wrfrst_d01_YYYY-MM-DD_00:00:00
+#
+#   will be EXCLUDED from postprocessing and plotting
 
 #--------------------------
 # Plotting Information
@@ -102,6 +103,9 @@ EXPECTED_NUM_FILENAME_PATTERNS = 5
 DAYS_IN_MONTH = {'01': 30, '02':28, '02_leap': 29, '03':31, '04':30, '05':31,
     '06':30, '07':31, '08':31, '09':30, '10':31, '11':30, '12':31   }
 
+# Exclude files with this filename pattern from postprocessing and plotting
+EXCLUDE_FILES = ['wrfout_5day_d01', 'wrfrst_d01']
+
 def check_dirs_for_data()-> dict:
     """
          Check for expected chunk directories and complete data within each
@@ -133,11 +137,9 @@ def check_dirs_for_data()-> dict:
     #     "wrfout_pres_d01_YYYY-MM-DD_hh:mm:SS",
     #     "wrfout_zlev_d01_YYYY-MM-DD_hh:mm:SS",
     #     "wrfout_afwa_d01_YYYY-MM-DD_hh:mm:SS",
-    #     "wrfrst_d01_YYYY-MM-DD_hh:mm:SS" <- excluding via the
-    #         EXCLUDE_FILENAME_PATTERNS
 
 
-    dir_of_unique_filenames: dict = {}
+    dir_and_unique_filenames: dict = {}
 
     for cur_dir in complete_chunk_dirs:
         # keep track of unique filename-date combinations
@@ -145,36 +147,30 @@ def check_dirs_for_data()-> dict:
         all_files = os.listdir(cur_dir)
         for cur_file in all_files:
             # Make sure we are only considering files with expected filename patterns.
-            for exclude in EXCLUDE_FILENAME_PATTERNS:
-                expression = exclude + ".*\d{4}-\d{1,2}-\d{1,2}_\d{2}:\d{2}:\d{2}.*"
-                match = re.match(expression, cur_file)
-                if match:
-                    print(f"excluding {match} from unique_filename_dates")
-                    break
-            result = re.search(r'(.*\d{4})-\d{1,2}-\d{1,2}_\d{2}:\d{2}:\d{2}.*',  cur_file)
+            result = re.search(r'(wrfout_(?:d01|afwa_d01|zlev_d01|hour_d01|pres_d01)_\d{4})-\d{1,2}-\d{1,2}',  cur_file)
+
             if result:
                 filename = result.group(1)
                 print(f"adding {filename} to unique_filename_dates")
                 unique_filename_dates.add(filename)
 
         # Collect a list of unique filenames for each chunk directory.
-        dir_of_unique_filenames[cur_dir] = list(unique_filename_dates)
+        dir_and_unique_filenames[cur_dir] = list(unique_filename_dates)
 
     # Check that all the expected filename patterns have been found for every
     # chunk directory (i.e. all the files named wrfout_d01_<date-time>,
     # wrfout_hour_d01_<date-time>, etc. are in each chunk directory)
     # If any chunk directory has missing files, exit from this script.
-    expected_num_filename_patterns = EXPECTED_NUM_FILENAME_PATTERNS - len(EXCLUDE_FILENAME_PATTERNS)
     all_files = {}
-    keys =  dir_of_unique_filenames.keys()
+    keys =  dir_and_unique_filenames.keys()
     for k in keys:
-        if len(dir_of_unique_filenames[k]) == expected_num_filename_patterns:
+        if len(dir_and_unique_filenames[k]) == EXPECTED_NUM_FILENAME_PATTERNS:
             sys.exit("Insufficient number of filename patterns.")
 
         # Check for the expected number of files (filename + date + time) in this
         # chunk directory.
 
-        all_files_present:dict  = check_for_all_files(k, dir_of_unique_filenames)
+        all_files_present:dict  = check_for_all_files(k, dir_and_unique_filenames)
 
         # build up the final all_files dictionary by appending the all_files_present
         # from each chunk directory
@@ -183,7 +179,7 @@ def check_dirs_for_data()-> dict:
     return all_files
 
 
-def check_for_all_files(chunk_dir:str, dir_fnames:dict) -> list:
+def check_for_all_files(chunk_dir:str, dir_and_fname_patterns:dict) -> list:
     """
            PRE-CONDITION:
            ***************
@@ -204,7 +200,7 @@ def check_for_all_files(chunk_dir:str, dir_fnames:dict) -> list:
                chunk_dir: the full path to the current chunk dir which is under examination
                                for all files
 
-               dir_fnames: a dictionary containing full path to chunk dirs as key, and
+               dir_and_fname_patterns: a dictionary containing full path to chunk dirs as key, and
                a list of all the unique filename patterns with year only as values.
 
            Returns:
@@ -224,7 +220,7 @@ def check_for_all_files(chunk_dir:str, dir_fnames:dict) -> list:
     #              "wrfout_afwa_d01_*",
     #              "wrfrst_d01_*"
 
-    all_file_patterns_for_chunkdir = dir_fnames[chunk_dir]
+    all_file_patterns_for_chunkdir = dir_and_fname_patterns[chunk_dir]
 
     # retrieve all the year information from the files and include only
     # the years beginning from the ordinal year (i.e. nth year) from the first year
