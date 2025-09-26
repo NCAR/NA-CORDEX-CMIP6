@@ -43,11 +43,21 @@ BASEDIR = '/glade/derecho/scratch/jsallen/NA-CORDEX-CMIP6/ERA5_HIST_E03/wrf_d01'
 # is a total of 30 years).
 TOTAL_YEARS_IN_SIMULATION = 40
 
+# For each simulation, number of years
+# e.g. for 1977_chunk, the start year is 1977, last year is 1989 which is 12 years
+NUMBER_OF_YEARS_WITHIN_SIMULATION = 13
+
 # collect the seventh year of each decade
 SEVENTH_YEAR_OF_DECADE = True
 
 # increment of year, set to 1 for every year, 10 for every decade, etc.
 YEAR_INCREMENT = 10
+
+# inside each chunk directory, specify an ordinal year (2 for second, 3 for third, etc. )
+# to use as the starting year in determining whether a full complement of data exists.
+# e.g. if the actual first year is 1977 and 2 is specified, then use 1978, the second
+# year as the starting year
+ORDINAL_START_YEAR = 1
 
 #--------------------------
 # Plotting Information
@@ -63,12 +73,7 @@ INPUT_FNAME_TEMPLATE = "tas_NAM-12_ERA5_evaluation_r1i1p1f1_NCAR_WRF461_v1-r1_hr
 # the postprocessed data's year
 PLOT_FNAME_TEMPLATE = "5day_mean_and_hourly_tas_NAM-12_ERA5_evaluation_r1ip1f1_NCAR_WRF461_v1-r1_hr_${YEAR}"
 
-# in config.yaml, this is set to 'tas', uncomment and set this to any other variable
-# to override the setting in the YAML config
-# DATA_VAR = "tas"
-
 PLOT_OUTPUT_DIR = '/glade/u/home/minnawin/NA-CORDEX/Output/plots'
-
 
 
 #-------------------------------------
@@ -88,6 +93,8 @@ POST_PROCESS_SCRIPT = '/glade/u/home/minnawin/NA-CORDEX/NA-CORDEX-CMIP6/postproc
 EXPECTED_NUM_FILES = 365
 EXPECTED_NUM_FILES_LEAP_YEAR = 366
 EXPECTED_NUM_FILENAME_PATTERNS = 6
+DAYS_IN_MONTH = {'01': 30, '02':28, '02_leap': 29, '03':31, '04':30, '05':31,
+    '06':30, '07':31, '08':31, '09':30, '10':31, '11':30, '12':31   }
 
 def check_dirs_for_data()-> dict:
     """
@@ -122,7 +129,7 @@ def check_dirs_for_data()-> dict:
     #     "wrfout_afwa_d01_YYYY-MM-DD_hh:mm:SS",
     #     "wrfrst_d01_YYYY-MM-DD_hh:mm:SS"
 
-    dir_to_unique_filenames: dict = {}
+    dir_of_unique_filenames: dict = {}
 
     for cur_dir in complete_chunk_dirs:
         # keep track of unique filename-date combinations
@@ -136,28 +143,27 @@ def check_dirs_for_data()-> dict:
                 unique_filename_dates.add(filename)
 
         # Collect a list of unique filenames for each chunk directory.
-        dir_to_unique_filenames[cur_dir] = list(unique_filename_dates)
+        dir_of_unique_filenames[cur_dir] = list(unique_filename_dates)
 
     # Check that all the expected filename patterns have been found for every
     # chunk directory (i.e. all the files named wrfout_d01_<date-time>,
     # wrfout_hour_d01_<date-time>, etc. are in each chunk directory)
     # If any chunk directory has missing files, exit from this script.
     all_files = {}
-    keys =  dir_to_unique_filenames.keys()
+    keys =  dir_of_unique_filenames.keys()
     for k in keys:
-        if len(dir_to_unique_filenames[k]) == EXPECTED_NUM_FILENAME_PATTERNS:
+        print(f"inside check_dirs_for_datacurrent|| key value, {k}, dict: {dir_of_unique_filenames}")
+        if len(dir_of_unique_filenames[k]) == EXPECTED_NUM_FILENAME_PATTERNS:
             sys.exit("Insufficient number of filename patterns.")
 
         # Check for the expected number of files (filename + date + time) in this
         # chunk directory.
 
-        all_files_present:dict  = check_for_all_files(k, dir_to_unique_filenames)
-        if not all_files_present:
-            sys.exit("Not all files are present")
-        else:
-            # build up the final all_files dictionary by appending the all_files_present
-            # from each chunk directory
-             all_files = {**all_files, **all_files_present}
+        all_files_present:dict  = check_for_all_files(k, dir_of_unique_filenames)
+
+        # build up the final all_files dictionary by appending the all_files_present
+        # from each chunk directory
+        all_files = {**all_files, **all_files_present}
 
     return all_files
 
@@ -190,6 +196,8 @@ def check_for_all_files(chunk_dir:str, dir_fnames:dict) -> list:
                all_files:   a dictionary with the chunk dir as key and
                 the list of years (derived from the filenames)
 
+                Exits from the script if there are missing files
+
     """
 
 
@@ -203,33 +211,90 @@ def check_for_all_files(chunk_dir:str, dir_fnames:dict) -> list:
 
     all_file_patterns_for_chunkdir = dir_fnames[chunk_dir]
 
-    # This is the equivalent to the Unix/Linux command:
-    #     find . -name "wrfout_d01_*" |wc -l
-    #  for every filename pattern
+    # retrieve all the year information from the files and include only
+    # the years beginning from the ordinal year (i.e. nth year) from the first year
+    # of the data
+
+    # a list of years of the actual files in this chunk directory
+    all_years_all_files = []
+    for fp in all_file_patterns_for_chunkdir:
+        match = re.match(r'.*_(\d{4})', fp)
+        all_years_all_files.append(int(match.group(1)))
+
+    all_years_all_files.sort()
+    first_year = int(all_years_all_files[0])
+    # determine the last year, so we can ignore it as it only has data for Jan 1
+    last_year = first_year + NUMBER_OF_YEARS_WITHIN_SIMULATION
+    adjusted_last_year = last_year - 1
+    # start with the nth year
+    start_year_increment = ORDINAL_START_YEAR - 1
+    adjusted_first_year = first_year + start_year_increment
+    years_of_interest = [yr for yr in range(adjusted_first_year, adjusted_last_year)]
+
+    missing_years = []
+    for expected in years_of_interest:
+        if expected not in all_years_all_files:
+            missing_years.append(expected)
+
+    #  Search for every filename pattern.
+    #  The search is the equivalent to the Unix/Linux command:
+    #     find . -name "wrfout_d01_*"  -printf '.'| wc -m
     valid_years = []
     all_files = {}
-    for cur_file_pattern  in all_file_patterns_for_chunkdir:
-       filepath = os.path.join(chunk_dir, cur_file_pattern )
-       search_pattern = filepath + "*"
-       num_files = len(glob.glob(search_pattern))
-       year = re.match(r".*_(\d{4})", cur_file_pattern).group(1)
-       if is_leap_year(year):
-           if num_files == EXPECTED_NUM_FILES_LEAP_YEAR:
-               # Thus far, criteria is met, store the year as a list
-               valid_years.append(year)
-           else:
-               sys.exit("Insufficient number of files in this chunk dir")
-       else:
-           if num_files == EXPECTED_NUM_FILES:
-               # Thus far, criteria is met, store the year as a list
-               valid_years.append(year)
-           else:
-                sys.exit("Insufficient number of files in this chunk dir")
+    missing_files = []
 
-       # Thus far, criteria is met, assign the list of files to the chunk dir key
-       all_files[chunk_dir] = valid_years
+    for cur_file_pattern in all_file_patterns_for_chunkdir:
+        #  Extract the year portion of the filename pattern and use to consider only
+        #  relevant years (i.e. years that are expected to have 365/366 files
+        #  per filename pattern).
+        match = re.match(r'.*_(\d{4})', cur_file_pattern)
+        file_year = int(match.group(1))
+        if file_year in years_of_interest:
+            filepath = os.path.join(chunk_dir, cur_file_pattern)
+            search_pattern = filepath + "*"
+
+            matched_files_found:list = glob.glob(search_pattern)
+            num_files = len(matched_files_found)
+
+            if is_leap_year(file_year):
+
+               if num_files == EXPECTED_NUM_FILES_LEAP_YEAR:
+                   # Thus far, criteria is met, store the year as a list
+                   valid_years.append(file_year)
+               else:
+                   for m in range(1, 13):
+                       if m == 2:
+                           days_in_month = DAYS_IN_MONTH['02_leap']
+                       else:
+                           days_in_month = DAYS_IN_MONTH[str(m).zfill(2)]
+                       for d in range(1, days_in_month + 1):
+                          expected_full_file = cur_file_pattern + '-' + str(m).zfill(2) + '-' + str(d).zfill(2)
+                          if expected_full_file not in matched_files_found:
+                              missing_files.append(expected_full_file)
+
+                   sys.exit(f"WARNING: in {chunk_dir}, these files are missing {missing_files}")
+
+            else:
+               if num_files == EXPECTED_NUM_FILES:
+                   # Thus far, criteria is met, store the year as a list
+                   valid_years.append(file_year)
+               else:
+                   for m in range(1, 13):
+                       days_in_month = DAYS_IN_MONTH[str(m).zfill(2)]
+                       for d in range(1, days_in_month + 1):
+                           expected_full_file = cur_file_pattern + '-' + str(m).zfill(2) + '-' + str(d).zfill(2)
+                           if expected_full_file not in matched_files_found:
+                               missing_files.append(expected_full_file)
+
+                   sys.exit(f"WARNING: in {chunk_dir}, these files are missing {missing_files}")
+
+
+    # Thus far, all criteria is met, assign the list of files to the chunk_dir key
+    all_files[chunk_dir] = valid_years
+
 
     return all_files
+
 
 
 def check_for_all_chunk_dirs()  -> bool:
@@ -247,9 +312,9 @@ def check_for_all_chunk_dirs()  -> bool:
         Args: None, using global vars  to search for data and relevant scripts
 
         Returns:
-            a list of all the chunk directories
+            a list of all the chunk directories (full path)
 
-            as soon as an expected chunk directory is NOT found, the script exits
+            if no chunk directories were found, exit from this script
 
 
     """
@@ -262,6 +327,7 @@ def check_for_all_chunk_dirs()  -> bool:
     chunk_dirs.sort()
     chunk_years = []
     for dir in chunk_dirs:
+        # Verify that this directory has chunk directories
         if SEVENTH_YEAR_OF_DECADE:
             # YYY7_chunk
             match = re.search(r'(\d{4})_chunk', dir)
@@ -270,26 +336,27 @@ def check_for_all_chunk_dirs()  -> bool:
             match = re.match(r'(\d{3}7)_chunk', dir)
 
         if not match:
-            sys.exit("Missing one or more expected chunk directories")
+            sys.exit(f"No directories with YEAR_chunk name were found in {BASEDIR}")
 
+        # Collect all the years corresponding to the chunk directories
         chunk_years.append(match.group(1))
 
+    # Verify the chunk years in the BASEDIR are consistent with expected
+    # years (based on the TOTAL_YEARS_IN_SIMULATION and YEAR_INCREMENT)
+    first_year = int(chunk_years[0])
+    expected_last_year:int = first_year + TOTAL_YEARS_IN_SIMULATION
+    expected_years:list = [i for i in range(first_year, expected_last_year, YEAR_INCREMENT)]
+    missing_dirs = []
+    for cur_yr in chunk_years:
+        if int(cur_yr) not  in expected_years:
+            missing_dirs.append(cur_yr)
 
-    # Verify the chunk years span the same number of years specified in
-    # TOTAL_YEARS_IN_SIMULATION
-    last_year = len(chunk_years) - 1
-    simulation_years = int(chunk_years[last_year]) - int(chunk_years[0])
-
-    if simulation_years ==TOTAL_YEARS_IN_SIMULATION:
-        expected_num_dirs = (TOTAL_YEARS_IN_SIMULATION/YEAR_INCREMENT) + 1
-        if len(chunk_years) != expected_num_dirs:
-            return None
-
-        # Generate a list of the full path to the complete list of chunk directories
-        chunk_dir_path: list = [os.path.join(BASEDIR, cur_chunk)  for cur_chunk in chunk_dirs]
-        return chunk_dir_path
+    if len(missing_dirs) > 0:
+        sys.exit(f"Missing the following chunk directories: {missing_dirs}")
     else:
-        sys.exit("Missing one or more expected chunk directories")
+        # Generate a list of the full path to the complete list of chunk directories
+        chunk_dir_path: list = [os.path.join(BASEDIR, cur_chunk) for cur_chunk in chunk_dirs]
+        return chunk_dir_path
 
 
 def is_leap_year(year:str|int) -> bool:
@@ -324,7 +391,7 @@ def is_leap_year(year:str|int) -> bool:
         return False
 
 
-def invoke_postprocessing(all_files: dict) -> int:
+def invoke_postprocessing(all_files: dict) -> list:
     """
      Invoke the postprocess.core.variables.py script
      which expects two arguments: year month (no zero padding)
@@ -356,21 +423,18 @@ def invoke_postprocessing(all_files: dict) -> int:
         for cur_year in year_list:
             all_years_flattened.append(cur_year)
 
-    # for each year and month (all months Jan-Dec), invoke the
+    # for each year, invoke the
     # postprocess.core.variables.py script
-    months = range(1,13)
     for cur_year in all_years_flattened:
-        for cur_month in months:
-            arguments = [str(cur_year), str(cur_month)]
-            print(f"Invoking postprocess script for  {cur_year} {cur_month}:")
+            arguments = [str(cur_year)]
+            print(f"Invoking postprocess script for  {cur_year}:")
             print(f"subprocess.run(['python', POST_PROCESS_SCRIPT]+ arguments, capture_output=True, text=True)")
 
-            # !!TODO!! uncomment when ready to run
-            # result = subprocess.run(['python', POST_PROCESS_SCRIPT]+ arguments, capture_output=True, text=True)
+            result = subprocess.run(['python', POST_PROCESS_SCRIPT]+ arguments, capture_output=True, text=True)
 
     return all_years_flattened
 
-def generate_plots(all_years:list):
+def generate_plots(all_years:list) :
     """
           Generate the plots by invoking methods in plot.py
 
@@ -396,7 +460,11 @@ def generate_plots(all_years:list):
     settings['years_by_list'] = True
     settings['months_by_list'] = True
     settings['years'] = all_years
-    settings['data_var'] = 'tas'
+
+    # Retrieve the data variable name from the postprocess filename
+    match = re.match(r'(\w+)_.*', INPUT_FNAME_TEMPLATE)
+    data_variable = match.group(1)
+    settings['data_var'] = data_variable
 
     # complete data will have data for every month
     all_months = range(1,13)
@@ -407,17 +475,17 @@ def generate_plots(all_years:list):
     all_input_files: list = util.get_input_files(settings)
 
     # check if plots already exist before invoking plot generation
-
-    if not plots_already_exist(PLOT_FNAME_TEMPLATE, all_years, all_months):
+    if not plots_already_exist(PLOT_FNAME_TEMPLATE, all_years):
         # invoke the plotting function from plot.py
         plot.make_time_series_plots(all_input_files, settings)
     else:
         # Not necessary, but useful information
-        print("All plots already exist, skip creating these plots.")
+        print(f"All plots already exist for years: {all_years}, skip creating these plots.")
 
     return 0
 
-def plots_already_exist(output_filename_expr:str, years:list, months:list) -> bool:
+
+def plots_already_exist(output_filename_expr:str, years:list) -> bool:
     """
        Check if plots were already created for this set of data and
        conditions.
@@ -455,21 +523,6 @@ def plots_already_exist(output_filename_expr:str, years:list, months:list) -> bo
     return False
 
 
-def plots_ok(settings:dict) -> list:
-    """
-         Check that all the expected plots exist in the plot output directory
-
-         Args:
-
-         settings: a dictionary representation of the settings in the config.yaml file
-                       and updated/overridden values set in this script
-
-         Returns:
-             missing_plots:  a list of missing plots
-
-    """
-    pass
-
 if __name__ == "__main__":
 
     # Postprocess and generate plots
@@ -486,6 +539,8 @@ if __name__ == "__main__":
        # Generate plots via plot.py and config.yaml
        print("Generating plots from postprocessed data...")
        generate_plots(all_years)
+
+
 
 
 
