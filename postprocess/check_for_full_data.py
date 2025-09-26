@@ -347,7 +347,7 @@ def check_for_all_chunk_dirs()  -> bool:
     # years (based on the TOTAL_YEARS_IN_SIMULATION and YEAR_INCREMENT)
     first_year = int(chunk_years[0])
     expected_last_year:int = first_year + TOTAL_YEARS_IN_SIMULATION
-    expected_years:list = [i for i in range(first_year, expected_last_year, YEAR_INCREMENT)]
+    expected_years:list = [i for i in range(first_year, expected_last_year+1, YEAR_INCREMENT)]
     print(f"expected years: {expected_years}")
     missing_dirs = []
     for cur_yr in chunk_years:
