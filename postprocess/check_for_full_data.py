@@ -57,7 +57,7 @@ YEAR_INCREMENT = 10
 # to use as the starting year in determining whether a full complement of data exists.
 # e.g. if the actual first year is 1977 and 2 is specified, then use 1978, the second
 # year as the starting year
-ORDINAL_START_YEAR = 1
+ORDINAL_START_YEAR = 2
 
 #--------------------------
 # Plotting Information
@@ -152,7 +152,6 @@ def check_dirs_for_data()-> dict:
     all_files = {}
     keys =  dir_of_unique_filenames.keys()
     for k in keys:
-        print(f"inside check_dirs_for_datacurrent|| key value, {k}, dict: {dir_of_unique_filenames}")
         if len(dir_of_unique_filenames[k]) == EXPECTED_NUM_FILENAME_PATTERNS:
             sys.exit("Insufficient number of filename patterns.")
 
@@ -180,7 +179,7 @@ def check_for_all_files(chunk_dir:str, dir_fnames:dict) -> list:
 
             For this chunk directory, check for the expected number of files for each
             filename pattern/type:
-           365 for a non Leap Year, 366 for a Leap Year.
+            365 for a non Leap Year, 366 for a Leap Year.
 
            Save the list of filenames as values to the corresponding chunk dir (key) in
            a dictionary.
@@ -257,7 +256,7 @@ def check_for_all_files(chunk_dir:str, dir_fnames:dict) -> list:
             num_files = len(matched_files_found)
 
             if is_leap_year(file_year):
-
+               hms:str = "_00:00:00"
                if num_files == EXPECTED_NUM_FILES_LEAP_YEAR:
                    # Thus far, criteria is met, store the year as a list
                    valid_years.append(file_year)
@@ -268,7 +267,8 @@ def check_for_all_files(chunk_dir:str, dir_fnames:dict) -> list:
                        else:
                            days_in_month = DAYS_IN_MONTH[str(m).zfill(2)]
                        for d in range(1, days_in_month + 1):
-                          expected_full_file = cur_file_pattern + '-' + str(m).zfill(2) + '-' + str(d).zfill(2)
+                          expected_file = cur_file_pattern + '-' + str(m).zfill(2) + '-' + str(d).zfill(2) + hms
+                          expected_full_file = os.path.join(BASEDIR, chunk_dir, expected_file)
                           if expected_full_file not in matched_files_found:
                               missing_files.append(expected_full_file)
 
@@ -282,7 +282,9 @@ def check_for_all_files(chunk_dir:str, dir_fnames:dict) -> list:
                    for m in range(1, 13):
                        days_in_month = DAYS_IN_MONTH[str(m).zfill(2)]
                        for d in range(1, days_in_month + 1):
-                           expected_full_file = cur_file_pattern + '-' + str(m).zfill(2) + '-' + str(d).zfill(2)
+                           expected_file = cur_file_pattern + '-' + str(m).zfill(2) + '-' + str(d).zfill(2) + hms
+                           expected_full_file = os.path.join(BASEDIR, chunk_dir, expected_file)
+                           print(f"expected_full_file: {expected_full_file}")
                            if expected_full_file not in matched_files_found:
                                missing_files.append(expected_full_file)
 
@@ -323,10 +325,10 @@ def check_for_all_chunk_dirs()  -> bool:
     # directories: YYYY_chunk (specifically YYY7_chunk).
     # Create a list of the chunk directories with their
     # full path only if ALL the expected dirs are present.
-    chunk_dirs = os.listdir(BASEDIR)
-    chunk_dirs.sort()
+    chunk_dirs_found = os.listdir(BASEDIR)
+    chunk_dirs_found.sort()
     chunk_years = []
-    for dir in chunk_dirs:
+    for dir in chunk_dirs_found:
         # Verify that this directory has chunk directories
         if SEVENTH_YEAR_OF_DECADE:
             # YYY7_chunk
@@ -346,8 +348,10 @@ def check_for_all_chunk_dirs()  -> bool:
     first_year = int(chunk_years[0])
     expected_last_year:int = first_year + TOTAL_YEARS_IN_SIMULATION
     expected_years:list = [i for i in range(first_year, expected_last_year, YEAR_INCREMENT)]
+    print(f"expected years: {expected_years}")
     missing_dirs = []
     for cur_yr in chunk_years:
+        print(f"cur yr: {cur_yr}")
         if int(cur_yr) not  in expected_years:
             missing_dirs.append(cur_yr)
 
@@ -355,7 +359,7 @@ def check_for_all_chunk_dirs()  -> bool:
         sys.exit(f"Missing the following chunk directories: {missing_dirs}")
     else:
         # Generate a list of the full path to the complete list of chunk directories
-        chunk_dir_path: list = [os.path.join(BASEDIR, cur_chunk) for cur_chunk in chunk_dirs]
+        chunk_dir_path: list = [os.path.join(BASEDIR, cur_chunk) for cur_chunk in chunk_dirs_found]
         return chunk_dir_path
 
 
