@@ -134,7 +134,7 @@ def check_dirs_for_data()-> dict:
     #     "wrfout_zlev_d01_YYYY-MM-DD_hh:mm:SS",
     #     "wrfout_afwa_d01_YYYY-MM-DD_hh:mm:SS",
     #     "wrfrst_d01_YYYY-MM-DD_hh:mm:SS" <- excluding via the
-    #         EXCLUDE_FILE_PATTERNS
+    #         EXCLUDE_FILENAME_PATTERNS
 
 
     dir_of_unique_filenames: dict = {}
@@ -146,7 +146,7 @@ def check_dirs_for_data()-> dict:
         for cur_file in all_files:
             # Make sure we are only considering files with expected filename patterns.
             for exclude in EXCLUDE_FILENAME_PATTERNS:
-                expression = exclude + "\d{4})-\d{1,2}-\d{1,2}_\d{2}:\d{2}:\d{2}.*"
+                expression = exclude + ".*\d{4}-\d{1,2}-\d{1,2}_\d{2}:\d{2}:\d{2}.*"
                 match = re.match(expression, cur_file)
                 if match:
                     break
