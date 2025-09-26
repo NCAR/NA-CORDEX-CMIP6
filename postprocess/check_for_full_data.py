@@ -149,10 +149,12 @@ def check_dirs_for_data()-> dict:
                 expression = exclude + ".*\d{4}-\d{1,2}-\d{1,2}_\d{2}:\d{2}:\d{2}.*"
                 match = re.match(expression, cur_file)
                 if match:
+                    print(f"excluding {match} from unique_filename_dates")
                     break
             result = re.search(r'(.*\d{4})-\d{1,2}-\d{1,2}_\d{2}:\d{2}:\d{2}.*',  cur_file)
             if result:
                 filename = result.group(1)
+                print(f"adding {filename} to unique_filename_dates")
                 unique_filename_dates.add(filename)
 
         # Collect a list of unique filenames for each chunk directory.
