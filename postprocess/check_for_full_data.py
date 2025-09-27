@@ -100,7 +100,7 @@ POST_PROCESS_SCRIPT = '/glade/u/home/minnawin/NA-CORDEX/develop/NA-CORDEX-CMIP6/
 EXPECTED_NUM_FILES = 365
 EXPECTED_NUM_FILES_LEAP_YEAR = 366
 EXPECTED_NUM_FILENAME_PATTERNS = 5
-DAYS_IN_MONTH = {'01': 30, '02':28, '02_leap': 29, '03':31, '04':30, '05':31,
+DAYS_IN_MONTH = {'01': 31, '02':28, '02_leap': 29, '03':31, '04':30, '05':31,
     '06':30, '07':31, '08':31, '09':30, '10':31, '11':30, '12':31   }
 
 # Exclude files with this filename pattern from postprocessing and plotting
@@ -216,8 +216,7 @@ def check_for_all_files(chunk_dir:str, dir_and_fname_patterns:dict) -> list:
     #              "wrfout_hour_d01_*",
     #              "wrfout_pres_d01_*",
     #              "wrfout_zlev_d01_*",
-    #              "wrfout_afwa_d01_*",
-    #              "wrfrst_d01_*"
+    #              "wrfout_afwa_d01_*"
 
     all_file_patterns_for_chunkdir = dir_and_fname_patterns[chunk_dir]
 
@@ -225,13 +224,14 @@ def check_for_all_files(chunk_dir:str, dir_and_fname_patterns:dict) -> list:
     # the years beginning from the ordinal year (i.e. nth year) from the first year
     # of the data
 
-    # a list of years of the actual files in this chunk directory
+    # a list of years of the actual files (of interest) in this chunk directory
     all_years_all_files = []
     for fp in all_file_patterns_for_chunkdir:
         match = re.match(r'.*_(\d{4})', fp)
         all_years_all_files.append(int(match.group(1)))
 
     all_years_all_files.sort()
+    all_actuals = set(all_years_all_files)
     first_year = int(all_years_all_files[0])
     # determine the last year, so we can ignore it as it only has data for Jan 1
     last_year = first_year + NUMBER_OF_YEARS_WITHIN_SIMULATION
@@ -242,13 +242,21 @@ def check_for_all_files(chunk_dir:str, dir_and_fname_patterns:dict) -> list:
 
     missing_years = []
     for expected in years_of_interest:
-        if expected not in all_years_all_files:
+        if expected not in all_actuals:
             missing_years.append(expected)
+
+    if len(missing_years) > 0:
+      print(f"WARNING, in {chunk_dir} no data files for : {missing_years} ")
+      sys.exit("Exiting due to missing data files for one or more years.")
 
     #  Search for every filename pattern.
     #  The search is the equivalent to the Unix/Linux command:
     #     find . -name "wrfout_d01_*"  -printf '.'| wc -m
+
+    # list of the years corresponding to existing data
     valid_years = []
+
+    # the dictionary to store the list of found filenames (values) to a chunk dir (key)
     all_files = {}
     missing_files = []
     missing = False
@@ -265,7 +273,7 @@ def check_for_all_files(chunk_dir:str, dir_and_fname_patterns:dict) -> list:
 
             matched_files_found:list = glob.glob(search_pattern)
             num_files = len(matched_files_found)
-            hms: str = "_00:00:00"
+            hms = "_00:00:00"
 
             if is_leap_year(file_year):
                if num_files == EXPECTED_NUM_FILES_LEAP_YEAR:
@@ -437,6 +445,7 @@ def invoke_postprocessing(all_files: dict) -> list:
     for year_list in all_years_2d:
         for cur_year in year_list:
             all_years_flattened.append(cur_year)
+    print(f"years to postprocess: {all_years_flattened}")
 
     # for each year, invoke the
     # postprocess.core.variables.py script
@@ -446,7 +455,7 @@ def invoke_postprocessing(all_files: dict) -> list:
             print(f"python {POST_PROCESS_SCRIPT} {cur_year} ")
             # print(f"subprocess.run(['python', POST_PROCESS_SCRIPT]+ arguments, capture_output=True, text=True)")
 
-            result = subprocess.run(['python', POST_PROCESS_SCRIPT]+ arguments, capture_output=True, text=True)
+            subprocess.run(['python', POST_PROCESS_SCRIPT]+ arguments, capture_output=True, text=True)
 
     return all_years_flattened
 
@@ -551,10 +560,12 @@ if __name__ == "__main__":
 
        # Postprocessing via postprocess.core.variables.py
        all_years:list =  invoke_postprocessing(all_files)
+       print("Postprocessing finished, invoke plotting...")
 
        # Generate plots via plot.py and config.yaml
        print("Generating plots from postprocessed data...")
        generate_plots(all_years)
+       print("Plotting complete")
 
 
 
