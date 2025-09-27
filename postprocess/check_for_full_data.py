@@ -44,8 +44,8 @@ BASEDIR = '/glade/derecho/scratch/jsallen/NA-CORDEX-CMIP6/ERA5_HIST_E03/wrf_d01'
 TOTAL_YEARS_IN_SIMULATION = 40
 
 # For each simulation, number of years
-# e.g. for 1977_chunk, the start year is 1977, last year is 1989 which is 12 years
-NUMBER_OF_YEARS_WITHIN_SIMULATION = 10
+# e.g. for 1977_chunk, the start year is 1977, last year is 1990 which is 13 years
+NUMBER_OF_YEARS_WITHIN_SIMULATION = 13
 
 # collect the seventh year of each decade
 SEVENTH_YEAR_OF_DECADE = True
@@ -235,11 +235,10 @@ def check_for_all_files(chunk_dir:str, dir_and_fname_patterns:dict) -> list:
     first_year = int(all_years_all_files[0])
     # determine the last year, so we can ignore it as it only has data for Jan 1
     last_year = first_year + NUMBER_OF_YEARS_WITHIN_SIMULATION
-    adjusted_last_year = last_year - 1
     # start with the nth year
     start_year_increment = ORDINAL_START_YEAR - 1
     adjusted_first_year = first_year + start_year_increment
-    years_of_interest = [yr for yr in range(adjusted_first_year, adjusted_last_year)]
+    years_of_interest = [yr for yr in range(adjusted_first_year, last_year)]
 
     missing_years = []
     for expected in years_of_interest:
@@ -364,11 +363,11 @@ def check_for_all_chunk_dirs()  -> bool:
     expected_years:list = [i for i in range(first_year, expected_last_year+1, YEAR_INCREMENT)]
     missing_dirs = []
     for cur in expected_years:
-        if int(cur) not in chunk_years:
+        if str(cur) not in chunk_years:
             missing_dirs.append(cur)
 
     if len(missing_dirs) > 0:
-        sys.exit(f"Missing the following chunk directories: {missing_dirs}")
+        sys.exit(f"Missing the following chunk directories: {missing_dirs} in {BASEDIR}")
     else:
         # Generate a list of the full path to the complete list of chunk directories
         chunk_dir_path: list = [os.path.join(BASEDIR, cur_chunk) for cur_chunk in chunk_dirs_found]
