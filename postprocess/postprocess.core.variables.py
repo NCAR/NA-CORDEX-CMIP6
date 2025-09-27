@@ -59,9 +59,9 @@ wrfout_hour_fname = "wrfout_hour_d01_"  # Leading string of wrfout files with ho
 wrfout_fx_fname   = "wrfout_5day_d01_"  # Leading string of wrfout files with LANDFRAC and HGT
 
 # path to wrfoutput
-wrfout_path       = "/Users/minnawin/NA-CORDEX/Output"
+wrfout_path       = 
 # path to wrfinput for fixed fields (land fraction and terrain height)
-wrfinp_path       = "/Users/minnawin/NA-CORDEX/Data/wrf_d01"
+wrfinp_path       = 
 
 # -------------------------------
 # END OF USER DEFINED VARIABLES
