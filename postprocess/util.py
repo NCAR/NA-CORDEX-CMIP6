@@ -141,11 +141,10 @@ def get_input_files(settings:dict) ->list:
             missing_input_files.append(full_filename)
         else:
             all_input_files.append(full_filename)
-    # TODO
-    # determine if this is helpful to keep
-    # if len(missing_input_files) > 0:
-       # sys.exit(f"Missing input files: {missing_input_files}, exiting from plotting")
-       # print(f"Missing input files: {missing_input_files}")
+
+    if len(missing_input_files) > 0:
+       # sys.exit(f"Missing input files: {missing_input_files}")
+       print(f"WARNING: Missing input files: {missing_input_files}")
 
     if len(all_input_files) == 0:
        sys.exit("ERROR: No input files found for specified time(s), please check your configuration file.")
@@ -200,6 +199,7 @@ def extract_and_resample(settings:dict, all_input_files: list) -> namedtuple:
     variable_of_interest = settings['data_var']
 
     ncdata = xr.open_mfdataset(all_input_files,  concat_dim='time', combine='nested', chunks={'time': 1, 'lat': 236, 'lon': 376}, data_vars='all', )[variable_of_interest]
+    ncdata.sortby('time')
 
     # lats and lons
     lat:xr.DataArray = ncdata.lat
