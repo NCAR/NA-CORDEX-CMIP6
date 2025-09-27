@@ -103,9 +103,6 @@ EXPECTED_NUM_FILENAME_PATTERNS = 5
 DAYS_IN_MONTH = {'01': 31, '02':28, '02_leap': 29, '03':31, '04':30, '05':31,
     '06':30, '07':31, '08':31, '09':30, '10':31, '11':30, '12':31   }
 
-# Exclude files with this filename pattern from postprocessing and plotting
-EXCLUDE_FILES = ['wrfout_5day_d01', 'wrfrst_d01']
-
 def check_dirs_for_data()-> dict:
     """
          Check for expected chunk directories and complete data within each
