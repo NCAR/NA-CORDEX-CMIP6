@@ -87,9 +87,9 @@ PLOT_OUTPUT_DIR = '/glade/u/home/minnawin/NA-CORDEX/Output/plots'
 # bash script and
 # other Python script locations
 #--------------------------------------
-CMORIZE_SCRIPT = '/glade/u/home/minnawin/NA-CORDEX/NA-CORDEX-CMIP6/postprocess/cmorize.compress.sh'
+CMORIZE_SCRIPT = '/glade/u/home/minnawin/NA-CORDEX/develop/NA-CORDEX-CMIP6/postprocess/cmorize.compress.sh'
 
-POST_PROCESS_SCRIPT = '/glade/u/home/minnawin/NA-CORDEX/NA-CORDEX-CMIP6/postprocess/postprocess.core.variables.py'
+POST_PROCESS_SCRIPT = '/glade/u/home/minnawin/NA-CORDEX/develop/NA-CORDEX-CMIP6/postprocess/postprocess.core.variables.py'
 
 #*********************************
 # **** End of Set the following ****
@@ -240,7 +240,6 @@ def check_for_all_files(chunk_dir:str, dir_and_fname_patterns:dict) -> list:
     start_year_increment = ORDINAL_START_YEAR - 1
     adjusted_first_year = first_year + start_year_increment
     years_of_interest = [yr for yr in range(adjusted_first_year, adjusted_last_year)]
-    print(f"postprocessing for {years_of_interest}")
 
     missing_years = []
     for expected in years_of_interest:
@@ -364,9 +363,9 @@ def check_for_all_chunk_dirs()  -> bool:
     expected_last_year:int = first_year + TOTAL_YEARS_IN_SIMULATION
     expected_years:list = [i for i in range(first_year, expected_last_year+1, YEAR_INCREMENT)]
     missing_dirs = []
-    for cur_yr in chunk_years:
-        if int(cur_yr) not  in expected_years:
-            missing_dirs.append(cur_yr)
+    for cur in expected_years:
+        if int(cur) not in chunk_years:
+            missing_dirs.append(cur)
 
     if len(missing_dirs) > 0:
         sys.exit(f"Missing the following chunk directories: {missing_dirs}")
@@ -445,7 +444,8 @@ def invoke_postprocessing(all_files: dict) -> list:
     for cur_year in all_years_flattened:
             arguments = [str(cur_year)]
             print(f"Invoking postprocess script for  {cur_year}:")
-            print(f"subprocess.run(['python', POST_PROCESS_SCRIPT]+ arguments, capture_output=True, text=True)")
+            print(f"python {POST_PROCESS_SCRIPT} {cur_year} ")
+            # print(f"subprocess.run(['python', POST_PROCESS_SCRIPT]+ arguments, capture_output=True, text=True)")
 
             result = subprocess.run(['python', POST_PROCESS_SCRIPT]+ arguments, capture_output=True, text=True)
 
