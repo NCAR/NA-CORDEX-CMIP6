@@ -143,8 +143,8 @@ def get_input_files(settings:dict) ->list:
             all_input_files.append(full_filename)
 
     if len(missing_input_files) > 0:
-       # sys.exit(f"Missing input files: {missing_input_files}")
-       print(f"WARNING: Missing input files: ")
+       print(f"WARNING: Missing input files needed for plotting: ")
+
        for i in missing_input_files:
             print(f"{i}\n")
        sys.exit("Exit plotting due to missing postprocessed file(s).")
