@@ -143,7 +143,7 @@ def get_input_files(settings:dict) ->list:
             all_input_files.append(full_filename)
 
     if len(missing_input_files) > 0:
-       print(f"WARNING: Some  postprocessed input files are missing ")
+       print(f"WARNING: Some postprocessed input files are missing ")
 
 
        # for i in missing_input_files:
