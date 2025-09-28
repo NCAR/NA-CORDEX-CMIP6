@@ -269,7 +269,7 @@ def check_for_all_files(chunk_dir:str, dir_and_fname_patterns:dict) -> list:
             num_files = len(matched_files_found)
             hms = "_00:00:00"
 
-            if is_leap_year(file_year):
+            if calendar.isleap(file_year):
                if num_files == EXPECTED_NUM_FILES_LEAP_YEAR:
                    # Thus far, criteria is met, store the year as a list
                    valid_years.append(file_year)
@@ -371,38 +371,6 @@ def check_for_all_chunk_dirs()  -> bool:
         # Generate a list of the full path to the complete list of chunk directories
         chunk_dir_path: list = [os.path.join(BASEDIR, cur_chunk) for cur_chunk in chunk_dirs_found]
         return chunk_dir_path
-
-
-def is_leap_year(year:str|int) -> bool:
-    """
-         Determines whether the input year is a Leap Year using the formula:
-         - Evenly divisible by 4 (e.g. 2020, 2024) is a Leap Year,   but if it is evenly divisible by 100,
-           then NOT a Leap Year (e.g. 2100, 2200)
-          except, if evenly divisible  by 400, then it is a  Leap Year (e.g. 2000, 2400)
-
-         Args:
-
-        @param year:  a string (4 char)  or  integer (4 digit) year
-
-         Returns:
-             True if Leap Year, False otherwise
-    """
-
-    # Convert the year into an int
-    year = int(year)
-
-    if year%4 == 0:
-       if year % 100 == 0 :
-           if year % 400 == 0:
-              # evenly divisible  by 100 and by 400 -> Leap Year
-              return True
-           # evenly divisible by 100 but NOT by 400 -> Not Leap Year
-           return False
-       # evenly divisible by 4 -> Leap Year
-       return True
-    else:
-        # not evenly divisible by 4 -> Not Leap Year
-        return False
 
 
 def invoke_postprocessing(all_files: dict) -> list:
