@@ -140,13 +140,34 @@ All plots are located in the NA-CORDEX-CMIP6/postprocess directory
 
 - Set the user-defined values in the global section of the code located between the ***"Set the following"*** and ***"End of Set the following"*** comments:
   - BASEDIR 
+     -  the directory where the raw data is located
   - TOTAL_YEARS_IN_SIMULATION 
+     - number of years the simulation spans
+     - e.g. if chunk dirs are 1977_chunk to 2017_chunk, this spans 40 years
   - SEVENTH_YEAR_OF_DECADE
+    -  True or False
+    -  True if every decade of data falls on the seventh year:
+       - e.g. 1977, 1987, 1997, etc. 
   - YEAR_INCREMENT
+     -  number of years between each simulation
+     -  e.g. a 10 year increment would result in 1977_chunk, 1987_chunk, etc.
   - ORDINAL_START_YEAR
+    -  within each chunk directory,  the nth year of the data to use as a starting date
+    -  e.g. if set to 2, then use the second year as the start date
   - PLOT_INPUT_DIR
+     -  location of the postprocessed data
   - PLOT_CONFIG 
+     - the location of the config.yaml file
+     - resides in the same directory as the check_for_full_data.py 
+     - can reside elsewhere if desired
   - INPUT_FNAME_TEMPLATE
+    - the postprocessed filename pattern
+    - e.g. tas_NAM-12_ERA5_evaluation_r1i1p1f1_NCAR_WRF461_v1-r1_hr_${YEAR}-${MONTH}
+      - the plotting script will substitute the appropriate YEAR and MONTH based on the config file settings 
+        - these config file settings are set in the config.yaml but overridden by the check_for_full_data.py script with the appropriate values
   - PLOT_FNAME_TEMPLATE
+    - the output template for the output plot file
+    - e.g. 5day_mean_and_hourly_tas_NAM-12_ERA5_evaluation_r1ip1f1_NCAR_WRF461_v1-r1_hr_${YEAR}
+      -  creates a file with the above filename, with ${YEAR} substituted with the year corresponding to the postprocessed data
   - PLOT_OUTPUT_DIR
-  
+    - location of the directory to save the plot files
