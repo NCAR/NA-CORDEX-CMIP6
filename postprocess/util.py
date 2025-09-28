@@ -143,11 +143,12 @@ def get_input_files(settings:dict) ->list:
             all_input_files.append(full_filename)
 
     if len(missing_input_files) > 0:
-       print(f"WARNING: Missing input files needed for plotting: ")
+       print(f"WARNING: Some  postprocessed input files are missing ")
 
-       for i in missing_input_files:
-            print(f"{i}\n")
-       sys.exit("Exit plotting due to missing postprocessed file(s).")
+
+       # for i in missing_input_files:
+       #      print(f"{i}\n")
+       sys.exit("Exit plotting - missing postprocessed file(s).")
 
     if len(all_input_files) == 0:
        sys.exit("ERROR: No input files found for specified time(s), please check your configuration file.")
