@@ -142,7 +142,8 @@ All code is located in the NA-CORDEX-CMIP6/postprocess directory
 
        python check_for_full_data.py
 
-- Set the user-defined values in the global section of the code located between the ***"Set the following"*** and ***"End of Set the following"*** comments:
+
+Before running, set the user-defined values in the global section of the code located between the ***"Set the following"*** and ***"End of Set the following"*** comments:
   - BASEDIR 
      -  the directory where the raw data is located
   - TOTAL_YEARS_IN_SIMULATION 
