@@ -12,7 +12,7 @@ consist of 3-panels/subplots for the full domain, the Great Lakes region, and th
 Boulder Municipal Airport.  Each subplot consists of two curves: the 5day average
 temperature and hourly temperature.
 
-All plots are located in the NA-CORDEX-CMIP6/postprocess directory
+All code is located in the NA-CORDEX-CMIP6/postprocess directory
 
 
 # Overview of Components
