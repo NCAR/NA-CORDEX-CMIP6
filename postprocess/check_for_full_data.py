@@ -1,7 +1,7 @@
 # ============================*
 # ** Copyright UCAR (c) 2025
 # ** University Corporation for Atmospheric Research (UCAR)
-# ** National Science Foundation National Center for Atmospheric Research (NCAR)
+# ** National Science Foundation National Center for Atmospheric Research (NSF NCAR)
 # ** P.O.Box 3000, Boulder, Colorado, 80307-3000, USA
 # ============================*
 
@@ -12,6 +12,7 @@ import re
 import subprocess
 import util
 import plot
+import calendar
 
 """
     Monitor the wrf_d01 directory for complete data (one year of data). 
@@ -64,7 +65,7 @@ ORDINAL_START_YEAR = 2
 #     wrfout_5day_d01_YYYY-MM-DD_00:00:00
 #     wrfrst_d01_YYYY-MM-DD_00:00:00
 #
-#   will be EXCLUDED from postprocessing and plotting
+#   will be EXCLUDED from postprocessing
 
 #--------------------------
 # Plotting Information
@@ -83,25 +84,21 @@ PLOT_FNAME_TEMPLATE = "5day_mean_and_hourly_tas_NAM-12_ERA5_evaluation_r1ip1f1_N
 PLOT_OUTPUT_DIR = '/glade/u/home/minnawin/NA-CORDEX/Output/plots'
 
 
-#-------------------------------------
-# bash script and
-# other Python script locations
-#--------------------------------------
-CMORIZE_SCRIPT = '/glade/u/home/minnawin/NA-CORDEX/develop/NA-CORDEX-CMIP6/postprocess/cmorize.compress.sh'
-
-POST_PROCESS_SCRIPT = '/glade/u/home/minnawin/NA-CORDEX/develop/NA-CORDEX-CMIP6/postprocess/postprocess.core.variables.py'
-
 #*********************************
 # **** End of Set the following ****
 #*********************************
+
+#----------------------------------------
+# post processing script names
+#----------------------------------------
+CMORIZE_SCRIPT = 'cmorize.compress.sh'
+POST_PROCESS_SCRIPT = 'postprocess.core.variables.py'
 
 
 # CONSTANT values
 EXPECTED_NUM_FILES = 365
 EXPECTED_NUM_FILES_LEAP_YEAR = 366
 EXPECTED_NUM_FILENAME_PATTERNS = 5
-DAYS_IN_MONTH = {'01': 31, '02':28, '02_leap': 29, '03':31, '04':30, '05':31,
-    '06':30, '07':31, '08':31, '09':30, '10':31, '11':30, '12':31   }
 
 def check_dirs_for_data()-> dict:
     """
@@ -279,10 +276,7 @@ def check_for_all_files(chunk_dir:str, dir_and_fname_patterns:dict) -> list:
                else:
                    missing = True
                    for m in range(1, 13):
-                       if m == 2:
-                           days_in_month = DAYS_IN_MONTH['02_leap']
-                       else:
-                           days_in_month = DAYS_IN_MONTH[str(m).zfill(2)]
+                       days_in_month = str(calendar.monthrange(file_year, m)).zfill(2)
                        for d in range(1, days_in_month + 1):
                           expected_file = cur_file_pattern + '-' + str(m).zfill(2) + '-' + str(d).zfill(2) + hms
                           expected_full_file = os.path.join(BASEDIR, chunk_dir, expected_file)
@@ -295,7 +289,7 @@ def check_for_all_files(chunk_dir:str, dir_and_fname_patterns:dict) -> list:
                else:
                    missing = True
                    for m in range(1, 13):
-                       days_in_month = DAYS_IN_MONTH[str(m).zfill(2)]
+                       days_in_month = str(calendar.monthrange(file_year, m)).zfill(2)
                        for d in range(1, days_in_month + 1):
                            expected_file = cur_file_pattern + '-' + str(m).zfill(2) + '-' + str(d).zfill(2) + hms
                            expected_full_file = os.path.join(BASEDIR, chunk_dir, expected_file)
@@ -427,13 +421,13 @@ def invoke_postprocessing(all_files: dict) -> list:
     # script
 
     # Check to make sure necessary scripts exist
-    if not os.path.exists(CMORIZE_SCRIPT):
-        sys.exit("cmorize.compress.sh script not found")
-    if not os.path.exists(POST_PROCESS_SCRIPT):
-        sys.exit("postprocess.core.variables.py not found")
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    if not os.path.exists(os.path.join(script_dir, CMORIZE_SCRIPT)) and  not os.path.exists(os.path.join(script_dir,
+            POST_PROCESS_SCRIPT)):
+        sys.exit("cmorize.compress.sh and postprocess.core.variables.py scripts are not in the current working "
+                 "directory")
 
-    if  os.path.dirname(CMORIZE_SCRIPT) != os.path.dirname(POST_PROCESS_SCRIPT):
-        sys.exit("cmorize.compress.sh does not reside in same dir as postprocees.core.variables.py")
+
 
     # get the 2D list of all values (years) in the all_files dict
     # and flatten before passing into the invoke_postprocessing function
@@ -442,11 +436,15 @@ def invoke_postprocessing(all_files: dict) -> list:
     for year_list in all_years_2d:
         for cur_year in year_list:
             all_years_flattened.append(cur_year)
-    print(f"years to postprocess: {all_years_flattened}")
+    all_years_no_dups = set(all_years_flattened)
+
+    # for informational purposes only
+    # for i in all_years_no_dups:
+    #     print(f" postprocess for : {i}")
 
     # for each year, invoke the
     # postprocess.core.variables.py script
-    for cur_year in all_years_flattened:
+    for cur_year in all_years_no_dups:
             arguments = [str(cur_year)]
             print(f"Invoking postprocess script for  {cur_year}:")
             print(f"python {POST_PROCESS_SCRIPT} {cur_year} ")
