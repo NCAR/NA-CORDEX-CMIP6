@@ -138,6 +138,10 @@ All code is located in the NA-CORDEX-CMIP6/postprocess directory
 
 # Running check_for_full_data.py
 
+- invoke the check_for_full_data.py 
+
+       python check_for_full_data.py
+
 - Set the user-defined values in the global section of the code located between the ***"Set the following"*** and ***"End of Set the following"*** comments:
   - BASEDIR 
      -  the directory where the raw data is located
