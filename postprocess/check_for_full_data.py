@@ -65,7 +65,7 @@ ORDINAL_START_YEAR = 2
 #     wrfout_5day_d01_YYYY-MM-DD_00:00:00
 #     wrfrst_d01_YYYY-MM-DD_00:00:00
 #
-#   will be EXCLUDED from postprocessing
+#   will not be included in the checks for full data
 
 #--------------------------
 # Plotting Information
