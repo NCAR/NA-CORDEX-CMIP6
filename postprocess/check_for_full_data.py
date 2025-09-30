@@ -13,6 +13,7 @@ import subprocess
 import util
 import plot
 import calendar
+from datetime import datetime
 
 """
     Monitor the wrf_d01 directory for complete data (one year of data). 
@@ -172,7 +173,8 @@ def check_dirs_for_data()-> dict:
     return all_files
 
 
-def check_for_all_files(chunk_dir:str, dir_and_fname_patterns:dict) -> list:
+def check_for_all_files(chunk_dir:str, expected_dir_and_fname_patterns
+:dict) -> list:
     """
            PRE-CONDITION:
            ***************
@@ -184,17 +186,25 @@ def check_for_all_files(chunk_dir:str, dir_and_fname_patterns:dict) -> list:
 
             For this chunk directory, check for the expected number of files for each
             filename pattern/type:
+
+            First, compare the years in all the filenames and compare that to expected
+            years.  Exit if some filenames are missing.
+
+            Next, check for the number of files for each year:
             365 for a non Leap Year, 366 for a Leap Year.
 
            Save the list of filenames as values to the corresponding chunk dir (key) in
            a dictionary.
 
+           Collect the names of missing files and print them out before a sys.exit()
+
            Args:
                chunk_dir: the full path to the current chunk dir which is under examination
                                for all files
 
-               dir_and_fname_patterns: a dictionary containing full path to chunk dirs as key, and
-               a list of all the unique filename patterns with year only as values.
+               expected_dir_and_fname_patterns:  a dictionary containing the full
+                                                                     chunk dirs as key, and
+               a list of all the expected unique filename patterns with year only as values.
 
            Returns:
                all_files:   a dictionary with the chunk dir as key and
@@ -212,51 +222,59 @@ def check_for_all_files(chunk_dir:str, dir_and_fname_patterns:dict) -> list:
     #              "wrfout_zlev_d01_*",
     #              "wrfout_afwa_d01_*"
 
-    all_file_patterns_for_chunkdir = dir_and_fname_patterns[chunk_dir]
+    all_file_patterns_for_chunkdir = expected_dir_and_fname_patterns[chunk_dir]
+    all_file_patterns_for_chunkdir.sort()
 
     # retrieve all the year information from the files and include only
     # the years beginning from the ordinal year (i.e. nth year) from the first year
     # of the data
 
     # a list of years of the actual files (of interest) in this chunk directory
+    # if there are years that are beyond this current year (i.e. current year
+    # is 2025 but expect 2026, 2027, etc based on NUMBER_OF_YEARS_IN_SIMULATION
+    # the last expected year is one year before this current year
     all_years_all_files = []
+
     for fp in all_file_patterns_for_chunkdir:
         match = re.match(r'.*_(\d{4})', fp)
-        all_years_all_files.append(int(match.group(1)))
+        yr = int(match.group(1))
+        # add the year if it hasn't already been added
+        if yr not in all_years_all_files:
+            all_years_all_files.append(yr)
 
-    all_years_all_files.sort()
-    all_actuals = set(all_years_all_files)
+
+    # start with the nth year because first year of data starts ~June
     first_year = int(all_years_all_files[0])
-    # determine the last year, so we can ignore it as it only has data for Jan 1
-    last_year = first_year + NUMBER_OF_YEARS_WITHIN_SIMULATION
-    # start with the nth year
     start_year_increment = ORDINAL_START_YEAR - 1
     adjusted_first_year = first_year + start_year_increment
+
+    # determine the last year, so we can ignore it as it only has data for Jan 1
+    last_year = first_year + NUMBER_OF_YEARS_WITHIN_SIMULATION
+
+    # if the last year > this year, then we will be incorrectly expecting data
+    # that shouldn't exist.  The last year should be adjusted to the year before
+    # this_year
+    this_year = datetime.now().year
+    if this_year < last_year:
+       last_year = this_year - 1
     years_of_interest = [yr for yr in range(adjusted_first_year, last_year)]
 
-    missing_years = []
-    for expected in years_of_interest:
-        if expected not in all_actuals:
-            missing_years.append(expected)
-
-    if len(missing_years) > 0:
-      print(f"WARNING, in {chunk_dir} no data files for : {missing_years} ")
-      sys.exit("Exiting due to missing data files for one or more years.")
-
-    #  Search for every filename pattern.
-    #  The search is the equivalent to the Unix/Linux command:
-    #     find . -name "wrfout_d01_*"  -printf '.'| wc -m
-
-    # list of the years corresponding to existing data
-    valid_years = []
+    #
+    #  Search for every filename pattern and determine if a year's worth
+    #  of data exists.  Keep track of any missing files.
+    #
 
     # the dictionary to store the list of found filenames (values) to a chunk dir (key)
     all_files = {}
-    missing_files = []
-    missing = False
+    is_missing = False
+    valid_years = []
+    # keep track of the file patterns (with year) and the corresponding chunk dir
+    missing_info = {}
+    missing_patterns = []
 
+    chunk_yr = os.path.basename(chunk_dir)
     for cur_file_pattern in all_file_patterns_for_chunkdir:
-        #  Extract the year portion of the filename pattern and use to consider only
+        #  Extract the year portion of the filename pattern and use it to consider only
         #  relevant years (i.e. years that are expected to have 365/366 files
         #  per filename pattern).
         match = re.match(r'.*_(\d{4})', cur_file_pattern)
@@ -267,45 +285,50 @@ def check_for_all_files(chunk_dir:str, dir_and_fname_patterns:dict) -> list:
 
             matched_files_found:list = glob.glob(search_pattern)
             num_files = len(matched_files_found)
-            hms = "_00:00:00"
 
             if calendar.isleap(file_year):
                if num_files == EXPECTED_NUM_FILES_LEAP_YEAR:
-                   # Thus far, criteria is met, store the year as a list
-                   valid_years.append(file_year)
+                   # Thus far, criteria is met, store the year as a list if it
+                   # hasn't already been added
+                   if file_year not in valid_years:
+                      valid_years.append(file_year)
                else:
-                   missing = True
-                   for m in range(1, 13):
-                       days_in_month = str(calendar.monthrange(file_year, m)).zfill(2)
-                       for d in range(1, days_in_month + 1):
-                          expected_file = cur_file_pattern + '-' + str(m).zfill(2) + '-' + str(d).zfill(2) + hms
-                          expected_full_file = os.path.join(BASEDIR, chunk_dir, expected_file)
-                          if expected_full_file not in matched_files_found:
-                              missing_files.append(expected_full_file)
+                   is_missing = True
+                   missing_patterns.append(cur_file_pattern)
+
             else:
+               # not a Leap Year
                if num_files == EXPECTED_NUM_FILES:
                    # Thus far, criteria is met, store the year as a list
-                   valid_years.append(file_year)
+                   # if it hasn't already been added
+                   if file_year not in valid_years:
+                      valid_years.append(file_year)
                else:
-                   missing = True
-                   for m in range(1, 13):
-                       days_in_month = str(calendar.monthrange(file_year, m)).zfill(2)
-                       for d in range(1, days_in_month + 1):
-                           expected_file = cur_file_pattern + '-' + str(m).zfill(2) + '-' + str(d).zfill(2) + hms
-                           expected_full_file = os.path.join(BASEDIR, chunk_dir, expected_file)
-                           if expected_full_file not in matched_files_found:
-                               missing_files.append(expected_full_file)
-
-    if missing:
-        print(f"!!! WARNING: there are {len(missing_files)} missing files in {chunk_dir}!!!")
-        for file in missing_files:
-           print(f" Missing {file}\n")
-        sys.exit(f"Exiting due to missing files")
+                   is_missing = True
+                   missing_patterns.append(cur_file_pattern)
 
 
-    # Thus far, all criteria is met, assign the list of files to the chunk_dir key
-    all_files[chunk_dir] = valid_years
+        # For this chunk directory, all criteria is met.
+        # Assign the list of files to the chunk_dir key
+        all_files[chunk_dir] = valid_years
 
+    # Generate info on missing files
+    match = re.match(r'(\d{4})_.*', chunk_yr)
+    yr = int(match.group(1))
+    hms = "00:00:00"
+
+    if is_missing:
+        print(f"WARNING: the following files for {chunk_yr}: ")
+        missing_info[chunk_yr] = missing_patterns
+        for cur_missing in missing_patterns:
+           for m in range(1,13):
+               days_in_month = str(calendar.monthrange(yr, m)[1]).zfill(2)
+               for d in range(1, int(days_in_month) + 1):
+                   expected_file = cur_missing + '-' + str(m).zfill(2) + '-' + str(d).zfill(2) + '-' + hms
+                   expected_full_file = os.path.join(BASEDIR, chunk_dir, expected_file)
+                   if not os.path.exists(expected_full_file):
+                       print(f"{expected_full_file} is missing")
+        sys.exit("Exiting, due to the above missing filename patterns ...")
 
     return all_files
 
@@ -396,7 +419,6 @@ def invoke_postprocessing(all_files: dict) -> list:
                  "directory")
 
 
-
     # get the 2D list of all values (years) in the all_files dict
     # and flatten before passing into the invoke_postprocessing function
     all_years_2d: list = all_files.values()
@@ -404,6 +426,9 @@ def invoke_postprocessing(all_files: dict) -> list:
     for year_list in all_years_2d:
         for cur_year in year_list:
             all_years_flattened.append(cur_year)
+
+    # remove duplicate years,
+    # as some chunk directory file dates may overlap
     all_years_no_dups = set(all_years_flattened)
 
     # for informational purposes only
