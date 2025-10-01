@@ -318,7 +318,7 @@ def check_for_all_files(chunk_dir:str, expected_dir_and_fname_patterns
     hms = "00:00:00"
 
     if is_missing:
-        print(f"WARNING: the following files for {chunk_yr}: ")
+        print(f"WARNING: missing files for {chunk_yr} ")
         missing_info[chunk_yr] = missing_patterns
         for cur_missing in missing_patterns:
            for m in range(1,13):
