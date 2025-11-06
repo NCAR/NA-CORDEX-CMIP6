@@ -1,0 +1,1 @@
+python /glade/work/jsallen/projects/na_cordex_2024/NA-CORDEX-CMIP6/postprocess/postprocess.core.variables.py /glade/derecho/scratch/jsallen/NA-CORDEX-CMIP6/ERA5_HIST_E03/wrf_d01/1977_chunk/ 1980 tas > tas/out.${step}.log 2>&1

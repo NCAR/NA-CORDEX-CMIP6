@@ -1,6 +1,5 @@
 #!/bin/bash -l
 # Jacob Stuivenvolt-Allen: jsallen@ucar.edu
-# Last updated: 07/20/2025
 
 # Purpose:
 # --------
@@ -9,40 +8,49 @@
 # adds in the necessary/correct metadata and variable attributes for
 # CF compliance and WCRP-CORDEX archiving specifications. 
 
-# I'll go through and add some better comments soon.
-
 # load modules 
 # ------------
 module load nco
 module load cdo
 
-var=$1     # Variable name
-fname=$2   # wrfout filename
-pcc=$3     # compression level
-freq=$4    # 
-units=$5   # 
-lev=$6     # 
-refh=$7    # 
-cell=$8    # 
-ln=${9}    # 
-stdn=${10} # 
-year=${11} #  year...
-mon=${12}  #  mon...
+wrfout_path=$1 # wrfoutput path
+var=$2         # Variable name
+fname=$3       # wrfout filename
+pcc=$4         # compression level
+freq=$5        # Write frequency
+units=$6       # units
+lev=$7         # single, pressure, soil
+refh=$8        # reference height
+cell=$9        # cell_methods
+ln=${10}       # longname
+stdn=${11}     # standard name
+year=${12}     #  year...
 
-readonly wrfout_path="/glade/u/home/jsallen/scratch/NA-CORDEX-CMIP6/ERA5_HIST_E01/wrf_d01/1977_chunk/" # where is your data?
-readonly coord_ref_file="${wrfout_path}wrfout_d01_1978-01-22_00:00:00" # Example WRF file for coordinates and time dimension!!
+#readonly wrfout_path="/glade/u/home/jsallen/scratch/NA-CORDEX-CMIP6/ERA5_HIST_E01/wrf_d01/1977_chunk/" # where is your data?
+readonly coord_ref_file="${wrfout_path}wrfout_d01_${year}-12-31_00:00:00" # Example WRF file for coordinates and time dimension!!
+
+echo "-------------------------------"
+echo "Variable: " $var
+echo "Output filename: " $fname
+echo "Compression level: " $pcc 
+echo "Timestep: " $freq
+echo "Units: " $units
+echo $lev
+echo "Reference Height: " $refh
+echo "Cell Methods: " $cell
+echo "Longname: " $ln
+echo "Standard Name: " $stdn
+echo "Year: " $year
 
 # Projection info for your WRF grid
 # ---------------------------------
-#readonly cen_lon=-97.0
-#readonly cen_lat=45.0
-readonly cen_lon=$(echo "scale=2; -97.0" | bc)
+readonly cen_lon=$(echo "scale=2; 263.0" | bc)
 readonly cen_lat=$(echo "scale=2; 45.0" | bc)
 
 # Global attributes for files
 # ---------------------------
 readonly activity_id="DD"
-readonly contact="jsallen@ucar.edu"
+readonly contact="jsallen@ucar.edu ; mcginnis@ucar.edu"
 readonly creation_date=$(date +"%Y-%m-%d %H:%M:%S")
 readonly domain="North America"
 readonly domain_id="NAM-12"
@@ -60,10 +68,11 @@ readonly mip_era="CMIP6"
 readonly product="model-output"
 readonly project_id="CORDEX-CMIP6"
 readonly source='Weather Research and Forecasting Model Version 4.6.1'
-readonly source_id='WRF461S'
+readonly source_id='WRF461S-SN'
 readonly source_type='ARCM'
 readonly version_realization='v1-r1'
 readonly references='https://github.com/NCAR/NA-CORDEX-CMIP6 (code and documentation)'
+readonly tracking_id=$(uuidgen)
 
 # ---------------------------------------
 # END OF USER DEFINED VARIABLES
@@ -104,7 +113,7 @@ if [ ! -f $coord_xy_file ]; then
   ncatted -h -a grid_mapping_name,crs,o,c,lambert_conformal_conic $coord_xy_file
   ncatted -h -a standard_parallel,crs,o,f,45.0 "$coord_xy_file"
   ncatted -h -a latitude_of_projection_origin,crs,o,f,45.0 $coord_xy_file
-  ncatted -h -a longitude_of_central_meridian,crs,o,f,-97.0 $coord_xy_file
+  ncatted -h -a longitude_of_central_meridian,crs,o,f,263.0 $coord_xy_file
 
   # Creating coordinate variables for x and y
   ncap2 -h -A -s 'y=array(0.,12.,$y); x=array(0.,12.,$x)' $coord_xy_file
@@ -146,29 +155,19 @@ fi
 # Function to clean single level variables output by WRF
 # ------------------------------------------------------
 clean_single_level () {
-  echo 'Variable='$1 ', output='$3 ', decimal threshold for compression='$4 'year,month='$7$8
-  #ncrcat -h -3 --chunk_cache 4000000000 -C -v $1,XTIME --no_tmp_fl --record_append $2 $3
-
-  # Clear and rename coordiantes - don't think i need...
-  #ncatted -h -a stagger,,d,, $2 $3
-  #ncatted -h -a coordinates,,d,, $3 
-
+  # Rename 
   ncrename -O -h -d west_east,x -d south_north,y $2 $3
-  #ncrename -h -v .XTIME,time $3 
-  #ncrename -h -d .Time,time $3
 
   # Time  and calendar attributes : must be set before reference time
-  #ncatted -h -a units,time,o,c,"minutes since ${time_start_year}" $3
   ncatted -h -a long_name,time,o,c,time $3
   ncatted -h -a standard_name,time,o,c,time $3
   ncatted -h -a axis,time,o,c,T $3
-  ncatted -h -a calendar,time,o,c,standard $3
+  ncatted -h -a calendar,time,o,c,proleptic_gregorian $3
 
-  # Set reftime
-  cdo -setreftime,1950-01-01,00:00:00,1day $3 ${1}.cdo.tmp.${7}${8}.nc
-  mv "${1}.cdo.tmp.${7}${8}.nc" $3 # This is probably slow
+  # Set reftime and corrrect time units
+  cdo -setreftime,1950-01-01,00:00:00,1day $3 ${1}.cdo.tmp.${7}.nc
+  mv "${1}.cdo.tmp.${7}.nc" $3 # This is probably slow
   ncap2 -O -s 'time=double(time)' $3 $3
-
   ncatted -h -a units,time,o,c,"days since 1950-01-01 00:00:00" $3
 
   # If ref_height is provided (for example, with 2-m temperature)
@@ -184,7 +183,8 @@ clean_single_level () {
     coords="lat lon"
   fi
 
-  # append in the lat,lon from coordinate file
+  # Append in the lat,lon from coordinate file
+  # And trim sponge layer
   if [ "$1" = "uas" -o "$1" = "vas" -o "$1" = "sfcWind" ]; then
     ncatted -h -a cell_methods,lat,d,, $coord_xy_stag_file
     ncatted -h -a cell_methods,lon,d,, $coord_xy_stag_file
@@ -197,14 +197,14 @@ clean_single_level () {
     ncks -h -O -d x,10,-11 -d y,10,-11 $3 $3
   fi
 
-  # trim off sponge layer
+  # Correct lon easting
+  ncap2 -h -O -s 'where(lon < 0) lon = lon + 360' $3 $3
 
   # Lossy compression
   if [[ "${4}" != "None" ]]; then
     echo "Compressing ${1} --------------------- "
     ncks -h -O -7 -L1 --ppc $1=$4 --chunk_cache 4000000000 --chunk_map rd1 $3 $3 
     ncap2 -O -s 'quantization_info=int(quantization_info)' $3 $3
-    #ncks -h -C -O -x -v quantization_info,quantization_nsd $3 $3 # Deletes quantized info
   fi
 
   rm $2
@@ -215,24 +215,9 @@ clean_single_level () {
 # Function to clean time invariant variables output by WRF
 # -------------------------------------------------------
 clean_time_invariant () {
-  echo 'Variable='$1 ', output='$3 ', decimal threshold for compression='$4
+  #echo 'Variable='$1 ', output='$3 ', decimal threshold for compression='$4
 
-  #clean_time_invariant "$1" "${wrfout_file}" "$out_f" "${pcc}" "${short_name}" "${year}" "${mon}"
   ncrename -O -h -d west_east,x -d south_north,y $2 $3
-
-  # If ref_height is provided (for example, with 2-m temperature)
-  #if [[ "${5}" != "None" ]]; then
-  #  ncap2 -h -A -s "height=double(${5})" $3
-  #  ncatted -h -a units,height,o,c,m $3
-  #  ncatted -h -a long_name,height,o,c,height $3
-  #  ncatted -h -a standard_name,height,o,c,height $3
-  #  ncatted -h -a positive,height,o,c,up $3
-  #  ncatted -h -a axis,height,o,c,Z $3
-  #  coords="lat lon height"
-  #else
-  #  coords="lat lon"
-  #fi
-
   coords="lat lon"
 
   # append in the lat,lon from coordinate file
@@ -244,153 +229,9 @@ clean_time_invariant () {
   if [[ "${4}" != "None" ]]; then
     echo "Compressing ${1} --------------------- "
     ncks -h -O -7 -L1 --ppc $1=$4 --chunk_cache 4000000000 --chunk_map rd1 $3 $3
-    #ncks -h -C -O -x -v quantization_info,quantization_nsd $3 $3
   fi
-
-  #ncwa -h -O -a time -C -v $1,lat,lon,y,x,crs $3 $3
-  #ncks -O -x -v time,$1 $3 $3
 
   rm $2
-
-}
-
-
-
-# --------------------------------------------------------
-# function to clean pressure level variables output by WRF
-# --------------------------------------------------------
-clean_pressure_level () {
-  echo 'variables='$1 ', output='$3 ', decimal threshold for compression='$4 
-
-  if [ ! -f ./wrf.plev.coords.nc ]; then
-    echo "WRF pressure level file not found ---------- creating"
-
-cat /dev/null > ./wrf.plev.coords.cdl
-cat << EOF >> ./wrf.plev.coords.cdl
-netcdf lev {
-dimensions:
-  lev = 15 ;
-variables:
-
-  double lev(lev) ;
-    lev:long_name = "pressure levels" ;
-    lev:units = "mb" ;
-    lev:positive = "up" ;
-    lev:axis = "Z" ;
-data:
-
- lev = 1000, 925, 850, 750, 700, 600, 500, 400, 300, 250, 200,
-150, 100, 70, 50 ;
-}
-EOF
-
-    ncgen -b ./wrf.plev.coords.cdl
-
-  fi
-
-  # append data
-  ncrcat -h -3 --chunk_cache 4000000000 -C -v $1,XTIME --no_tmp_fl --record_append $2 $3
-
-  # Clear and rename coordiantes
-  ncatted -h -a stagger,,d,, $3
-  ncatted -h -a coordinates,,d,, $3
-
-  ncrename -h -d west_east,x -d south_north,y $3
-  ncrename -h -v .XTIME,time $3
-  ncrename -h -d .Time,time $3
-  ncrename -h -d .num_press_levels_stag,lev $3
-
-  # Time  and calendar attributes : must be set before reference time
-  ncatted -h -a units,time,o,c,"minutes since ${time_start_year}" $3
-  ncatted -h -a long_name,time,o,c,time $3
-  ncatted -h -a standard_name,time,o,c,time $3
-  ncatted -h -a axis,time,o,c,T $3
-
-  cdo -setreftime,1949-12-01,00:00:00,1day $3 ${1}.cdo.tmp.${6}${7}.nc 
-  mv "${1}.cdo.tmp.${6}${7}.nc" $3 # This is probably slow
-  ncap2 -O -s 'time=double(time)' $3 $3
-  ncatted -h -a calendar,time,o,c,proleptic-gregorian $3
-
-  # If ref_height is provided (for example, with 2-m temperature)
-  coords="lat lon lev"
-
-  # append in the lat,lon from coordinate file
-  ncatted -h -a cell_methods,lat,d,, $coord_xy_file
-  ncatted -h -a cell_methods,lon,d,, $coord_xy_file
-  ncks -h -A -v lev ./wrf.plev.coords.nc $3
-  ncks -h -A -v lat,lon,y,x,crs $coord_xy_file $3
-
-  # Lossy compression
-  ncks -h -O -7 -L1 --ppc $1=$4 --chunk_cache 4000000000 --chunk_map rd1 $3 $3
-  ncks -h -C -O -x -v quantization_info,quantization_nsd $3 $3
-
-}
-
-# --------------------------------------------------------
-# function to clean soil level variables output by WRF
-# --------------------------------------------------------
-clean_soil_level () {
-  echo 'variables='$1 ', output='$3 ', decimal threshold for compression='$4
-
-  if [ ! -f ./wrf.slev.coords.nc ]; then
-    echo "WRF soil level file not found ---------- creating"
-
-cat /dev/null > ./wrf.slev.coords.cdl
-cat << EOF >> ./wrf.slev.coords.cdl
-netcdf lev {
-dimensions:
-  soil_height = 4 ;
-variables:
-
-  double soil_height(soil_height) ;
-    soil_height:standard_name = "height" ;
-    soil_height:long_name = "center of soil levels" ;
-    soil_height:units = "m" ;
-    soil_height:positive = "down" ;
-    soil_height:axis = "Z" ;
-data:
-
- soil_height = 0.005, 0.025, 0.70, 1.500;
-}
-EOF
-    ncgen -b ./wrf.slev.coords.cdl # generate netcdf file with soil levs
-  fi
-
-  # Append soil level variable
-  ncrcat -h -3 --chunk_cache 4000000000 -C -v $1,XTIME --no_tmp_fl --record_append $2 $3
-
-  # Clear and rename coordiantes
-  ncatted -h -a stagger,,d,, $3
-  ncatted -h -a coordinates,,d,, $3
-
-  ncrename -h -d west_east,x -d south_north,y $3
-  ncrename -h -v .XTIME,time $3
-  ncrename -h -d .Time,time $3
-  ncrename -h -d .soil_layers_stag,soil_height $3
-
-  # Time  and calendar attributes : must be set before reference time
-  ncatted -h -a units,time,o,c,"minutes since ${time_start_year}" $3
-  ncatted -h -a long_name,time,o,c,time $3
-  ncatted -h -a standard_name,time,o,c,time $3
-  ncatted -h -a calendar,time,o,c,proleptic-gregorian $3
-  ncatted -h -a axis,time,o,c,T $3
-
-  cdo -setreftime,1949-12-01,00:00:00,1day $3 ${1}.cdo.tmp.${6}${7}.nc
-  mv "${1}.cdo.tmp.${6}${7}.nc" $3 # This is probably slow
-  ncap2 -O -s 'time=double(time)' $3 $3
-
-  # If ref_height is provided (for example, with 2-m temperature)
-  coords="lat lon soil_height"
-
-  # append in the lat,lon from coordinate file
-  ncatted -h -a cell_methods,lat,d,, $coord_xy_file
-  ncatted -h -a cell_methods,lon,d,, $coord_xy_file
-  ncks -h -A -v soil_height ./wrf.slev.coords.nc $3
-  ncks -h -A -v lat,lon,y,x,crs $coord_xy_file $3
-
-  # Lossy compression
-  ncks -h -O -7 -L1 --ppc $1=$4 --chunk_cache 4000000000 --chunk_map rd1 $3 $3
-  ncks -h -C -O -x -v quantization_info,quantization_nsd $3 $3
 
 }
 
@@ -424,6 +265,8 @@ function add_global_attrs {
   ncatted -h -a source_type,global,o,c,"${source_type}" $2
   ncatted -h -a version_realization,global,o,c,"${version_realization}" $2
   ncatted -h -a references,global,o,c,"${references}" $2
+  ncatted -h -a tracking_id,global,o,c,"${tracking_id}" $2
+  ncatted -h -a license,global,o,c,"${license}" $2
 
 }
 
@@ -432,59 +275,77 @@ function add_global_attrs {
 function add_var_attrs {
 
   # variable attributes
-  ncatted -h -a units,$1,o,c,"${3}" $2
-  #ncatted -h -a short_name,$1,o,c,"${7}" $2
-  ncatted -h -a standard_name,$1,o,c,"${4}" $2
-  ncatted -h -a long_name,$1,o,c,"${5}" $2
-  ncatted -h -a coordinates,$1,o,c,"${coords}" $2
-  ncatted -h -a grid_mapping,$1,o,c,"crs" $2
-
+  ncatted -h -a units,"${1}",o,c,"${3}" $2
+  ncatted -h -a standard_name,"${1}",o,c,"${4}" $2
+  ncatted -h -a long_name,"${1}",o,c,"${5}" $2
+  ncatted -h -a coordinates,"${1}",o,c,"${coords}" $2
+  ncatted -h -a grid_mapping,"${1}",o,c,"crs" $2
+  
   # If cell_methods is provided:
   if [[ "${6}" != "None" ]]; then
     ncatted -h -a cell_methods,$1,o,c,"${6}" $2
   fi
 
+  # Check cell methods and adjust time coordinate/bnds
+  if [[ "${6}" = "area: time: mean" ]]; then
+
+    # Use ncap2 with in-place modification - this should preserve attributes
+    ncap2 -h -O -s 'time+=1.0/48.0' $2 $2
+    
+    # Add time bounds
+    ncap2 -h -A -s 'defdim("nv",2)' $2 $2
+    ncap2 -h -A -s 'time_bnds[$time,$nv]=0.0; time_bnds(:,0)=time-1.0/48.0; time_bnds(:,1)=time+1.0/48.0' $2 $2
+    ncatted -h -O -a bounds,time,o,c,"time_bnds" $2 $2
+
+  fi
+
+  # Daily aggregated max or min
+  if [[ "${6}" = "area: mean time: maximum" || "${6}" = "area: mean time: minimum" ]]; then
+
+    # Use ncap2 with in-place modification - this should preserve attributes
+    ncap2 -h -O -s 'time+=0.5' $2 $2
+    
+    # Add time bounds
+    ncap2 -h -A -s 'defdim("nv",2)' $2 $2
+    ncap2 -h -A -s 'time_bnds[$time,$nv]=0.0; time_bnds(:,0)=time-0.5; time_bnds(:,1)=time+0.5' $2 $2
+    ncatted -h -O -a bounds,time,o,c,"time_bnds" $2 $2
+  fi
+
   ncatted -O -h -a standard_parallel,crs,o,f,45.0 $2 $2
   ncatted -O -h -a latitude_of_projection_origin,crs,o,f,45.0 $2 $2
-  ncatted -O -h -a longitude_of_central_meridian,crs,o,f,-97.0 $2 $2
+  ncatted -O -h -a longitude_of_central_meridian,crs,o,f,263.0 $2 $2
 
 }
-
 
 # Function which leverages yaml data
 # -----------------------------------------
 function clean_wrf_data {
 
-  variable=$1
-  wrfout_file=$2
-  pcc=$3
-  freq=$4
-  units=$5
-  levels=$6
-  ref_height=$7
-  cell_methods=$8
-  #short_name=$9
-  long_name="${9}"
-  stan_name="${10}"
-  year="${11}"
-
-  #mon=$(printf "%02d" ${i})
+  wrfout_path=$1
+  variable=$2
+  wrfout_file=$3
+  pcc=$4
+  freq=$5
+  units=$6
+  levels=$7
+  ref_height=$8
+  cell_methods=$9
+  long_name="${10}"
+  stan_name="${11}"
+  year="${12}"
 
   mkdir -p ${variable}
   out_f="${variable}/${wrfout_file}"
 
   if [ "$levels" == "single" ]; then
-    clean_single_level "$1" "${wrfout_file}" "$out_f" "${pcc}" "${ref_height}" "${short_name}" "${year}" "${mon}"
-  elif [ "$levels" == "pressure" ]; then
-    clean_pressure_level "$1" "${wrfout_file}" "$out_f" "${pcc}" "${short_name}" "${year}" "${mon}"
-  elif [ "$levels" == "soil" ]; then
-    clean_soil_level "$1" "${wrfout_file}" "$out_f" "${pcc}" "${short_name}" "${year}" "${mon}"
+    clean_single_level "${variable}" "${wrfout_file}" "$out_f" "${pcc}" "${ref_height}" "${short_name}" "${year}" "${mon}"
+
   elif [ "$levels" == "fixed" ]; then
-    clean_time_invariant "$1" "${wrfout_file}" "$out_f" "${pcc}" "${short_name}" "${year}" "${mon}"
+    clean_time_invariant "${variable}" "${wrfout_file}" "$out_f" "${pcc}" "${short_name}" "${year}" "${mon}"
   fi
 
-  add_global_attrs $1 $out_f $freq
-  add_var_attrs $1 "$out_f" "${units}" "${long_name}" "${stan_name}" "${cell_methods}" "${short_name}"
+  add_global_attrs "${variable}" "${out_f}" "${freq}"
+  add_var_attrs "${variable}" "${out_f}" "${units}" "${long_name}" "${stan_name}" "${cell_methods}" "${short_name}"
 
 }
 # -----------------------------------------
