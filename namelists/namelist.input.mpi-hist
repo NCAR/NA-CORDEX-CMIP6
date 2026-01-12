@@ -31,7 +31,7 @@
  auxinput4_inname                    = "wrflowinp_d<domain>",                                                              
  auxinput4_interval                  = 360, 
 
- auxinput15_inname="/glade/campaign/ral/risc/collections/na-cordex-cmip6/CMIP6/MPI-ESM1-2-HR/hitorical/aer/aod_wrf/XXXX"
+ auxinput15_inname="/glade/campaign/ral/risc/collections/na-cordex-cmip6/CMIP6/MPI-ESM1-2-HR/historical/aer/aod_wrf/XXXX"
  auxinput15_interval                 = 1440,
  io_form_auxinput15                  = 2,
 

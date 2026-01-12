@@ -2,4 +2,4 @@ module load ncl
 module load nco
 module load cdo
 module load conda
-conda activate npl
+conda activate npl-2025b

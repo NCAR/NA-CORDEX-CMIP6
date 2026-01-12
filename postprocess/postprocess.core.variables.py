@@ -68,11 +68,12 @@ variable    = sys.argv[3]  # variable (cmorized syntax)
 # START OF USER DEFINED VARIABLES
 # -------------------------------
 
-do_overwrite_existing = False # Setting to True will overwrite all post-processed data: careful!
+do_overwrite_existing = True # Setting to True will overwrite all post-processed data: careful!
 
 os.system('module load nco') # I don't think this works unfortunately
 os.system('module load cdo')
 
+wrfinput_path     = "/glade/derecho/scratch/jsallen/NA-CORDEX-CMIP6/ERA5_HIST_E03/input_example/"  # path to wrfinput_d01
 wrfout_hour_fname = "wrfout_hour_d01_"  # Leading string of wrfout files with hourly output
 wrfout_fx_fname   = "wrfout_5day_d01_"  # Leading string of wrfout files with LANDFRAC and HGT
 
@@ -196,11 +197,10 @@ for date in day_time_dim:
 
 # Load datasets when needed:
 # -------------------------
-print(f'{wrfout_path}/{wrfout_fx_fname}{str(start_date)[:8]}*')
+print(f'{wrfout_path}{wrfout_fx_fname}{str(start_date)[:8]}*')
 
-fx_fname = glob.glob(f'{wrfout_path}/{wrfout_fx_fname}{str(start_date)[:9]}*')[0]
+fx_fname = glob.glob(f'{wrfout_path}{wrfout_fx_fname}{str(start_date)[:9]}*')[0]
 ds_fx = xr.open_dataset(fx_fname)
-
 
 def load_hr(hr_files):
     ds_hr = xr.open_mfdataset(hr_files[1:], 
@@ -230,7 +230,7 @@ def load_afwa(afwa_files):
                               decode_coords=False).fillna(1.e20) # chunk and fill values
     return(ds_afwa_hr)
 
-ds_fx_inp = xr.open_dataset(f'{wrfout_path}/wrfinput_d01', decode_times=False).fillna(1.e20)
+ds_fx_inp = xr.open_dataset(f'{wrfinput_path}wrfinput_d01', decode_times=False).fillna(1.e20)
 
 # ----------------------
 
@@ -265,12 +265,15 @@ def cmor_comp_save(wrfout_path, var, fname, pcc, freq, units, lev, refh, cell, l
 # Near-Surface Air Temperature : Also TMAX / TMIN
 # ---------------------------------------------------
 def clean_tas(ds):
+
+    print(ds['Time'])
+
     # T2 units : K
     # T2 description : 2-meter temperature
 
-    tas_fout    = f'tas_{fname_hr}_{year}.nc'
-    tasmin_fout = f'tasmin_{fname_dd}_{year}.nc'
-    tasmax_fout = f'tasmax_{fname_dd}_{year}.nc'
+    tas_fout    = f'tas_{fname_hr}_{year}010100_{year}123123.nc'
+    tasmin_fout = f'tasmin_{fname_dd}_{year}0101_{year}1231.nc'
+    tasmax_fout = f'tasmax_{fname_dd}_{year}0101_{year}1231.nc'
 
     # tas, tasmax, tasmin CMORIZED specs
     # ----------------------------------
@@ -341,7 +344,7 @@ def clean_pr(ds):
     # RAINNC units : mm
     # RAINNC description : accumulated non-convective precipitation
 
-    pr_fout = f'pr_{fname_hr}_{year}.nc'
+    pr_fout = f'pr_{fname_hr}_{year}010100_{year}123123.nc'
     pr_chk  = check_for_postproc('pr', pr_fout)
     if pr_chk == False: return 
 
@@ -390,7 +393,7 @@ def clean_evspsbl(ds):
     # ETRAN units : mm/s
     # ETRAN description : transpiration rate
 
-    evspsbl_fout = f'evspsbl_{fname_hr}_{year}.nc'
+    evspsbl_fout = f'evspsbl_{fname_hr}_{year}010100_{year}123123.nc'
     evspsbl_chk  = check_for_postproc('evspsbl', evspsbl_fout)
     if evspsbl_chk == False: return 
 
@@ -452,7 +455,7 @@ def clean_huss(ds):
     da['time'] = time_dim
     huss = (da / (1 + da))
 
-    huss_fout = f'huss_{fname_hr}_{year}.nc'
+    huss_fout = f'huss_{fname_hr}_{year}010100_{year}123123.nc'
     huss_chk  = check_for_postproc('huss', huss_fout)
 
     if huss_chk == True:
@@ -518,7 +521,7 @@ def clean_hurs(ds):
     hurs = hurs.to_dataset(name='hurs').rename({'Time':'time'})
     hurs['time'] = time_dim
 
-    hurs_fout = f'hurs_{fname_hr}_{year}.nc'
+    hurs_fout = f'hurs_{fname_hr}_{year}010100_{year}123123.nc'
     hurs_chk  = check_for_postproc('hurs', hurs_fout)
 
     if hurs_chk == True:
@@ -556,7 +559,7 @@ def clean_ps(ds):
     ps['time'] = time_dim
 
     ps = ps.to_dataset(name='ps').drop_attrs()
-    ps_fout = f'ps_{fname_hr}_{year}.nc'
+    ps_fout = f'ps_{fname_hr}_{year}010100_{year}123123.nc'
     ps_chk  = check_for_postproc('ps', ps)
 
     if ps_chk == True:
@@ -579,7 +582,7 @@ def clean_psl(ds):
     psl['time'] = time_dim
 
     psl = psl.to_dataset(name='psl').drop_attrs()
-    psl_fout = f'psl_{fname_hr}_{year}.nc'
+    psl_fout = f'psl_{fname_hr}_{year}010100_{year}123123.nc'
     psl.to_netcdf(f'{psl_fout}')
 
     # psl cmorized specs
@@ -633,9 +636,9 @@ def clean_sfcWind(ds, dsfx):
     uas = uas.to_dataset(name='uas')
     vas = vas.to_dataset(name='vas')
 
-    sfcWind_fout    = f'sfcWind_{fname_hr}_{year}.nc'
-    uas_fout = f'uas_{fname_dd}_{year}.nc'
-    vas_fout = f'vas_{fname_dd}_{year}.nc'
+    sfcWind_fout    = f'sfcWind_{fname_hr}_{year}010100_{year}123123.nc'
+    uas_fout = f'uas_{fname_dd}_{year}010100_{year}123123.nc'
+    vas_fout = f'vas_{fname_dd}_{year}010100_{year}123123.nc'
 
     sfcWind.to_netcdf(sfcWind_fout)
     uas.to_netcdf(uas_fout)
@@ -688,7 +691,7 @@ def clean_rsds(ds):
     acc_rsds = ( (da['I_ACSWDNB'] * 1e9) + da['ACSWDNB'] ) / 3600  # J/Hour/m-2 accumulation to W/m2
     rsds = acc_rsds.diff(dim='time').sel(time=time_dim).to_dataset(name='rsds')
 
-    rsds_fout = f'rsds_{fname_hr}_{year}.nc'
+    rsds_fout = f'rsds_{fname_hr}_{year}010100_{year}123123.nc'
     rsds.to_netcdf(f'{rsds_fout}')
 
     # rsds cmorized specs
@@ -731,7 +734,7 @@ def clean_rlds(ds):
     acc_rlds = ( (da['I_ACLWDNB'] * 1e9) + da['ACLWDNB'] ) / 3600  # J/Hour/m-2 accumulation to W/m2
     rlds = acc_rlds.diff(dim='time').sel(time=time_dim).to_dataset(name='rlds')
 
-    rlds_fout = f'rlds_{fname_hr}_{year}.nc'
+    rlds_fout = f'rlds_{fname_hr}_{year}010100_{year}123123.nc'
     rlds.to_netcdf(f'{rlds_fout}')
 
     # rlds cmorized specs
@@ -771,7 +774,7 @@ def clean_clt(ds):
     clt['time'] = time_dim
 
     clt = clt.to_dataset(name='clt').drop_attrs() 
-    clt_fout = f'clt_{fname_hr}_{year}.nc'
+    clt_fout = f'clt_{fname_hr}_{year}010100_{year}123123.nc'
     clt.to_netcdf(f'{clt_fout}')
 
     # clt cmorized specs

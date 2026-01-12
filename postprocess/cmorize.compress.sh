@@ -51,7 +51,7 @@ readonly cen_lat=$(echo "scale=2; 45.0" | bc)
 # ---------------------------
 readonly activity_id="DD"
 readonly contact="jsallen@ucar.edu ; mcginnis@ucar.edu"
-readonly creation_date=$(date +"%Y-%m-%d %H:%M:%S")
+readonly creation_date=$(date +"%Y-%m-%dT%H:%M:%S")
 readonly domain="North America"
 readonly domain_id="NAM-12"
 readonly driving_experiment="reanalysis simulation of the recent past"
@@ -61,7 +61,7 @@ readonly driving_source_id="ERA5"
 readonly driving_variant_label="r1i1p1f1"
 # frequency set by each var
 readonly grid="Lambert conic conformal with 12 km grid spacing"
-readonly institution="National Center for Atmospheric Research: Research Applications Laboratory"
+readonly institution="NSF National Center for Atmospheric Research, Boulder (Colorado), USA"
 readonly institute_id="NCAR"
 readonly license="https://cordex.org/data-access/cordex-cmip6-data/cordex-cmip6-terms-of-use"
 readonly mip_era="CMIP6"
@@ -72,7 +72,7 @@ readonly source_id='WRF461S-SN'
 readonly source_type='ARCM'
 readonly version_realization='v1-r1'
 readonly references='https://github.com/NCAR/NA-CORDEX-CMIP6 (code and documentation)'
-readonly tracking_id=$(uuidgen)
+readonly tracking_id="hdl:21.14103/$(uuidgen)"
 
 # ---------------------------------------
 # END OF USER DEFINED VARIABLES
@@ -114,6 +114,8 @@ if [ ! -f $coord_xy_file ]; then
   ncatted -h -a standard_parallel,crs,o,f,45.0 "$coord_xy_file"
   ncatted -h -a latitude_of_projection_origin,crs,o,f,45.0 $coord_xy_file
   ncatted -h -a longitude_of_central_meridian,crs,o,f,263.0 $coord_xy_file
+  ncatted -h -a semi_major_axis,crs,o,f,6378.137 $coord_xy_file
+  ncatted -h -a inverse_flattening,crs,o,f,298.257223563 $coord_xy_file
 
   # Creating coordinate variables for x and y
   ncap2 -h -A -s 'y=array(0.,12.,$y); x=array(0.,12.,$x)' $coord_xy_file
@@ -139,7 +141,7 @@ if [ ! -f $coord_xy_file ]; then
   ncap2 -O -s 'lon=double(lon)' $coord_xy_file $coord_xy_file
 
   # Conventions attribute
-  ncatted -h -a Conventions,global,o,c,"CF-1.8" $coord_xy_file
+  ncatted -h -a Conventions,global,o,c,"CF-1.11" $coord_xy_file
   ncatted -h -a institution,global,o,c,"National Center for Atmospheric Research: Research Applications Laboratory" $coord_xy_file
   ncatted -h -a source,global,o,c,"Weather Research and Forecasting Model Version 4.6.1" $coord_xy_file
 
@@ -243,7 +245,7 @@ function add_global_attrs {
   ncatted -h -a ,$1,d,, -a ,global,d,, $2
 
   # Global attributes for files
-  ncatted -h -a Conventions,global,o,c,"CF-1.8" $2
+  ncatted -h -a Conventions,global,o,c,"CF-1.11" $2
   ncatted -h -a activity_id,global,o,c,"${activity_id}" $2
   ncatted -h -a contact,global,o,c,"${contact}" $2
   ncatted -h -a creation_date,global,o,c,"${creation_date}" $2

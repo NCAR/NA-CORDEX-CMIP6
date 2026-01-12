@@ -4,16 +4,16 @@ import os
 # ----------------------
 start_year      = 1980
 end_year        = 1980 # INCLUSIVE : EDIT THIS
-wrf_d01_out_dir = "/glade/derecho/scratch/jsallen/NA-CORDEX-CMIP6/ERA5_HIST_E03/wrf_d01/"
+wrf_d01_out_dir = "/glade/campaign/ral/risc/collections/na-cordex-cmip6/raw/ERA5/eval/"
 
-#varlist = [
-#        'rsds','rlds','pr',
-#        'evspsbl','tas','hurs',
-#        'ps','psl','huss',
-#        'sfcWind','fx'
-#        ]
+varlist = [
+        'rsds','rlds','pr',
+        'evspsbl','tas','hurs',
+        'ps','psl','huss',
+        'sfcWind','fx'
+        ]
 
-varlist = [ 'tas' ]
+#varlist = [ 'tas' ]
 
 # ----------------------
 # END OF USER DEFINED VARIABLES

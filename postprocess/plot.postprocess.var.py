@@ -21,6 +21,7 @@ from xarray import ufuncs
 from datetime import date
 import numpy as np
 import matplotlib.pyplot as plt
+import glob
 import sys
 import os    
 
@@ -36,7 +37,8 @@ year = sys.argv[1]
 var  = sys.argv[2]
 os.system(f'mkdir -p {var}/figures')
 
-filename = f'{var}/{var}_NAM-12_ERA5_evaluation_r1i1p1f1_NCAR_WRF461S-SN_v1-r1_hr_{year}.nc'
+# Account for filename strings with beginning and start time: 
+filename = glob.glob(f'{var}/{var}_NAM-12_ERA5_evaluation_r1i1p1f1_NCAR_WRF461S-SN_v1-r1_hr_{year}*.nc')[0]
 ds = xr.open_dataset(filename)[var]
 
 # Plot time series - near boulder
