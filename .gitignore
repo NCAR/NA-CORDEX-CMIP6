@@ -12,9 +12,13 @@ postprocess/rlds
 postprocess/uas
 postprocess/vas
 postprocess/sfcWind
+postprocess/psl
+postprocess/ps
 postprocess/sftlf
 postprocess/orog
 postprocess/fx
 postprocess/stdout*
 postprocess/wrf.xy.coords.nc
 postprocess/wrf.xy.stagger.coords.nc
+
+clean.sh
