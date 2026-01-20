@@ -560,7 +560,7 @@ def clean_ps(ds):
 
     ps = ps.to_dataset(name='ps').drop_attrs()
     ps_fout = f'ps_{fname_hr}_{year}010100_{year}123123.nc'
-    ps_chk  = check_for_postproc('ps', ps)
+    ps_chk  = check_for_postproc('ps', ps_fout)
 
     if ps_chk == True:
         ps.to_netcdf(f'{ps_fout}')

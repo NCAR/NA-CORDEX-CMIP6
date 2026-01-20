@@ -111,15 +111,21 @@ if [ ! -f $coord_xy_file ]; then
   # Add the projection information 
   ncap2 -h -A -s "crs=-9999" $coord_xy_file
   ncatted -h -a grid_mapping_name,crs,o,c,lambert_conformal_conic $coord_xy_file
-  ncatted -h -a standard_parallel,crs,o,f,45.0 "$coord_xy_file"
-  ncatted -h -a latitude_of_projection_origin,crs,o,f,45.0 $coord_xy_file
-  ncatted -h -a longitude_of_central_meridian,crs,o,f,263.0 $coord_xy_file
-  ncatted -h -a semi_major_axis,crs,o,f,6378.137 $coord_xy_file
-  ncatted -h -a inverse_flattening,crs,o,f,298.257223563 $coord_xy_file
+  ncatted -h -a standard_parallel,crs,o,f,"35.,60." "$coord_xy_file"
+  ncatted -h -a longitude_of_central_meridian,crs,o,f,-97. $coord_xy_file
+  ncatted -h -a latitude_of_projection_origin,crs,o,f,46. $coord_xy_file
+  ncatted -h -a semi_major_axis,crs,o,f,6370000. $coord_xy_file
+  ncatted -h -a semi_minor_axis,crs,o,f,6370000. $coord_xy_file
 
-  # Creating coordinate variables for x and y
-  ncap2 -h -A -s 'y=array(0.,12.,$y); x=array(0.,12.,$x)' $coord_xy_file
-  ncatted -h -a units,y,o,c,km -a units,x,o,c,km $coord_xy_file
+  #ncatted -h -a inverse_flattening,crs,o,d,298.257223563 $coord_xy_file
+  ncatted -h -a false_easting,crs,o,f,0. $coord_xy_file
+  ncatted -h -a false_northing,crs,o,f,0. $coord_xy_file
+  ncatted -h -a units,crs,o,c,"m" $coord_xy_file
+
+  #ncap2 -h -A -s 'x=array(-4242000.,12000.,$x); y=array(-4038000.,12000.,$y)' "$coord_xy_file"
+  ncap2 -h -A -s 'x=array(-(($x.size-1)/2)*12000.,12000.,$x); y=array(-(($y.size-1)/2)*12000.,12000.,$y)' "$coord_xy_file"
+  #ncap2 -h -A -s 'y=array(0.,12000.,$y); x=array(0.,12000.,$x)' $coord_xy_file
+  ncatted -h -a units,y,o,c,m -a units,x,o,c,m $coord_xy_file
   ncatted -h -a long_name,y,o,c,"y coordinate in Cartesian system" $coord_xy_file
   ncatted -h -a long_name,x,o,c,"x-coordinate in Cartesian system" $coord_xy_file
   ncatted -h -a standard_name,y,o,c,projection_y_coordinate $coord_xy_file
@@ -275,6 +281,7 @@ function add_global_attrs {
 # Add variable attributes
 # -----------------------
 function add_var_attrs {
+  # $1=var, $2=file, $3=units, $4=standard_name, $5=long_name, $6=cell_methods
 
   # variable attributes
   ncatted -h -a units,"${1}",o,c,"${3}" $2
@@ -312,10 +319,6 @@ function add_var_attrs {
     ncap2 -h -A -s 'time_bnds[$time,$nv]=0.0; time_bnds(:,0)=time-0.5; time_bnds(:,1)=time+0.5' $2 $2
     ncatted -h -O -a bounds,time,o,c,"time_bnds" $2 $2
   fi
-
-  ncatted -O -h -a standard_parallel,crs,o,f,45.0 $2 $2
-  ncatted -O -h -a latitude_of_projection_origin,crs,o,f,45.0 $2 $2
-  ncatted -O -h -a longitude_of_central_meridian,crs,o,f,263.0 $2 $2
 
 }
 
