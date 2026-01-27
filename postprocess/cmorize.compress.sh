@@ -26,7 +26,6 @@ ln=${10}       # longname
 stdn=${11}     # standard name
 year=${12}     # year...
 
-#readonly wrfout_path="/glade/u/home/jsallen/scratch/NA-CORDEX-CMIP6/ERA5_HIST_E01/wrf_d01/1977_chunk/" # where is your data?
 readonly coord_ref_file="${wrfout_path}wrfout_d01_${year}-12-31_00:00:00" # Example WRF file for coordinates and time dimension!!
 
 echo "-------------------------------"
@@ -50,7 +49,7 @@ readonly cen_lat=$(echo "scale=2; 45.0" | bc)
 # Global attributes for files
 # ---------------------------
 readonly activity_id="DD"
-readonly contact="jsallen@ucar.edu ; mcginnis@ucar.edu"
+readonly contact="na-cordex-admin@ucar.edu"
 readonly creation_date=$(date +"%Y-%m-%dT%H:%M:%S")
 readonly domain="North America"
 readonly domain_id="NAM-12"
