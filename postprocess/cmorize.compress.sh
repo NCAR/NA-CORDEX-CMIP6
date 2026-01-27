@@ -14,17 +14,17 @@ module load nco
 module load cdo
 
 wrfout_path=$1 # wrfoutput path
-var=$2         # Variable name
+var=$2         # variable name CMOR
 fname=$3       # wrfout filename
 pcc=$4         # compression level
 freq=$5        # Write frequency
 units=$6       # units
-lev=$7         # single, pressure, soil
+lev=$7         # single, pressure, soil, work in progress...
 refh=$8        # reference height
 cell=$9        # cell_methods
 ln=${10}       # longname
 stdn=${11}     # standard name
-year=${12}     #  year...
+year=${12}     # year...
 
 #readonly wrfout_path="/glade/u/home/jsallen/scratch/NA-CORDEX-CMIP6/ERA5_HIST_E01/wrf_d01/1977_chunk/" # where is your data?
 readonly coord_ref_file="${wrfout_path}wrfout_d01_${year}-12-31_00:00:00" # Example WRF file for coordinates and time dimension!!
@@ -94,12 +94,11 @@ readonly coord_xy_stag_file="./wrf.xy.stagger.coords.nc"
 
 if [ ! -f $coord_xy_file ]; then
   echo "WRF coordinate file not found ---------- creating"
-  ncks -h -3 --chunk_cache 4000000000 -C -v XLONG,XLAT,XTIME --no_tmp_fl $coord_ref_file $coord_xy_file
+  ncks -h -3 --chunk_cache 4000000000 -C -v XLONG,XLAT --no_tmp_fl $coord_ref_file $coord_xy_file
 
   # Delete all uneeded attributes : wrf-holdovers
   ncatted -h -a ,XLONG,d,, $coord_xy_file
   ncatted -h -a ,XLAT,d,, $coord_xy_file
-  ncatted -h -a ,XTIME,d,, $coord_xy_file
   ncatted -h -a '^[A-Z0-9_-]+$',global,d,, $coord_xy_file
   ncatted -h -a stagger,,d,, $coord_xy_file
   ncatted -h -a coordinates,,d,, $coord_xy_file
@@ -107,6 +106,9 @@ if [ ! -f $coord_xy_file ]; then
   ncrename -h -d Time,time $coord_xy_file
   ncrename -h -d south_north,y -d west_east,x $coord_xy_file
   ncrename -h -v XLAT,lat -v XLONG,lon $coord_xy_file
+
+  # Get rid of time in spatial coordiantes
+  ncwa -h -O -a time $coord_xy_file $coord_xy_file
 
   # Add the projection information 
   ncap2 -h -A -s "crs=-9999" $coord_xy_file
@@ -150,9 +152,6 @@ if [ ! -f $coord_xy_file ]; then
   ncatted -h -a Conventions,global,o,c,"CF-1.11" $coord_xy_file
   ncatted -h -a institution,global,o,c,"National Center for Atmospheric Research: Research Applications Laboratory" $coord_xy_file
   ncatted -h -a source,global,o,c,"Weather Research and Forecasting Model Version 4.6.1" $coord_xy_file
-
-  # Get rid of time in spatial coordiantes
-  ncwa -h -O -a time -C -v lat,lon,y,x,crs $coord_xy_file $coord_xy_file
 
   # Add one more file for winds or staggered coordinate vars...
   ncks -h -O -d x,1, -d y,1, $coord_xy_file $coord_xy_stag_file
