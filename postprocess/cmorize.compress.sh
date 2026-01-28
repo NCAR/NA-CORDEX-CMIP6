@@ -93,7 +93,7 @@ readonly coord_xy_stag_file="./wrf.xy.stagger.coords.nc"
 
 if [ ! -f $coord_xy_file ]; then
   echo "WRF coordinate file not found ---------- creating"
-  ncks -h -3 --chunk_cache 4000000000 -C -v XLONG,XLAT --no_tmp_fl $coord_ref_file $coord_xy_file
+  ncks -h -3 --chunk_cache 4000000000 -C -d Time,0 -v XLONG,XLAT --no_tmp_fl $coord_ref_file $coord_xy_file
 
   # Delete all uneeded attributes : wrf-holdovers
   ncatted -h -a ,XLONG,d,, $coord_xy_file
