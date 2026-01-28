@@ -78,10 +78,10 @@ pcrs = ccrs.LambertConformal(central_longitude=260)
 tcrs = ccrs.PlateCarree()
 
 def plot(ax):
-    xticks = np.arange(-150,-70,20)
-    yticks = np.arange(20,60,10)
+    xticks = np.arange(215,310,15)
+    yticks = np.arange(5,80,15)
 
-    ax.set_extent([230,290,20,60], crs=ccrs.PlateCarree())
+    ax.set_extent([215,310,5,80], crs=ccrs.PlateCarree())
     ax.add_feature(cfeature.COASTLINE.with_scale('110m'), linewidth=0.4)
     ax.add_feature(cfeature.STATES, linewidth=0.5, alpha=0.7)
     ax.add_feature(cfeature.BORDERS, linewidth=0.5, alpha=0.7)
