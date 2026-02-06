@@ -637,8 +637,8 @@ def clean_sfcWind(ds, dsfx):
     vas = vas.to_dataset(name='vas')
 
     sfcWind_fout    = f'sfcWind_{fname_hr}_{year}010100_{year}123123.nc'
-    uas_fout = f'uas_{fname_dd}_{year}010100_{year}123123.nc'
-    vas_fout = f'vas_{fname_dd}_{year}010100_{year}123123.nc'
+    uas_fout = f'uas_{fname_hr}_{year}010100_{year}123123.nc'
+    vas_fout = f'vas_{fname_hr}_{year}010100_{year}123123.nc'
 
     sfcWind.to_netcdf(sfcWind_fout)
     uas.to_netcdf(uas_fout)
@@ -665,7 +665,7 @@ def clean_sfcWind(ds, dsfx):
                    levels, refh, cell[0], 
                    long_name[0], standard_name[0])
 
-    cmor_comp_save(wrfout_path, 'vas', vas_fout, pcc, freq, units[1],
+    cmor_comp_save(wrfout_path, 'vas', vas_fout, pcc, freq[1], units[1],
                    levels, refh, cell[1],
                    long_name[1], standard_name[1])
 
@@ -808,17 +808,15 @@ def clean_fx(ds):
     sftlf_fout = f'sftlf_{fname_fx}'
     orog_fout = f'orog_{fname_fx}'
 
-    #if os.path.exists(f'sftlf/{sftlf_fout}'):
-    #    return 
-    #if os.path.exists(f'sftlf/{sftlf_fout}'):
-    #    return 
+    if os.path.exists(f'sftlf/{sftlf_fout}'):
+        return 
 
     sftlf = ds['LANDMASK'].mean(dim='Time')
     seaice = ds['SEAICE'].mean(dim='Time')
     orog = ds['HGT'].mean(dim='Time')
 
     seaice = xr.where(seaice!=0, 1, 0)
-    sftlf = sftlf - seaice
+    sftlf = (sftlf - seaice) * 100
 
     sftlf = sftlf.to_dataset(name='sftlf').drop_attrs()
     orog = orog.to_dataset(name='orog').drop_attrs()
