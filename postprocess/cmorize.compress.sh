@@ -273,6 +273,8 @@ function add_global_attrs {
   ncatted -h -a references,global,o,c,"${references}" $2
   ncatted -h -a tracking_id,global,o,c,"${tracking_id}" $2
   ncatted -h -a license,global,o,c,"${license}" $2
+  ncatted -h -a freqeuncy,global,o,c,"$3" $2
+  ncatted -h -a variable_id,global,o,c,"$1" $2
 
 }
 
