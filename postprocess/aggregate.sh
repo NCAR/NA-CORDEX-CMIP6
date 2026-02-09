@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # aggregate_cordex.sh - Generate commandfiles for aggregating NA-CORDEX WRF output
-# Aggregates hourly→daily and daily→monthly according to CORDEX-CMIP6 specifications
+# Aggregates hourlyâdaily and dailyâmonthly according to CORDEX-CMIP6 specifications
 
 set -euo pipefail
 
@@ -236,46 +236,72 @@ for vardir in "$INDIR"/*/; do
     
     echo "  Years available: $minyear-$maxyear"
     
-    # Determine what aggregations to generate based on what input files exist:
-    # - If we have sub-daily files, generate daily
-    # - If we have daily files (either as input or as output from previous
-    #   aggregation), generate monthly
-    declare -a freqs_to_generate=()
-    
-    if [[ "$infreq" =~ hr$ ]]; then
-        # Have sub-daily input files, generate daily
-        freqs_to_generate=(day)
-        # Also check if daily outputs already exist for monthly aggregation
-        daily_outdir="$(gen_outdir "$drvsrc" "$drvexp" "$drvvar" "$src" "$verreal" "day" "$varname")"
-        daily_pattern="${varname}_${domain}_${drvsrc}_${drvexp}_${drvvar}_${inst}_${src}_${verreal}_day_*.nc"
-        if compgen -G "$daily_outdir/$daily_pattern" > /dev/null; then
-            freqs_to_generate+=(mon)
-        fi
-    elif [[ "$infreq" == "day" ]]; then
-        # Have daily input files, generate monthly
-        freqs_to_generate=(mon)
-    fi
-    
-    # Generate commands for each frequency
-    for freq in "${freqs_to_generate[@]}"; do
+    # Process each target frequency (day, mon) and check if inputs exist
+    for freq in day mon; do
         cmdfile="$CMDDIR/${varname}.${freq}.cmd"
         > "$cmdfile"  # Truncate/create
         
-        echo "  Generating $cmdfile"
+        # Determine where input files should be for this frequency
+        declare -A freq_yearfiles
+        freq_minyear=9999
+        freq_maxyear=0
         
-        # Determine input files for this frequency
-        if [[ "$freq" == "mon" && "$infreq" =~ hr$ ]]; then
-            # Monthly from sub-daily: use daily output files from previous step
-            indir_for_freq="$(gen_outdir "$drvsrc" "$drvexp" "$drvvar" "$src" "$verreal" "day" "$varname")"
-            inpat="${varname}_${domain}_${drvsrc}_${drvexp}_${drvvar}_${inst}_${src}_${verreal}_day_*.nc"
-        else
-            # Daily from sub-daily or monthly from daily: use input directory
-            indir_for_freq="$vardir"
-            inpat="*.nc"
+        if [[ "$freq" == "day" ]]; then
+            # Daily aggregation: need hourly input files
+            if [[ ! "$infreq" =~ hr$ ]]; then
+                # Input is not hourly, skip this frequency
+                rm "$cmdfile"
+                continue
+            fi
+            # Use the hourly files we already found
+            for year in "${!yearfiles[@]}"; do
+                freq_yearfiles[$year]="${yearfiles[$year]}"
+                [[ $year -lt $freq_minyear ]] && freq_minyear=$year
+                [[ $year -gt $freq_maxyear ]] && freq_maxyear=$year
+            done
+        elif [[ "$freq" == "mon" ]]; then
+            # Monthly aggregation: need daily input files
+            # Check input directory first (if input is already daily)
+            if [[ "$infreq" == "day" ]]; then
+                for year in "${!yearfiles[@]}"; do
+                    freq_yearfiles[$year]="${yearfiles[$year]}"
+                    [[ $year -lt $freq_minyear ]] && freq_minyear=$year
+                    [[ $year -gt $freq_maxyear ]] && freq_maxyear=$year
+                done
+            else
+                # Look for daily output files from previous aggregation
+                daily_outdir="$(gen_outdir "$drvsrc" "$drvexp" "$drvvar" "$src" "$verreal" "day" "$varname")"
+                daily_pattern="${varname}_${domain}_${drvsrc}_${drvexp}_${drvvar}_${inst}_${src}_${verreal}_day_*.nc"
+                
+                shopt -s nullglob
+                for f in "$daily_outdir"/$daily_pattern; do
+                    [[ ! -f "$f" ]] && continue
+                    fname=$(basename "$f")
+                    read -r _ _ _ _ _ _ _ _ _ timespan <<< "$(parse_filename "$fname")"
+                    [[ -z "$timespan" ]] && continue
+                    year=$(extract_year "$timespan")
+                    freq_yearfiles[$year]="$f"
+                    [[ $year -lt $freq_minyear ]] && freq_minyear=$year
+                    [[ $year -gt $freq_maxyear ]] && freq_maxyear=$year
+                done
+                shopt -u nullglob
+            fi
         fi
         
+        # Skip if no input files found for this frequency
+        if [[ "${#freq_yearfiles[@]}" -eq 0 ]]; then
+            rm "$cmdfile"
+            continue
+        fi
+        
+        echo "  Generating $cmdfile"
+        echo "    Input years available: $freq_minyear-$freq_maxyear"
+        
         # Compute output ranges
-        mapfile -t ranges < <(compute_ranges "$freq" "$minyear" "$maxyear")
+        mapfile -t ranges < <(compute_ranges "$freq" "$freq_minyear" "$freq_maxyear")
+        
+        nskipped=0
+        ncommands=0
         
         for range in "${ranges[@]}"; do
             IFS='-' read -r startyear endyear <<< "$range"
@@ -283,16 +309,7 @@ for vardir in "$INDIR"/*/; do
             # Collect input files for this range
             infiles=()
             for ((year=startyear; year<=endyear; year++)); do
-                if [[ "$freq" == "mon" && "$infreq" =~ hr$ ]]; then
-                    # Look for daily output files
-                    pattern="${varname}_${domain}_${drvsrc}_${drvexp}_${drvvar}_${inst}_${src}_${verreal}_day_${year}*.nc"
-                    for f in "$indir_for_freq"/$pattern; do
-                        [[ -f "$f" ]] && infiles+=("$f")
-                    done
-                else
-                    # Use input files directly
-                    [[ -n "${yearfiles[$year]:-}" ]] && infiles+=("${yearfiles[$year]}")
-                fi
+                [[ -n "${freq_yearfiles[$year]:-}" ]] && infiles+=("${freq_yearfiles[$year]}")
             done
             
             [[ ${#infiles[@]} -eq 0 ]] && continue
@@ -302,11 +319,12 @@ for vardir in "$INDIR"/*/; do
             outfile="$(gen_outfile "$varname" "$domain" "$drvsrc" "$drvexp" "$drvvar" "$inst" "$src" "$verreal" "$freq" "$startyear" "$endyear")"
             outpath="$outdir/$outfile"
             
+            ((ncommands++)) || true
+            
             # Check for existing files
             if [[ -f "$outpath" && $FORCE -eq 0 ]]; then
-                echo "Error: Output file exists: $outpath" >&2
-                echo "Use --force to overwrite" >&2
-                exit 1
+                ((nskipped++)) || true
+                continue
             fi
             
             # Determine CDO operator
@@ -322,8 +340,14 @@ for vardir in "$INDIR"/*/; do
         done
         
         # Report stats
-        ncommands=$(wc -l < "$cmdfile")
-        echo "    Generated $ncommands commands"
+        ngenerated=$((ncommands - nskipped))
+        echo "    Generated $ngenerated commands, skipped $nskipped/$ncommands existing files"
+        
+        # Clean up empty commandfile
+        [[ ! -s "$cmdfile" ]] && rm "$cmdfile"
+        
+        # Clean up for next frequency
+        unset freq_yearfiles
     done
 done
 

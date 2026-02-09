@@ -1,0 +1,204 @@
+#!/bin/bash
+#
+# launch_multi - Submit multiple MPMD commandfiles via launch_cf
+#
+# Creates a separate run directory for each commandfile to corral output files,
+# copies necessary config/scripts, and submits via launch_cf.
+#
+# Usage: launch_multi [options] --run DIR cmdfile1 [cmdfile2 ...]
+#
+# Options:
+#   --run DIR           Directory where run subdirectories are created (required)
+#   --wall TIME         Walltime (default: 00:20:00)
+#   --config FILE       Environment config file (default: ~/config_env.sh)
+#   --copy FILE         Additional file/dir to copy (can be repeated)
+#   -N NAME             Job name or prefix (default: basename of cmdfile)
+#   -A ACCOUNT          PBS account (default: $PROJECT)
+#   -q QUEUE            PBS queue (default: casper)
+#   -m MAIL             Mail options (default: a)
+#   -j JOIN             Join stdout/stderr (default: oe)
+#   --dry               Print commands without executing
+#   --help              Show this help
+#
+# Any other arguments are passed through to launch_cf (and then to qsub).
+
+set -e
+
+# Defaults
+walltime="00:20:00"
+config="$HOME/config_env.sh"
+config_specified=0
+account="${PROJECT:-}"
+queue="casper"
+mail="a"
+join="oe"
+runpath=""
+jobprefix=""
+dry=0
+copyfiles=()
+cmdfiles=()
+passthrough=()
+
+usage() {
+    sed -n '3,/^$/p' "$0" | sed 's/^# \?//'
+    exit "${1:-0}"
+}
+
+die() {
+    echo "Error: $1" >&2
+    exit 1
+}
+
+warn() {
+    echo "Warning: $1" >&2
+}
+
+run_cmd() {
+    if [[ $dry -eq 1 ]]; then
+        echo "  $1"
+    else
+        eval "$1"
+    fi
+}
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --help)
+            usage 0
+            ;;
+        --run)
+            runpath="$2"
+            shift 2
+            ;;
+        --wall)
+            walltime="$2"
+            shift 2
+            ;;
+        --config)
+            config="$2"
+            config_specified=1
+            shift 2
+            ;;
+        --copy)
+            copyfiles+=("$2")
+            shift 2
+            ;;
+        -N)
+            jobprefix="$2"
+            shift 2
+            ;;
+        -A)
+            account="$2"
+            shift 2
+            ;;
+        -q)
+            queue="$2"
+            shift 2
+            ;;
+        -m)
+            mail="$2"
+            shift 2
+            ;;
+        -j)
+            join="$2"
+            shift 2
+            ;;
+        --dry)
+            dry=1
+            shift
+            ;;
+        -*)
+            # Unknown option: pass through to launch_cf
+            passthrough+=("$1")
+            if [[ $# -gt 1 && ! "$2" =~ ^- ]]; then
+                passthrough+=("$2")
+                shift
+            fi
+            shift
+            ;;
+        *)
+            # Positional argument: commandfile
+            cmdfiles+=("$1")
+            shift
+            ;;
+    esac
+done
+
+# Validate required arguments
+[[ -z "$runpath" ]] && die "--run is required"
+[[ ${#cmdfiles[@]} -eq 0 ]] && die "No commandfiles specified"
+[[ -z "$account" ]] && die "No account specified (-A) and \$PROJECT not set"
+
+# Check that commandfiles exist
+for cf in "${cmdfiles[@]}"; do
+    [[ -f "$cf" ]] || die "Commandfile not found: $cf"
+done
+
+# Check config file
+if [[ ! -f "$config" ]]; then
+    if [[ $config_specified -eq 1 ]]; then
+        die "Config file not found: $config"
+    else
+        warn "Default config ~/config_env.sh not found."
+        warn "Run environment will be bare-bones with no access to software in modules."
+        warn "Consider creating a minimal one with:"
+        warn "  echo 'module restore default' > ~/config_env.sh"
+        config=""
+    fi
+fi
+
+# Check additional files to copy
+for f in "${copyfiles[@]}"; do
+    [[ -e "$f" ]] || die "File to copy not found: $f"
+done
+
+# Create base runpath if needed
+run_cmd "mkdir -p $(printf %q "$runpath")"
+
+here="$(pwd)"
+
+for cmdfile in "${cmdfiles[@]}"; do
+    # Get absolute path to cmdfile
+    cmdfile_abs="$(cd "$(dirname "$cmdfile")" && pwd)/$(basename "$cmdfile")"
+    
+    # Derive job name
+    cmd="$(basename "$cmdfile")"
+    basename_no_ext="${cmd%.cmd}"
+    if [[ -n "$jobprefix" ]]; then
+        jobname="${jobprefix}_${basename_no_ext}"
+    else
+        jobname="$basename_no_ext"
+    fi
+    
+    rundir="$runpath/$jobname"
+    
+    echo "=== $jobname ==="
+    
+    # Build and execute commands
+    run_cmd "rm -rf $(printf %q "$rundir")"
+    run_cmd "mkdir -p $(printf %q "$rundir")"
+    run_cmd "cp $(printf %q "$cmdfile_abs") $(printf %q "$rundir/")"
+    
+    if [[ -n "$config" ]]; then
+        run_cmd "cp $(printf %q "$config") $(printf %q "$rundir/config_env.sh")"
+    fi
+    
+    for f in "${copyfiles[@]}"; do
+        run_cmd "cp -r $(printf %q "$f") $(printf %q "$rundir/")"
+    done
+    
+    run_cmd "cd $(printf %q "$rundir")"
+    
+    # Build launch_cf command
+    launch_cmd="launch_cf -A $(printf %q "$account") -q $(printf %q "$queue")"
+    launch_cmd+=" -m $(printf %q "$mail") -j $(printf %q "$join")"
+    launch_cmd+=" -N $(printf %q "$jobname") -l walltime=$(printf %q "$walltime")"
+    for arg in "${passthrough[@]}"; do
+        launch_cmd+=" $(printf %q "$arg")"
+    done
+    launch_cmd+=" $(printf %q "$cmd")"
+    
+    run_cmd "$launch_cmd"
+    run_cmd "cd $(printf %q "$here")"
+done
