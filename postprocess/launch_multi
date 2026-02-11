@@ -9,15 +9,16 @@
 #
 # Options:
 #   --run DIR           Directory where run subdirectories are created (required)
-#   --wall TIME         Walltime (default: 00:20:00)
 #   --config FILE       Environment config file (default: ~/config_env.sh)
 #   --copy FILE         Additional file/dir to copy (can be repeated)
-#   -N NAME             Job name or prefix (default: basename of cmdfile)
-#   -A ACCOUNT          PBS account (default: $PROJECT)
-#   -q QUEUE            PBS queue (default: casper)
-#   -m MAIL             Mail options (default: a)
-#   -j JOIN             Join stdout/stderr (default: oe)
 #   --dry               Print commands without executing
+#   --sleep N           Delay in seconds between job submissions (default: 1)
+#   --wall TIME         Walltime (default: 00:20:00)
+#   -A ACCOUNT          PBS account (default: $PROJECT)
+#   -N NAME             Job name or prefix (default: basename of cmdfile)
+#   -j JOIN             Join stdout/stderr (default: oe)
+#   -m MAIL             Mail options (default: a)
+#   -q QUEUE            PBS queue (default: casper)
 #   --help              Show this help
 #
 # Any other arguments are passed through to launch_cf (and then to qsub).
@@ -25,19 +26,20 @@
 set -e
 
 # Defaults
-walltime="00:20:00"
+account="${PROJECT:-}"
+cmdfiles=()
 config="$HOME/config_env.sh"
 config_specified=0
-account="${PROJECT:-}"
-queue="casper"
-mail="a"
-join="oe"
-runpath=""
-jobprefix=""
-dry=0
 copyfiles=()
-cmdfiles=()
+dry=0
+jobprefix=""
+join="oe"
+mail="a"
 passthrough=()
+queue="casper"
+runpath=""
+sleep=1
+walltime="00:20:00"
 
 usage() {
     sed -n '3,/^$/p' "$0" | sed 's/^# \?//'
@@ -84,6 +86,10 @@ while [[ $# -gt 0 ]]; do
             copyfiles+=("$2")
             shift 2
             ;;
+	--sleep)
+	    sleep="$2"
+	    shift 2
+	    ;;
         -N)
             jobprefix="$2"
             shift 2
@@ -201,4 +207,5 @@ for cmdfile in "${cmdfiles[@]}"; do
     
     run_cmd "$launch_cmd"
     run_cmd "cd $(printf %q "$here")"
+    run_cmd "sleep $sleep"
 done
