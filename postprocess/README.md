@@ -70,8 +70,11 @@
 
 12. [make plots to check that the data looks good]
 
-13. Move the files to their final location.
-
+13. Move the files to their final location.  The easiest way to do
+    this is using Globus via the web UI, which will do it
+    autonomously, in parallel, and with error checking.  Detailed
+    instructions can be found in [NCAR's HPC
+    documentation](https://ncar-hpc-docs.readthedocs.io/en/latest/storage-systems/data-transfer/globus/#transferring-files-with-the-web-interface).
 
 ### List of current known problems: 
 1.  Discrepancy in cell_methods from WRF output and WCRP guidelines
