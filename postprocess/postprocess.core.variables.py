@@ -85,7 +85,7 @@ wrfout_fx_fname   = "wrfout_5day_d01_"  # Leading string of wrfout files with LA
 # Load local variable specs
 # -------------------------
 _script_dir = os.path.dirname(os.path.abspath(__file__))
-with open(os.path.join(_script_dir, 'var_specs.yaml')) as f:
+with open(os.path.join(_script_dir, 'var_specs.yml')) as f:
     var_specs = yaml.safe_load(f)
 
 def get_specs(var):
