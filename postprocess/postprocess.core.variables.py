@@ -1,51 +1,49 @@
-# Author: Jacob Stuivenvolt-Allen
+# Authors: Jacob Stuivenvolt-Allen, Seth McGinnis
 
 # Purpose:
 # --------
-# This script post-processes WRF output. The resulting
-# output will be CMORized. All standardization was done
-# by consulting the WCRP-CORDEX CMOR-Tables: 
+# This script post-processes WRF output to generate CMORized output
+# that conforms to CORDEX-CMIP6 specification (which also entails
+# CF-compliance).  Variable metadata specifications are taken from:
 # https://github.com/WCRP-CORDEX/cordex-cmip6-cmor-tables
+#
+# Additional specifications (near-surface reference height, lossy
+# compression precision) are defined in var_specs.yml.
 
-# USAGE:
+# USAGE NOTES:
 # -----
-# 1. Ensure cmorize.compress.sh and plot.postprocess.var.py
-#    exist in the same directory
 
-# 2. You must have cmorize.compress.sh in the same directory 
-# that you are running this script. Note that executing
-# this script will populate your current working 
-# directory with additional directories for each variable,
-# along with the post-processed output.
+# 1. Ensure that var_specs.yml, cmorize.compress.sh, and
+#    plot.postprocess.var.py all exist in the same directory that this
+#    script is running in
 
-# 3. You must supply two keyword arguments from the command 
-# line when executing this script. This is to allow for
-# parallelization with launch_cf on Casper HPC at NCAR. 
-# Alternatively, one could submit job arrays using their
-# own HPC. 
+# 2. This script populate the current working directory with
+#    additional directories for each variable containing the
+#    post-processed output.
 
-# Keyword argument 1 : Path to wrfoutput files for postproc
-# Keyword argument 2 : Year (int)
-# Keyword argument 3 : Variable (cmorized var name) 
+# 3. The script is designed for command-file parallelism via launch_cf
+#    on Casper HPC at NCAR.  (Or other such tools on other HPC
+#    systems.)  It processes a single year of data for one variable,
+#    specified via commandline arguments
 
-# 3. 12-km WRF output is large, and a user should
-# request sufficient memory for this task 
-# (~100GB)
+# argument 1 : Path to wrfoutput files for postproc
+# argument 2 : Year (int)
+# argument 3 : Variable (cmorized var name) 
 
-# 4. This workflow requires both NCO and CDO, which are
-# currently loaded assuming your HPC uses the Modules 
-# system. Change the module load statements as needed
-# for your HPC.
+# 4. 12-km WRF output is very large; be sure to request sufficient
+#    memory for this task (~100GB)
 
-# Example execution for one month, January of 1980:
+# 5. This workflow requires both NCO and CDO.  On Casper, these must
+#    be made available prior to running the script using the
+#    appropriate "module load" commands.  When running in parallel
+#    with launch_cf, those commands go in a file named
+#    `config_env.sh`, which is executed locally for each task.
+
+# Example execution:
 # ------------------------------------------------
-# $ python clean.core.variables.py {wrfout_path} 1980 tas
-
-# user only specifies path where raw wrfoutput files are 
-# to be post-processed.
-
-
+# $ python postprocess.core.variables.py {wrfout_path} 1980 tas
 # ------------------------------------------------
+
 import xarray as xr
 from xarray import ufuncs
 from datetime import date
@@ -55,7 +53,7 @@ import glob
 import sys
 import os
 import subprocess
-import sys 
+import yaml
 
 # -----------------
 # keyword arguments
@@ -68,12 +66,15 @@ variable    = sys.argv[3]  # variable (cmorized syntax)
 # START OF USER DEFINED VARIABLES
 # -------------------------------
 
-do_overwrite_existing = True # Setting to True will overwrite all post-processed data: careful!
+# Setting to True will overwrite all post-processed data: careful!
+do_overwrite_existing = True 
 
-os.system('module load nco') # I don't think this works unfortunately
-os.system('module load cdo')
+# The fixed / static variables orog & sftlf come from variables in a
+# WRF input file (HGT and LANDMASK in wrfinput_d01) rather than from
+# an output file; wrfinput_path is the authoritative source for these
+# input files for the NA-CORDEX simulations.
+wrfinput_path     = "/glade/derecho/scratch/jsallen/NA-CORDEX-CMIP6/ERA5_HIST_E03/input_example/"
 
-wrfinput_path     = "/glade/derecho/scratch/jsallen/NA-CORDEX-CMIP6/ERA5_HIST_E03/input_example/"  # path to wrfinput_d01
 wrfout_hour_fname = "wrfout_hour_d01_"  # Leading string of wrfout files with hourly output
 wrfout_fx_fname   = "wrfout_5day_d01_"  # Leading string of wrfout files with LANDFRAC and HGT
 
@@ -81,6 +82,21 @@ wrfout_fx_fname   = "wrfout_5day_d01_"  # Leading string of wrfout files with LA
 # END OF USER DEFINED VARIABLES
 # -------------------------------
 
+# Load local variable specs
+# -------------------------
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+with open(os.path.join(_script_dir, 'var_specs.yaml')) as f:
+    var_specs = yaml.safe_load(f)
+
+def get_specs(var):
+    """Return (levels, refh, qnt) for a variable from var_specs.yaml.
+    refh and qnt are returned as strings for shell command interpolation,
+    or 'None' if not specified."""
+    s = var_specs.get(var, {})
+    levels = s.get('levels', 'single')
+    refh   = str(s['refh']) if 'refh' in s else 'None'
+    qnt    = str(s['qnt'])  if 'qnt'  in s else 'None'
+    return levels, refh, qnt
 
 # PARSE CMOR Tables from WCRP-CORDEX
 # ----------------------------------
@@ -141,7 +157,6 @@ def check_for_postproc(var, fout):
         write_netcdf = True
 
     return(write_netcdf)
-
 # ------------------------------------------
 
 # File naming
@@ -236,24 +251,10 @@ ds_fx_inp = xr.open_dataset(f'{wrfinput_path}wrfinput_d01', decode_times=False).
 
 # Function for cmorizing and editing NETCDF attributes
 # ----------------------------------------------------
-def cmor_comp_save(wrfout_path, var, fname, pcc, freq, units, lev, refh, cell, ln, stdn):
-
-    # CMORIZED specs
-    # --------------
-    #pcc    = "5"
-    #freq   = "1hr"
-    #units  = "K"
-    #levels = "single"
-    #refh   = "2"
-    #cell   = "None"
-    #short_name = "tas"
-    #long_name  = "Near-Surface Air Temperature"
-    #standard_name = "air_temperature"
-    #year = 1980
-    # --------------
+def cmor_comp_save(wrfout_path, var, fname, qnt, freq, units, lev, refh, cell, ln, stdn):
 
     cmd = (
-    f'bash ./cmorize.compress.sh "{wrfout_path}" "{var}" "{fname}" "{pcc}" "{freq}" '
+    f'bash ./cmorize.compress.sh "{wrfout_path}" "{var}" "{fname}" "{qnt}" "{freq}" '
     f'"{units}" "{lev}" "{refh}" "{cell}" "{ln}" "{stdn}" "{year}" '
     )
 
@@ -275,22 +276,11 @@ def clean_tas(ds):
     tasmin_fout = f'tasmin_{fname_dd}_{year}0101_{year}1231.nc'
     tasmax_fout = f'tasmax_{fname_dd}_{year}0101_{year}1231.nc'
 
-    # tas, tasmax, tasmin CMORIZED specs
-    # ----------------------------------
-    pcc    = '3'
-    levels = 'single'
-    refh   = '2'
+    levels, refh, qnt = get_specs('tas')  # tasmax/tasmin share these specs
 
-    tas_info = pull_cmor_specs('tas', 'hr')
+    tas_info    = pull_cmor_specs('tas',    'hr')
     tasmax_info = pull_cmor_specs('tasmax', 'day')
     tasmin_info = pull_cmor_specs('tasmin', 'day')
-
-    freq   = [tas_info[0], tasmax_info[0], tasmin_info[0]]
-    units  = [tas_info[1], tasmax_info[1], tasmin_info[1]]
-    cell   = [tas_info[2], tasmax_info[2], tasmin_info[2]]
-    long_name      = [tas_info[3], tasmax_info[3], tasmin_info[3]]
-    standard_name  = [tas_info[4], tasmax_info[4], tasmin_info[4]]
-    # ---------------------------------- repeat for each variable
 
     tas_vars = 'T2'
     tas = ds[tas_vars].rename({'Time':'time'}).load()
@@ -307,27 +297,24 @@ def clean_tas(ds):
     tas_min = tas_min.rename({'dayofyear':'time','tas':'tasmin'})
     tas_max = tas_max.rename({'dayofyear':'time','tas':'tasmax'})
 
-    tas_chk    = check_for_postproc('tas', tas_fout)
+    tas_chk    = check_for_postproc('tas',    tas_fout)
     tasmax_chk = check_for_postproc('tasmax', tasmax_fout)
     tasmin_chk = check_for_postproc('tasmin', tasmin_fout)
 
-    if tas_chk == True :
+    if tas_chk == True:
         tas.to_netcdf(tas_fout)
-        cmor_comp_save(wrfout_path, 'tas', tas_fout, pcc, freq[0], units[0], 
-                       levels, refh, cell[0], 
-                       long_name[0], standard_name[0])
+        cmor_comp_save(wrfout_path, 'tas', tas_fout, qnt, tas_info[0], tas_info[1],
+                       levels, refh, tas_info[2], tas_info[3], tas_info[4])
 
     if tasmax_chk == True:
         tas_max.to_netcdf(f'{tasmax_fout}')
-        cmor_comp_save(wrfout_path, 'tasmax', tasmax_fout, pcc, freq[1], units[1],
-                       levels, refh, cell[1],
-                       long_name[1], standard_name[1])
+        cmor_comp_save(wrfout_path, 'tasmax', tasmax_fout, qnt, tasmax_info[0], tasmax_info[1],
+                       levels, refh, tasmax_info[2], tasmax_info[3], tasmax_info[4])
 
     if tasmin_chk == True:
         tas_min.to_netcdf(f'{tasmin_fout}')
-        cmor_comp_save(wrfout_path, 'tasmin', tasmin_fout, pcc, freq[2], units[2], 
-                       levels, refh, cell[2], 
-                       long_name[2], standard_name[2])
+        cmor_comp_save(wrfout_path, 'tasmin', tasmin_fout, qnt, tasmin_info[0], tasmin_info[1],
+                       levels, refh, tasmin_info[2], tasmin_info[3], tasmin_info[4])
 
     return()
 # ---------------------------------------------------
@@ -346,23 +333,10 @@ def clean_pr(ds):
 
     pr_fout = f'pr_{fname_hr}_{year}010100_{year}123123.nc'
     pr_chk  = check_for_postproc('pr', pr_fout)
-    if pr_chk == False: return 
+    if pr_chk == False: return
 
-    # pr cmorized specs
-    # ----------------------------------
-    pcc    = '5'
-    levels = 'single'
-    refh   = None
-
+    levels, refh, qnt = get_specs('pr')
     pr_info = pull_cmor_specs('pr', 'hr')
-
-    freq   = pr_info[0]
-    units  = pr_info[1]
-    cell   = pr_info[2]
-    long_name      = pr_info[3]
-    standard_name  = pr_info[4]
-    #short_name     = pr_info[3]
-    # ---------------------------------- repeat for each variable
 
     pr_vars = ['XLONG','XLAT','XTIME','I_RAINC','I_RAINNC','RAINC','RAINNC']
     pr_units = 'kg m-2 s-1'
@@ -378,9 +352,8 @@ def clean_pr(ds):
 
     if pr_chk == True:
         pr.to_netcdf(f'{pr_fout}')
-        cmor_comp_save(wrfout_path, 'pr', pr_fout, pcc, freq, units, 
-                   levels, refh, cell, 
-                   long_name, standard_name)
+        cmor_comp_save(wrfout_path, 'pr', pr_fout, qnt, pr_info[0], pr_info[1],
+                       levels, refh, pr_info[2], pr_info[3], pr_info[4])
 
     return()
 # ---------------------------------------------------
@@ -395,22 +368,10 @@ def clean_evspsbl(ds):
 
     evspsbl_fout = f'evspsbl_{fname_hr}_{year}010100_{year}123123.nc'
     evspsbl_chk  = check_for_postproc('evspsbl', evspsbl_fout)
-    if evspsbl_chk == False: return 
+    if evspsbl_chk == False: return
 
-    # evspsbl cmorized specs
-    # ----------------------------------
-    pcc    = '5'
-    levels = 'single'
-    refh   = None
-
+    levels, refh, qnt = get_specs('evspsbl')
     evspsbl_info = pull_cmor_specs('evspsbl', 'hr')
-
-    freq   = evspsbl_info[0]
-    units  = evspsbl_info[1]
-    cell   = evspsbl_info[2]
-    long_name      = evspsbl_info[3]
-    standard_name  = evspsbl_info[4]
-    # ---------------------------------- repeat for each variable
 
     evspsbl_vars = ['EDIR','ETRAN']
     evspsbl_units = 'kg m-2 s-1'
@@ -421,9 +382,8 @@ def clean_evspsbl(ds):
     evspsbl = (da['EDIR'] + da['ETRAN']).to_dataset(name='evspsbl')
 
     evspsbl.to_netcdf(f'{evspsbl_fout}')
-    cmor_comp_save(wrfout_path, 'evspsbl', evspsbl_fout, pcc, freq, units, 
-                   levels, refh, cell, 
-                   long_name, standard_name)
+    cmor_comp_save(wrfout_path, 'evspsbl', evspsbl_fout, qnt, evspsbl_info[0], evspsbl_info[1],
+                   levels, refh, evspsbl_info[2], evspsbl_info[3], evspsbl_info[4])
 
     return()
 # ---------------------------------------------------
@@ -432,22 +392,14 @@ def clean_evspsbl(ds):
 # ---------------------------------------------------
 def clean_huss(ds):
     # Q2 units: kg kg-1
-    # Q2 description: QV at 2 M
+    # Q2 description: mixing ratio (QV) at 2 M
 
-    # huss cmorized specs
-    # ----------------------------------
-    pcc    = '5'
-    levels = 'single'
-    refh   = '2'
+    huss_fout = f'huss_{fname_hr}_{year}010100_{year}123123.nc'
+    huss_chk  = check_for_postproc('huss', huss_fout)
+    if huss_chk == False: return
 
+    levels, refh, qnt = get_specs('huss')
     huss_info = pull_cmor_specs('huss', 'hr')
-
-    freq   = huss_info[0]
-    units  = huss_info[1]
-    cell   = huss_info[2]
-    long_name      = huss_info[3]
-    standard_name  = huss_info[4]
-    # ---------------------------------- repeat for each variable
 
     huss_vars = ['Q2']
 
@@ -455,14 +407,9 @@ def clean_huss(ds):
     da['time'] = time_dim
     huss = (da / (1 + da))
 
-    huss_fout = f'huss_{fname_hr}_{year}010100_{year}123123.nc'
-    huss_chk  = check_for_postproc('huss', huss_fout)
-
-    if huss_chk == True:
-        huss.to_netcdf(f'{huss_fout}')
-        cmor_comp_save(wrfout_path, 'huss', huss_fout, pcc, freq, units,
-                       levels, refh, cell, 
-                       long_name, standard_name)
+    huss.to_netcdf(f'{huss_fout}')
+    cmor_comp_save(wrfout_path, 'huss', huss_fout, qnt, huss_info[0], huss_info[1],
+                   levels, refh, huss_info[2], huss_info[3], huss_info[4])
 
     return()
 # ---------------------------------------------------
@@ -471,32 +418,21 @@ def clean_huss(ds):
 # ---------------------------------------------------
 def clean_hurs(ds):
     # Q2 units: kg kg-1
-    # Q2 description: QV at 2 M
+    # Q2 description: mixing ratio (QV) at 2 M
     # T2 units: K
     # T2 description: 2-meter temperature
     # PSFC units: Pa
     # PSFC description: Surface pressure 
 
-    # hurs cmorized specs
-    # ----------------------------------
-    pcc    = '3'
-    levels = 'single'
-    refh   = '2'
+    hurs_fout = f'hurs_{fname_hr}_{year}010100_{year}123123.nc'
+    hurs_chk  = check_for_postproc('hurs', hurs_fout)
+    if hurs_chk == False: return
 
+    levels, refh, qnt = get_specs('hurs')
     hurs_info = pull_cmor_specs('hurs', 'hr')
-
-    freq   = hurs_info[0]
-    units  = hurs_info[1]
-    cell   = hurs_info[2]
-    long_name      = hurs_info[3]
-    standard_name  = hurs_info[4]
-    # ---------------------------------- repeat for each variable
-
 
     hurs_vars = ['Q2','T2','PSFC']
     hurs_units = '%'
-
-    # BEG SETH - please check RH calculation below
 
     # https://glossary.ametsoc.org/wiki/Latent_heat
     # Physical constants - Clausius-Clapeyron
@@ -514,21 +450,19 @@ def clean_hurs(ds):
     e_s = e0 * ufuncs.exp( (Lv/Rv) * ((1/T0) - (1 / ds['T2'])) )
     
     hurs = (e / e_s) * 100
-    hurs = hurs.clip(min=0, max=100) # Can't be less than 0 or greater than 100... it is sometimes
+    hurs = hurs.clip(min=0, max=100)
 
-    # END SETH 
+    # Sometimes model outputs result in values < 0 or > 100. hurs < 0
+    # is invalid; hurs > 100 is sometimes valid (supersaturation
+    # conditions at very low temperature), but nobody wants it, so clip.
+    
 
     hurs = hurs.to_dataset(name='hurs').rename({'Time':'time'})
     hurs['time'] = time_dim
 
-    hurs_fout = f'hurs_{fname_hr}_{year}010100_{year}123123.nc'
-    hurs_chk  = check_for_postproc('hurs', hurs_fout)
-
-    if hurs_chk == True:
-        hurs.to_netcdf(f'{hurs_fout}')
-        cmor_comp_save(wrfout_path, 'hurs', hurs_fout, pcc, freq, units,
-                   levels, refh, cell, 
-                   long_name, standard_name)
+    hurs.to_netcdf(f'{hurs_fout}')
+    cmor_comp_save(wrfout_path, 'hurs', hurs_fout, qnt, hurs_info[0], hurs_info[1],
+                   levels, refh, hurs_info[2], hurs_info[3], hurs_info[4])
 
     return()
 # ---------------------------------------------------
@@ -539,34 +473,21 @@ def clean_ps(ds):
     # PSFC units: Pa
     # PSFC description: Surface pressure
 
-    # ps cmorized specs
-    # ----------------------------------
-    pcc    = '3'
-    levels = 'single'
-    refh   = None
+    ps_fout = f'ps_{fname_hr}_{year}010100_{year}123123.nc'
+    ps_chk  = check_for_postproc('ps', ps_fout)
+    if ps_chk == False: return
 
+    levels, refh, qnt = get_specs('ps')
     ps_info = pull_cmor_specs('ps', 'hr')
-
-    freq   = ps_info[0]
-    units  = ps_info[1]
-    cell   = ps_info[2]
-    long_name      = ps_info[3]
-    standard_name  = ps_info[4]
-    # ---------------------------------- repeat for each variable
 
     ps_vars = 'PSFC'
     ps = ds[ps_vars].rename({'Time':'time'}).load()
     ps['time'] = time_dim
 
     ps = ps.to_dataset(name='ps').drop_attrs()
-    ps_fout = f'ps_{fname_hr}_{year}010100_{year}123123.nc'
-    ps_chk  = check_for_postproc('ps', ps_fout)
-
-    if ps_chk == True:
-        ps.to_netcdf(f'{ps_fout}')
-        cmor_comp_save(wrfout_path, 'ps', ps_fout, pcc, freq, units,
-                       levels, refh, cell,
-                       long_name, standard_name)
+    ps.to_netcdf(f'{ps_fout}')
+    cmor_comp_save(wrfout_path, 'ps', ps_fout, qnt, ps_info[0], ps_info[1],
+                   levels, refh, ps_info[2], ps_info[3], ps_info[4])
 
     return()
 # ---------------------------------------------------
@@ -575,34 +496,23 @@ def clean_ps(ds):
 # ---------------------------------------------------
 def clean_psl(ds):
     # AFWA_MSLP units: Pa
-    # AFWA MSLP description: Surface pressure
+    # AFWA_MSLP description: Mean sea level pressure
+
+    psl_fout = f'psl_{fname_hr}_{year}010100_{year}123123.nc'
+    psl_chk  = check_for_postproc('psl', psl_fout)
+    if psl_chk == False: return
+
+    levels, refh, qnt = get_specs('psl')
+    psl_info = pull_cmor_specs('psl', 'hr')
 
     psl_vars = 'AFWA_MSLP'
     psl = ds[psl_vars].rename({'Time':'time'}).load()
     psl['time'] = time_dim
 
     psl = psl.to_dataset(name='psl').drop_attrs()
-    psl_fout = f'psl_{fname_hr}_{year}010100_{year}123123.nc'
     psl.to_netcdf(f'{psl_fout}')
-
-    # psl cmorized specs
-    # ----------------------------------
-    pcc    = '5'
-    levels = 'single'
-    refh   = None
-    
-    psl_info = pull_cmor_specs('psl', 'hr')
-
-    freq   = psl_info[0]
-    units  = psl_info[1]
-    cell   = psl_info[2]
-    long_name      = psl_info[3]
-    standard_name  = psl_info[4]
-    # ---------------------------------- repeat for each variable
-
-    cmor_comp_save(wrfout_path, 'psl', psl_fout, pcc, freq, units,
-                   levels, refh, cell, 
-                   long_name, standard_name)
+    cmor_comp_save(wrfout_path, 'psl', psl_fout, qnt, psl_info[0], psl_info[1],
+                   levels, refh, psl_info[2], psl_info[3], psl_info[4])
 
     return()
 # ---------------------------------------------------
@@ -622,15 +532,15 @@ def clean_sfcWind(ds, dsfx):
     cosa = dsfx['COSALPHA'].mean(dim='Time')
     sina = dsfx['SINALPHA'].mean(dim='Time')
 
-    # BEG SETH - please check wind rotation to earth relative coords below
-
     # Rotate winds to earth relative (lat/lon) coordinates
+    # NOTE: signs on sinalpha are correct as written; some sources
+    # have them reversed. Reference:
+    # https://www-k12.atmos.washington.edu/~ovens/wrfwinds.html
+
     uas = (da['U10'] * cosa) - (da['V10'] * sina)
     vas = (da['V10'] * cosa) + (da['U10'] * sina)
 
     sfcWind = xr.ufuncs.sqrt( (uas**2 + vas**2) )
-
-    # END SETH
 
     sfcWind = sfcWind.to_dataset(name='sfcWind')
     uas = uas.to_dataset(name='uas')
@@ -640,38 +550,25 @@ def clean_sfcWind(ds, dsfx):
     uas_fout = f'uas_{fname_hr}_{year}010100_{year}123123.nc'
     vas_fout = f'vas_{fname_hr}_{year}010100_{year}123123.nc'
 
+    # sfcWind, uas, vas share levels and refh (same physical quantity at same height)
+    levels, refh, qnt = get_specs('sfcWind')
+
+    uas_info     = pull_cmor_specs('uas',     'hr')
+    vas_info     = pull_cmor_specs('vas',     'hr')
+    sfcWind_info = pull_cmor_specs('sfcWind', 'hr')
+
     sfcWind.to_netcdf(sfcWind_fout)
     uas.to_netcdf(uas_fout)
     vas.to_netcdf(vas_fout)
 
-    # U10/V10 cmorized specs
-    # ----------------------------------
-    pcc    = '3'
-    levels = 'single'
-    refh   = '10'
+    cmor_comp_save(wrfout_path, 'uas', uas_fout, qnt, uas_info[0], uas_info[1],
+                   levels, refh, uas_info[2], uas_info[3], uas_info[4])
 
-    uas_info = pull_cmor_specs('uas', 'hr')
-    vas_info = pull_cmor_specs('vas', 'hr')
-    sfcWind_info = pull_cmor_specs('sfcWind', 'hr')
-    
-    freq   = [uas_info[0], vas_info[0], sfcWind_info[0]]
-    units  = [uas_info[1], vas_info[1], sfcWind_info[1]]
-    cell   = [uas_info[2], vas_info[2], sfcWind_info[2]]
-    long_name      = [uas_info[3], vas_info[3], sfcWind_info[3]]
-    standard_name  = [uas_info[4], vas_info[4], sfcWind_info[4]]
-    # ---------------------------------- repeat for each variable
+    cmor_comp_save(wrfout_path, 'vas', vas_fout, qnt, vas_info[0], vas_info[1],
+                   levels, refh, vas_info[2], vas_info[3], vas_info[4])
 
-    cmor_comp_save(wrfout_path, 'uas', uas_fout, pcc, freq[0], units[0],
-                   levels, refh, cell[0], 
-                   long_name[0], standard_name[0])
-
-    cmor_comp_save(wrfout_path, 'vas', vas_fout, pcc, freq[1], units[1],
-                   levels, refh, cell[1],
-                   long_name[1], standard_name[1])
-
-    cmor_comp_save(wrfout_path, 'sfcWind', sfcWind_fout, pcc, freq[2], units[2],
-                   levels, refh, cell[2],
-                   long_name[2], standard_name[2])
+    cmor_comp_save(wrfout_path, 'sfcWind', sfcWind_fout, qnt, sfcWind_info[0], sfcWind_info[1],
+                   levels, refh, sfcWind_info[2], sfcWind_info[3], sfcWind_info[4])
 
     return()
 # ---------------------------------------------------
@@ -694,24 +591,11 @@ def clean_rsds(ds):
     rsds_fout = f'rsds_{fname_hr}_{year}010100_{year}123123.nc'
     rsds.to_netcdf(f'{rsds_fout}')
 
-    # rsds cmorized specs
-    # ----------------------------------
-    pcc    = '5'
-    levels = 'single'
-    refh   = None
-
+    levels, refh, qnt = get_specs('rsds')
     rsds_info = pull_cmor_specs('rsds', 'hr')
 
-    freq   = rsds_info[0]
-    units  = rsds_info[1]
-    cell   = rsds_info[2]
-    long_name      = rsds_info[3]
-    standard_name  = rsds_info[4]
-    # ---------------------------------- repeat for each variable
-    
-    cmor_comp_save(wrfout_path, 'rsds', rsds_fout, pcc, freq, units,
-                   levels, refh, cell, 
-                   long_name, standard_name)
+    cmor_comp_save(wrfout_path, 'rsds', rsds_fout, qnt, rsds_info[0], rsds_info[1],
+                   levels, refh, rsds_info[2], rsds_info[3], rsds_info[4])
 
     cmd = f'ncatted -h -a positive,rsds,o,c,down rsds/{rsds_fout}'
     os.system(cmd)
@@ -737,24 +621,11 @@ def clean_rlds(ds):
     rlds_fout = f'rlds_{fname_hr}_{year}010100_{year}123123.nc'
     rlds.to_netcdf(f'{rlds_fout}')
 
-    # rlds cmorized specs
-    # ----------------------------------
-    pcc    = '5'
-    levels = 'single'
-    refh   = None
-
+    levels, refh, qnt = get_specs('rlds')
     rlds_info = pull_cmor_specs('rlds', 'hr')
 
-    freq   = rlds_info[0]
-    units  = rlds_info[1]
-    cell   = rlds_info[2]
-    long_name      = rlds_info[3]
-    standard_name  = rlds_info[4]
-    # ---------------------------------- repeat for each variable
-
-    cmor_comp_save(wrfout_path, 'rlds', rlds_fout, pcc, freq, units,
-                   levels, refh, cell, 
-                   long_name, standard_name)
+    cmor_comp_save(wrfout_path, 'rlds', rlds_fout, qnt, rlds_info[0], rlds_info[1],
+                   levels, refh, rlds_info[2], rlds_info[3], rlds_info[4])
 
     cmd = f'ncatted -h -a positive,rlds,o,c,down rlds/{rlds_fout}'
     os.system(cmd)
@@ -777,29 +648,16 @@ def clean_clt(ds):
     clt_fout = f'clt_{fname_hr}_{year}010100_{year}123123.nc'
     clt.to_netcdf(f'{clt_fout}')
 
-    # clt cmorized specs
-    # ----------------------------------
-    pcc    = 3
-    levels = 'single'
-    refh   = None
-
+    levels, refh, qnt = get_specs('clt')
     clt_info = pull_cmor_specs('clt', 'hr')
 
-    freq   = clt_info[0]
-    units  = clt_info[1]
-    cell   = clt_info[2]
-    long_name      = clt_info[3]
-    standard_name  = clt_info[4]
-    # ---------------------------------- repeat for each variable
-
-    cmor_comp_save(wrfout_path, 'clt', clt_fout, pcc, freq, units,
-                   levels, refh, cell, 
-                   long_name, standard_name)
+    cmor_comp_save(wrfout_path, 'clt', clt_fout, qnt, clt_info[0], clt_info[1],
+                   levels, refh, clt_info[2], clt_info[3], clt_info[4])
 
     return()
 # ---------------------------------------------------
 
-# Time invariant core variables (orog and sftlf)
+# Time invariant variables (orog and sftlf)
 # ---------------------------------------------------
 def clean_fx(ds):
     # LANDMASK units: 1 (0 = no land, 1 = land ; binary)
@@ -810,6 +668,12 @@ def clean_fx(ds):
 
     if os.path.exists(f'sftlf/{sftlf_fout}'):
         return 
+
+    sftlf_levels, _, sftlf_qnt = get_specs('sftlf')
+    orog_levels,  _, orog_qnt  = get_specs('orog')
+
+    sftlf_info = pull_cmor_specs('sftlf', 'fx')
+    orog_info  = pull_cmor_specs('orog',  'fx')
 
     sftlf = ds['LANDMASK'].mean(dim='Time')
     seaice = ds['SEAICE'].mean(dim='Time')
@@ -824,29 +688,11 @@ def clean_fx(ds):
     sftlf.to_netcdf(f'{sftlf_fout}')
     orog.to_netcdf(f'{orog_fout}')
 
-    # sftlf,orog cmorized specs 
-    # ----------------------------------
-    pcc    = None
-    levels = 'fixed'
-    refh   = None
+    cmor_comp_save(wrfout_path, 'sftlf', sftlf_fout, sftlf_qnt, sftlf_info[0], sftlf_info[1],
+                   sftlf_levels, 'None', sftlf_info[2], sftlf_info[3], sftlf_info[4])
 
-    sftlf_info = pull_cmor_specs('sftlf', 'fx')
-    orog_info = pull_cmor_specs('orog', 'fx')
-
-    freq   = [sftlf_info[0], orog_info[0]]
-    units  = [sftlf_info[1], orog_info[1]]
-    cell   = [sftlf_info[2], orog_info[2]]
-    long_name      = [sftlf_info[3], orog_info[3]]
-    standard_name  = [sftlf_info[4], orog_info[4]]
-    # ---------------------------------- repeat for each variable
-
-    cmor_comp_save(wrfout_path, 'sftlf', sftlf_fout, pcc, freq[0], units[0],
-                   levels, refh, cell[0], 
-                   long_name[0], standard_name[0])
-
-    cmor_comp_save(wrfout_path, 'orog', orog_fout, pcc, freq[1], units[1],
-                   levels, refh, cell[1], 
-                   long_name[1], standard_name[1])
+    cmor_comp_save(wrfout_path, 'orog', orog_fout, orog_qnt, orog_info[0], orog_info[1],
+                   orog_levels, 'None', orog_info[2], orog_info[3], orog_info[4])
 
     return()
 # ---------------------------------------------------
@@ -873,4 +719,10 @@ if variable == 'fx' : clean_fx(ds_fx_inp)
 
 subprocess.run(['python', './plot.postprocess.var.py', year, variable])
 
+if variable == 'sfcWind':
+    subprocess.run(['python', './plot.postprocess.var.py', year, 'uas'])
+    subprocess.run(['python', './plot.postprocess.var.py', year, 'vas'])
 
+if variable == 'tas':
+    subprocess.run(['python', './plot.postprocess.var.py', year, 'tasmax'])
+    subprocess.run(['python', './plot.postprocess.var.py', year, 'tasmin'])

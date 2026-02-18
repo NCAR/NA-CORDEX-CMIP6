@@ -1,0 +1,75 @@
+# Local variable specifications for NA-CORDEX-CMIP6 postprocessing.
+# Units, standard_name, long_name, cell_methods, and frequency are pulled
+# from the authoritative WCRP-CORDEX CMOR tables at runtime.
+#
+# Fields:
+#   levels: vertical level type (single, fixed, pressure, soil)
+#   refh:   reference height in meters (omit if not applicable)
+#   qnt:    quantization level for lossy compression (omit for fx variables)
+#
+# YAML anchors (&name) and aliases (*name) are used to express shared specs
+# explicitly.  Defaults are defined once and overridden where needed.
+
+_defaults: &defaults
+  levels: single
+  qnt: 5
+
+# --- 2-meter temperature variables (shared specs) ---
+tas: &tas_specs
+  <<: *defaults
+  refh: 2
+  qnt: 3
+tasmax:
+  <<: *tas_specs
+tasmin:
+  <<: *tas_specs
+
+# --- 10-meter wind variables (shared specs) ---
+sfcWind: &wind_specs
+  <<: *defaults
+  refh: 10
+  qnt: 3
+uas:
+  <<: *wind_specs
+vas:
+  <<: *wind_specs
+
+# --- Remaining single-level variables ---
+hurs:
+  <<: *defaults
+  refh: 2
+  qnt: 3
+
+huss:
+  <<: *defaults
+  refh: 2
+
+ps:
+  <<: *defaults
+  qnt: 3
+
+clt:
+  <<: *defaults
+  qnt: 3
+
+pr:
+  <<: *defaults
+
+evspsbl:
+  <<: *defaults
+
+psl:
+  <<: *defaults
+
+rsds:
+  <<: *defaults
+
+rlds:
+  <<: *defaults
+
+# --- Time-invariant variables (no compression) ---
+sftlf:
+  levels: fixed
+
+orog:
+  levels: fixed
