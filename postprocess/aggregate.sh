@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # aggregate_cordex.sh - Generate commandfiles for aggregating NA-CORDEX WRF output
-# Aggregates hourlyâdaily and dailyâmonthly according to CORDEX-CMIP6 specifications
+# Aggregates hourly→daily and daily→monthly according to CORDEX-CMIP6 specifications
+# Also generates commandfiles to copy hourly files into the DRS output tree.
 
 set -euo pipefail
 
@@ -11,15 +12,17 @@ DR_CSV_URL="https://raw.githubusercontent.com/WCRP-CORDEX/data-request-table/mai
 
 usage() {
     cat >&2 <<EOF
-Usage: $(basename "$0") [OPTIONS] INDIR OUTDIR [CMDDIR]
+Usage: $(basename "$0") [OPTIONS] INDIR OUTDIR VERSION [CMDDIR]
 
-Generate CDO commandfiles for aggregating CORDEX data to requested frequencies.
+Generate CDO commandfiles for aggregating CORDEX data to requested frequencies,
+and cp commandfiles for placing hourly files into the DRS output tree.
 
 Arguments:
-  INDIR   Input directory containing variable subdirectories with yearly
-          NetCDF files
-  OUTDIR  Root output directory (starts at driving_source_id level)
-  CMDDIR  Directory for commandfiles (default: current directory)
+  INDIR    Input directory containing variable subdirectories with yearly
+           NetCDF files
+  OUTDIR   Root output directory (starts at driving_source_id level)
+  VERSION  Dataset version string (e.g. v20250101)
+  CMDDIR   Directory for commandfiles (default: current directory)
 
 Options:
   --force     Overwrite existing output files
@@ -50,12 +53,19 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-[[ $# -lt 2 ]] && usage
+[[ $# -lt 3 ]] && usage
 
 INDIR="$(realpath "$1")"
 OUTDIR="$(realpath "$2")"
-CMDDIR="${3:-.}"
+VERSION="$3"
+CMDDIR="${4:-.}"
 CMDDIR="$(realpath "$CMDDIR")"
+
+# Validate version string
+if ! [[ "$VERSION" =~ ^v[0-9]{8}$ ]]; then
+    echo "Error: VERSION must match vYYYYMMDD (e.g. v20250101), got: $VERSION" >&2
+    exit 1
+fi
 
 # Validate inputs
 [[ ! -d "$INDIR" ]] && { echo "Error: Input directory not found: $INDIR" >&2; exit 1; }
@@ -107,10 +117,10 @@ extract_year() {
     echo "${timespan:0:4}"
 }
 
-# Function to generate output directory path (without version element)
+# Function to generate output directory path (including version element at end)
 gen_outdir() {
     local drvsrc="$1" drvexp="$2" drvvar="$3" src="$4" verreal="$5" freq="$6" var="$7"
-    echo "$OUTDIR/$drvsrc/$drvexp/$drvvar/$src/$verreal/$freq/$var"
+    echo "$OUTDIR/$drvsrc/$drvexp/$drvvar/$src/$verreal/$freq/$var/$VERSION"
 }
 
 # Function to generate output filename
@@ -235,6 +245,29 @@ for vardir in "$INDIR"/*/; do
     }
     
     echo "  Years available: $minyear-$maxyear"
+
+    # Generate hourly copy commandfile if input is hourly
+    if [[ "$infreq" =~ hr$ ]]; then
+        hr_cmdfile="$CMDDIR/${varname}.hr.cmd"
+        > "$hr_cmdfile"
+
+        for year in $(seq "$minyear" "$maxyear"); do
+            [[ -z "${yearfiles[$year]:-}" ]] && continue
+            src_file="${yearfiles[$year]}"
+            outdir="$(gen_outdir "$drvsrc" "$drvexp" "$drvvar" "$src" "$verreal" "$infreq" "$varname")"
+            outfile="$(basename "$src_file")"
+            outpath="$outdir/$outfile"
+
+            if [[ -f "$outpath" && $FORCE -eq 0 ]]; then
+                continue
+            fi
+
+            mkdir -p "$outdir"
+            echo "cp $src_file $outpath" >> "$hr_cmdfile"
+        done
+
+        [[ ! -s "$hr_cmdfile" ]] && rm "$hr_cmdfile"
+    fi
     
     # Process each target frequency (day, mon) and check if inputs exist
     for freq in day mon; do
@@ -242,7 +275,7 @@ for vardir in "$INDIR"/*/; do
         > "$cmdfile"  # Truncate/create
         
         # Determine where input files should be for this frequency
-        declare -A freq_yearfiles
+        declare -A freq_yearfiles=()
         freq_minyear=9999
         freq_maxyear=0
         
@@ -346,9 +379,9 @@ for vardir in "$INDIR"/*/; do
         # Clean up empty commandfile
         [[ ! -s "$cmdfile" ]] && rm "$cmdfile"
         
-        # Clean up for next frequency
-        unset freq_yearfiles
     done
+
+    unset yearfiles
 done
 
 echo ""
