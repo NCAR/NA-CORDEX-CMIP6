@@ -26,7 +26,7 @@ ln=${10}       # longname
 stdn=${11}     # standard name
 year=${12}     # year...
 
-readonly coord_ref_file="${wrfout_path}wrfout_d01_${year}-12-31_00:00:00" # Example WRF file for coordinates and time dimension!!
+readonly coord_ref_file="${wrfout_path}/wrfout_d01_${year}-12-31_00:00:00" # Example WRF file for coordinates and time dimension!!
 
 echo "-------------------------------"
 echo "Variable: " $var
