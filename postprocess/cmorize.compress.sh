@@ -260,21 +260,21 @@ function add_global_attrs {
   ncatted -h -a driving_institution_id,global,o,c,"${driving_institution_id}" $2
   ncatted -h -a driving_source_id,global,o,c,"${driving_source_id}" $2
   ncatted -h -a driving_variant_label,global,o,c,"${driving_variant_label}" $2
+  ncatted -h -a freqeuncy,global,o,c,"$3" $2
   ncatted -h -a grid,global,o,c,"${grid}" $2
   ncatted -h -a institution,global,o,c,"${institution}" $2
   ncatted -h -a institute_id,global,o,c,"${institute_id}" $2
+  ncatted -h -a license,global,o,c,"${license}" $2
   ncatted -h -a mip_era,global,o,c,"${mip_era}" $2
   ncatted -h -a product,global,o,c,"${product}" $2
   ncatted -h -a project_id,global,o,c,"${project_id}" $2
+  ncatted -h -a references,global,o,c,"${references}" $2
   ncatted -h -a source,global,o,c,"${source}" $2
   ncatted -h -a source_id,global,o,c,"${source_id}" $2
   ncatted -h -a source_type,global,o,c,"${source_type}" $2
-  ncatted -h -a version_realization,global,o,c,"${version_realization}" $2
-  ncatted -h -a references,global,o,c,"${references}" $2
   ncatted -h -a tracking_id,global,o,c,"${tracking_id}" $2
-  ncatted -h -a license,global,o,c,"${license}" $2
-  ncatted -h -a freqeuncy,global,o,c,"$3" $2
   ncatted -h -a variable_id,global,o,c,"$1" $2
+  ncatted -h -a version_realization,global,o,c,"${version_realization}" $2
 
 }
 
