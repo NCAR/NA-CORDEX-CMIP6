@@ -61,12 +61,12 @@ readonly driving_variant_label="r1i1p1f1"
 # frequency set by each var
 readonly grid="Lambert conic conformal with 12 km grid spacing"
 readonly institution="NSF National Center for Atmospheric Research, Boulder (Colorado), USA"
-readonly institute_id="NCAR"
+readonly institution_id="NCAR"
 readonly license="https://cordex.org/data-access/cordex-cmip6-data/cordex-cmip6-terms-of-use"
 readonly mip_era="CMIP6"
 readonly product="model-output"
 readonly project_id="CORDEX-CMIP6"
-readonly source='Weather Research and Forecasting Model Version 4.6.1'
+readonly source='Weather Research and Forecasting Model Version 4.6.1, CORDEX WRF Community configuration S'
 readonly source_id='WRF461S-SN'
 readonly source_type='ARCM'
 readonly version_realization='v1-r1'
@@ -111,6 +111,7 @@ if [ ! -f $coord_xy_file ]; then
 
   # Add the projection information 
   ncap2 -h -A -s "crs=-9999" $coord_xy_file
+  ncatted -h -a long_name,crs,o,c,"coordinate reference system" $coord_xy_file
   ncatted -h -a grid_mapping_name,crs,o,c,lambert_conformal_conic $coord_xy_file
   ncatted -h -a standard_parallel,crs,o,f,"35.,60." "$coord_xy_file"
   ncatted -h -a longitude_of_central_meridian,crs,o,f,-97. $coord_xy_file
@@ -262,7 +263,7 @@ function add_global_attrs {
   ncatted -h -a driving_variant_label,global,o,c,"${driving_variant_label}" $2
   ncatted -h -a grid,global,o,c,"${grid}" $2
   ncatted -h -a institution,global,o,c,"${institution}" $2
-  ncatted -h -a institute_id,global,o,c,"${institute_id}" $2
+  ncatted -h -a institution_id,global,o,c,"${institution_id}" $2
   ncatted -h -a mip_era,global,o,c,"${mip_era}" $2
   ncatted -h -a product,global,o,c,"${product}" $2
   ncatted -h -a project_id,global,o,c,"${project_id}" $2
@@ -273,7 +274,7 @@ function add_global_attrs {
   ncatted -h -a references,global,o,c,"${references}" $2
   ncatted -h -a tracking_id,global,o,c,"${tracking_id}" $2
   ncatted -h -a license,global,o,c,"${license}" $2
-  ncatted -h -a freqeuncy,global,o,c,"$3" $2
+  ncatted -h -a frequency,global,o,c,"$3" $2
   ncatted -h -a variable_id,global,o,c,"$1" $2
 
 }
