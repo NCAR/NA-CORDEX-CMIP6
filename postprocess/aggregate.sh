@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # aggregate_cordex.sh - Generate commandfiles for aggregating NA-CORDEX WRF output
-# Aggregates hourly→daily and daily→monthly according to CORDEX-CMIP6 specifications
+# Aggregates hourly->daily and daily->monthly according to CORDEX-CMIP6 specifications
 # Also generates commandfiles to copy hourly files into the DRS output tree.
 
 set -euo pipefail
@@ -86,18 +86,20 @@ EOF
 # Create output directories
 mkdir -p "$OUTDIR" "$CMDDIR"
 
-# Read variable frequencies from CSV (skip header, columns 1 and 2)
-# Note: variables can have multiple requested frequencies
-declare -A varfreq
-while IFS=, read -r var freq rest; do
-    [[ "$var" == "out_name" ]] && continue  # Skip header
-    [[ -z "$var" || -z "$freq" ]] && continue
-    if [[ -n "${varfreq[$var]:-}" ]]; then
-        varfreq["$var"]+=" $freq"
-    else
-        varfreq["$var"]="$freq"
-    fi
-done < "$DR_CSV"
+# Validate CSV layout (columns must match exactly; update if dreq format changes)
+expected_header="out_name,frequency,units,long_name,standard_name,cell_methods,priority,comment"
+[[ "$(head -1 "$DR_CSV")" != "$expected_header" ]] && {
+    echo "Error: Unexpected CSV header in $DR_CSV" >&2
+    echo "  Expected: $expected_header" >&2
+    exit 1
+}
+
+# Aggregatable variables (non-fx): used to skip irrelevant input directories
+AGGVARS=$(tail -n +2 "$DR_CSV" | grep -v ',fx,' | cut -f1 -d, | sort -u)
+
+# Hourly instantaneous variables: need time/time_bnds fixup after daily aggregation.
+# time units are assumed to be 'days since ...' throughout (guaranteed by cmorize.compress.py).
+POINTVARS=$(awk -F',' 'NR>1 && $2 ~ /hr/ && $6 ~ /time: point/ {print $1}' "$DR_CSV")
 
 # Function to parse CORDEX filename and extract DRS components
 parse_filename() {
@@ -194,16 +196,8 @@ for vardir in "$INDIR"/*/; do
     varname=$(basename "$vardir")
     
     # Check if variable is in data request
-    [[ -z "${varfreq[$varname]:-}" ]] && {
+    echo "$AGGVARS" | grep -qw "$varname" || {
         echo "$varname is not a variable in data request, skipping" >&2
-        continue
-    }
-    
-    reqfreq="${varfreq[$varname]}"
-    
-    # Skip fx (invariant) variables
-    [[ "$reqfreq" =~ fx ]] && {
-        echo "$varname is static, skipping" >&2
         continue
     }
     
@@ -214,7 +208,7 @@ for vardir in "$INDIR"/*/; do
         continue
     }
     
-    echo "Processing variable: $varname (requested frequency: $reqfreq)"
+    echo "Processing variable: $varname"
     
     # Parse first file to get DRS components
     fname=$(basename "${files[0]}")
@@ -360,16 +354,25 @@ for vardir in "$INDIR"/*/; do
                 continue
             fi
             
-            # Determine CDO operator
+            # Determine CDO operator and generate command.
+            # For instantaneous (time: point) variables aggregated to daily,
+            # settbounds,hour ensures correct [day 00:00, day+1 00:00] bounds,
+            # and ncap2 shifts the time coordinate from 11:30 to 12:00.
+            # (Time units are assumed to be 'days since ...' throughout.)
+            mkdir -p "$outdir"
             case "$freq" in
-                mon) cdoop="monmean" ;;
-                day) cdoop="daymean" ;;
+                mon)
+                    echo "cdo monmean -mergetime ${infiles[*]} $outpath" >> "$cmdfile"
+                    ;;
+                day)
+                    if echo "$POINTVARS" | grep -qw "$varname"; then
+                        echo "cdo daymean -settbounds,hour -mergetime ${infiles[*]} $outpath && ncap2 -A -s 'time=time+0.5/24.0' $outpath" >> "$cmdfile"
+                    else
+                        echo "cdo daymean -mergetime ${infiles[*]} $outpath" >> "$cmdfile"
+                    fi
+                    ;;
                 *) echo "Error: Unknown frequency $freq" >&2; exit 1 ;;
             esac
-            
-            # Generate command
-            mkdir -p "$outdir"
-            echo "cdo $cdoop -mergetime ${infiles[*]} $outpath" >> "$cmdfile"
         done
         
         # Report stats
