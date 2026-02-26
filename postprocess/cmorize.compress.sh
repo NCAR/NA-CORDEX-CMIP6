@@ -25,6 +25,7 @@ cell=$9        # cell_methods
 ln=${10}       # longname
 stdn=${11}     # standard name
 year=${12}     # year...
+outdir=${13}   # output directory (variable subdirs created here)
 
 readonly coord_ref_file="${wrfout_path}/wrfout_d01_${year}-12-31_00:00:00" # Example WRF file for coordinates and time dimension!!
 
@@ -40,6 +41,7 @@ echo "Cell Methods: " $cell
 echo "Longname: " $ln
 echo "Standard Name: " $stdn
 echo "Year: " $year
+echo "Output directory: " $outdir
 
 # Projection info for your WRF grid
 # ---------------------------------
@@ -66,7 +68,7 @@ readonly license="https://cordex.org/data-access/cordex-cmip6-data/cordex-cmip6-
 readonly mip_era="CMIP6"
 readonly product="model-output"
 readonly project_id="CORDEX-CMIP6"
-readonly source='Weather Research and Forecasting Model Version 4.6.1, CORDEX WRF Community configuration S'
+readonly source='Weather Research and Forecasting model version 4.6.1, CORDEX WRF Community configuration S'
 readonly source_id='WRF461S-SN'
 readonly source_type='ARCM'
 readonly version_realization='v1-r1'
@@ -86,10 +88,12 @@ time_start_year="${time_old_units:14:19}"
 
 
 # -----------------------------
-# Check for wrf coordinate file 
+# Check for wrf coordinate file
+# TODO: fix race condition - concurrent jobs in the same outdir may
+# both find the file absent and attempt to create it simultaneously.
 # -----------------------------
-readonly coord_xy_file="./wrf.xy.coords.nc"
-readonly coord_xy_stag_file="./wrf.xy.stagger.coords.nc"
+readonly coord_xy_file="${outdir}/wrf.xy.coords.nc"
+readonly coord_xy_stag_file="${outdir}/wrf.xy.stagger.coords.nc"
 
 if [ ! -f $coord_xy_file ]; then
   echo "WRF coordinate file not found ---------- creating"
@@ -172,8 +176,8 @@ clean_single_level () {
   ncatted -h -a calendar,time,o,c,proleptic_gregorian $3
 
   # Set reftime and corrrect time units
-  cdo -setreftime,1950-01-01,00:00:00,1day $3 ${1}.cdo.tmp.${7}.nc
-  mv "${1}.cdo.tmp.${7}.nc" $3 # This is probably slow
+  cdo -setreftime,1950-01-01,00:00:00,1day $3 ${outdir}/${1}.cdo.tmp.${7}.nc
+  mv "${outdir}/${1}.cdo.tmp.${7}.nc" $3
   ncap2 -O -s 'time=double(time)' $3 $3
   ncatted -h -a units,time,o,c,"days since 1950-01-01 00:00:00" $3
 
@@ -339,9 +343,10 @@ function clean_wrf_data {
   long_name="${10}"
   stan_name="${11}"
   year="${12}"
+  outdir="${13}"
 
-  mkdir -p ${variable}
-  out_f="${variable}/${wrfout_file}"
+  mkdir -p "${outdir}/${variable}"
+  out_f="${outdir}/${variable}/${wrfout_file}"
 
   if [ "$levels" == "single" ]; then
     clean_single_level "${variable}" "${wrfout_file}" "$out_f" "${pcc}" "${ref_height}" "${short_name}" "${year}" "${mon}"
@@ -355,6 +360,6 @@ function clean_wrf_data {
 
 }
 # -----------------------------------------
-clean_wrf_data "${1}" "${2}" "${3}" "${4}" "${5}" "${6}" "${7}" "${8}" "${9}" "${10}" "${11}" "${12}"
+clean_wrf_data "${1}" "${2}" "${3}" "${4}" "${5}" "${6}" "${7}" "${8}" "${9}" "${10}" "${11}" "${12}" "${13}"
  
 exit
