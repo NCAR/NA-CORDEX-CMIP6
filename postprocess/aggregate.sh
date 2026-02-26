@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# aggregate_cordex.sh - Generate commandfiles for aggregating NA-CORDEX WRF output
-# Aggregates hourly->daily and daily->monthly according to CORDEX-CMIP6 specifications
+# aggregate_cordex.sh - Generate commandfiles for NA-CORDEX (WRF) aggregation
+# Aggregates hourly -> daily ->monthly according to CORDEX-CMIP6 specs
 # Also generates commandfiles to copy hourly files into the DRS output tree.
 
 set -euo pipefail
@@ -9,6 +9,9 @@ set -euo pipefail
 # Default location for data request CSV
 DR_CSV_DEFAULT="/glade/work/${USER}/cordex6/dreq_default.csv"
 DR_CSV_URL="https://raw.githubusercontent.com/WCRP-CORDEX/data-request-table/main/data-request/dreq_default.csv"
+
+# project id (esgf-qa want this as root of output tree)
+PROJECT="cordex-cmip6"
 
 usage() {
     cat >&2 <<EOF
@@ -20,7 +23,7 @@ and cp commandfiles for placing hourly files into the DRS output tree.
 Arguments:
   INDIR    Input directory containing variable subdirectories with yearly
            NetCDF files
-  OUTDIR   Root output directory (starts at driving_source_id level)
+  OUTDIR   Output directory tree root
   VERSION  Dataset version string (e.g. v20250101)
   CMDDIR   Directory for commandfiles (default: current directory)
 
@@ -119,10 +122,10 @@ extract_year() {
     echo "${timespan:0:4}"
 }
 
-# Function to generate output directory path (including version element at end)
-gen_outdir() {
+# Function to generate output directory path
+gen_outdir
     local drvsrc="$1" drvexp="$2" drvvar="$3" src="$4" verreal="$5" freq="$6" var="$7"
-    echo "$OUTDIR/$drvsrc/$drvexp/$drvvar/$src/$verreal/$freq/$var/$VERSION"
+    echo "$OUTDIR/$PROJECT/$drvsrc/$drvexp/$drvvar/$src/$verreal/$freq/$var/$VERSION"
 }
 
 # Function to generate output filename
@@ -150,9 +153,8 @@ compute_ranges() {
         mon)
             # 10-year chunks: start at year ending in 1 (or minyear),
             # end at year ending in 0 (or maxyear)
-            local start=$minyear
-            [[ $((start % 10)) -ne 1 ]] && start=$(( (start/10)*10 + 1 ))
-            [[ $start -lt $minyear ]] && start=$minyear
+            local start=$(( (minyear/10)*10 + 1 ))
+            [[ $start -gt $minyear ]] && start=$minyear
             
             while [[ $start -le $maxyear ]]; do
                 local end=$(( (start/10)*10 + 10 ))
@@ -164,10 +166,8 @@ compute_ranges() {
         day)
             # 5-year chunks: start at year ending in 1 or 6 (or minyear),
             # end at year ending in 5 or 0 (or maxyear)
-            local start=$minyear
-            local mod5=$((start % 5))
-            [[ $mod5 -ne 1 ]] && start=$(( (start/5)*5 + 1 ))
-            [[ $start -lt $minyear ]] && start=$minyear
+            local start=$(( (minyear/5)*5 + 1 ))
+            [[ $start -gt $minyear ]] && start=$minyear
             
             while [[ $start -le $maxyear ]]; do
                 local end=$((start + 4))
@@ -274,18 +274,25 @@ for vardir in "$INDIR"/*/; do
         freq_maxyear=0
         
         if [[ "$freq" == "day" ]]; then
-            # Daily aggregation: need hourly input files
-            if [[ ! "$infreq" =~ hr$ ]]; then
-                # Input is not hourly, skip this frequency
+            if [[ "$infreq" == "day" ]]; then
+                # Input is already daily: merge into DRS tree in 5-year chunks
+                for year in "${!yearfiles[@]}"; do
+                    freq_yearfiles[$year]="${yearfiles[$year]}"
+                    [[ $year -lt $freq_minyear ]] && freq_minyear=$year
+                    [[ $year -gt $freq_maxyear ]] && freq_maxyear=$year
+                done
+            elif [[ "$infreq" =~ hr$ ]]; then
+                # Input is hourly: aggregate to daily
+                for year in "${!yearfiles[@]}"; do
+                    freq_yearfiles[$year]="${yearfiles[$year]}"
+                    [[ $year -lt $freq_minyear ]] && freq_minyear=$year
+                    [[ $year -gt $freq_maxyear ]] && freq_maxyear=$year
+                done
+            else
+                # Input is neither hourly nor daily, skip
                 rm "$cmdfile"
                 continue
             fi
-            # Use the hourly files we already found
-            for year in "${!yearfiles[@]}"; do
-                freq_yearfiles[$year]="${yearfiles[$year]}"
-                [[ $year -lt $freq_minyear ]] && freq_minyear=$year
-                [[ $year -gt $freq_maxyear ]] && freq_maxyear=$year
-            done
         elif [[ "$freq" == "mon" ]]; then
             # Monthly aggregation: need daily input files
             # Check input directory first (if input is already daily)
@@ -358,15 +365,19 @@ for vardir in "$INDIR"/*/; do
             # For instantaneous (time: point) variables aggregated to daily,
             # settbounds,hour ensures correct [day 00:00, day+1 00:00] bounds,
             # and ncap2 shifts the time coordinate from 11:30 to 12:00.
-            # (Time units are assumed to be 'days since ...' throughout.)
+            # bash -c ensures && semantics regardless of the user's default shell.
+            # Time units are assumed to be 'days since ...' throughout (guaranteed by cmorize.compress.py).
             mkdir -p "$outdir"
             case "$freq" in
                 mon)
                     echo "cdo monmean -mergetime ${infiles[*]} $outpath" >> "$cmdfile"
                     ;;
                 day)
-                    if echo "$POINTVARS" | grep -qw "$varname"; then
-                        echo "cdo daymean -settbounds,hour -mergetime ${infiles[*]} $outpath && ncap2 -A -s 'time=time+0.5/24.0' $outpath" >> "$cmdfile"
+                    if [[ "$infreq" == "day" ]]; then
+                        echo "cdo mergetime ${infiles[*]} $outpath" >> "$cmdfile"
+                    elif echo "$POINTVARS" | grep -qw "$varname"; then
+                        ncap2_expr='time=time+0.5/24.0'
+                        echo "bash -c \"cdo daymean -settbounds,hour -mergetime ${infiles[*]} $outpath && ncap2 -A -s '$ncap2_expr' $outpath\"" >> "$cmdfile"
                     else
                         echo "cdo daymean -mergetime ${infiles[*]} $outpath" >> "$cmdfile"
                     fi
