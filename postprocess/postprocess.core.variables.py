@@ -13,22 +13,23 @@
 # USAGE NOTES:
 # -----
 
-# 1. Ensure that var_specs.yml, cmorize.compress.sh, and
-#    plot.postprocess.var.py all exist in the same directory that this
-#    script is running in
+# 1. Ensure that var_specs.yml and cmorize.compress.sh exist in the
+#    same directory that this script is running in.
 
-# 2. This script populates the current working directory with
-#    additional directories for each variable containing the
-#    post-processed output.
+# 2. This script creates variable subdirectories under OUTDIR (argument
+#    4) and writes post-processed output there.  It does not change the
+#    working directory; all paths are handled explicitly.  cmorize.compress.sh
+#    creates coordinate cache files (wrf.xy.coords.nc, etc.) in OUTDIR.
 
 # 3. The script is designed for command-file parallelism via launch_cf
 #    on Casper HPC at NCAR.  (Or other such tools on other HPC
 #    systems.)  It processes a single year of data for one variable,
-#    specified via commandline arguments
+#    specified via commandline arguments.
 
-# argument 1 : Path to wrfoutput files for postproc
+# argument 1 : Path to wrfoutput files (chunk directory)
 # argument 2 : Year (int)
-# argument 3 : Variable (cmorized var name) 
+# argument 3 : Variable (CMORized var name)
+# argument 4 : Output directory (where variable subdirs are created)
 
 # 4. 12-km WRF output is very large; be sure to request sufficient
 #    memory for this task (~100GB)
@@ -39,9 +40,11 @@
 #    with launch_cf, those commands go in a file named
 #    `config_env.sh`, which is executed locally for each task.
 
+# 6. Plotting is handled separately; see plot.sh (or README)
+
 # Example execution:
 # ------------------------------------------------
-# $ python postprocess.core.variables.py {wrfout_path} 1980 tas
+# $ python postprocess.core.variables.py {wrfout_path} 1980 tas {outdir}
 # ------------------------------------------------
 
 import xarray as xr
@@ -63,6 +66,12 @@ import json
 wrfout_path = sys.argv[1]  # path to wrf output 
 year        = sys.argv[2]  # year 
 variable    = sys.argv[3]  # variable (cmorized syntax)
+outdir      = sys.argv[4]  # output directory (variable subdirs created here)
+
+# TODO: fix race condition on wrf.xy.coords.nc / wrf.xy.stagger.coords.nc
+# when multiple jobs run concurrently in the same outdir.  One option:
+# move coordinate file creation to a separate setup step in the workflow.
+os.makedirs(outdir, exist_ok=True)
 
 # -------------------------------
 # START OF USER DEFINED VARIABLES
@@ -75,6 +84,7 @@ do_overwrite_existing = True
 # WRF input file (HGT and LANDMASK in wrfinput_d01) rather than from
 # an output file; wrfinput_path is the authoritative source for these
 # input files for the NA-CORDEX simulations.
+# TODO: make this a CLI argument
 wrfinput_path     = "/glade/derecho/scratch/jsallen/NA-CORDEX-CMIP6/ERA5_HIST_E03/input_example/"
 
 wrfout_hour_fname = "wrfout_hour_d01_"  # Leading string of wrfout files with hourly output
@@ -188,8 +198,8 @@ def make_fname(var, cmor_freq):
 start_date   = pd.Timestamp(f'{year}-01-01')
 day_before   = start_date - pd.Timedelta(days=1)
 end_of_month = start_date + pd.offsets.MonthEnd(0)
-end_date     = start_date + pd.offsets.YearEnd(0) + pd.Timedelta(hours=23)
-#end_date = start_date + pd.offsets.MonthEnd(0) + pd.Timedelta(hours=23) # Uncomment for quicker testing
+#end_date     = start_date + pd.offsets.YearEnd(0) + pd.Timedelta(hours=23)
+end_date = start_date + pd.offsets.MonthEnd(0) + pd.Timedelta(hours=23) # Uncomment for quicker testing
 
 time_dim     = pd.date_range(start_date, end_date, freq='h')
 acc_time_dim = pd.date_range(day_before, end_date, freq='h')
@@ -248,7 +258,7 @@ def cmor_comp_save(wrfout_path, var, fname, qnt, freq, units, lev, refh, cell, l
 
     cmd = (
     f'bash ./cmorize.compress.sh "{wrfout_path}" "{var}" "{fname}" "{qnt}" "{freq}" '
-    f'"{units}" "{lev}" "{refh}" "{cell}" "{ln}" "{stdn}" "{year}" '
+    f'"{units}" "{lev}" "{refh}" "{cell}" "{ln}" "{stdn}" "{year}" "{outdir}"'
     )
 
     os.system(cmd)
@@ -258,7 +268,7 @@ def cmor_comp_save(wrfout_path, var, fname, qnt, freq, units, lev, refh, cell, l
 # Output existence check
 # ----------------------
 def _output_needed(var, fout):
-    if os.path.exists(f'{var}/{fout}') and not do_overwrite_existing:
+    if os.path.exists(os.path.join(outdir, var, fout)) and not do_overwrite_existing:
         print(f'{var}/{fout} EXISTS : Skipping')
         return False
     return True
@@ -272,8 +282,9 @@ def write_vars(var_da_list):
             continue
         levels, refh, qnt = get_specs(var)
         info = pull_cmor_specs(var, cmor_freq)
-        os.makedirs(var, exist_ok=True)
-        da.to_netcdf(fout)
+        vardir = os.path.join(outdir, var)
+        os.makedirs(vardir, exist_ok=True)
+        da.to_netcdf(fout)  # bare filename; cmorize.compress.sh reads from cwd, writes to outdir/var/, then removes this file
         cmor_comp_save(wrfout_path, var, fout, qnt, info[0], info[1],
                        levels, refh, info[2], info[3], info[4])
 # ------------------------------------------------------------
@@ -519,7 +530,7 @@ def clean_fx(ds):
     sftlf_fout = make_fname('sftlf', 'fx')
     orog_fout  = make_fname('orog',  'fx')
 
-    if os.path.exists(f'sftlf/{sftlf_fout}'):
+    if os.path.exists(os.path.join(outdir, 'sftlf', sftlf_fout)):
         return
 
     sftlf_levels, _, sftlf_qnt = get_specs('sftlf')
@@ -538,10 +549,10 @@ def clean_fx(ds):
     sftlf = sftlf.to_dataset(name='sftlf').drop_attrs()
     orog  = orog.to_dataset(name='orog').drop_attrs()
 
-    os.makedirs('sftlf', exist_ok=True)
-    os.makedirs('orog',  exist_ok=True)
-    sftlf.to_netcdf(sftlf_fout)
-    orog.to_netcdf(orog_fout)
+    os.makedirs(os.path.join(outdir, 'sftlf'), exist_ok=True)
+    os.makedirs(os.path.join(outdir, 'orog'),  exist_ok=True)
+    sftlf.to_netcdf(sftlf_fout)  # bare filename; cmorize.compress.sh reads from cwd, writes to outdir/var/, then removes this file
+    orog.to_netcdf(orog_fout)    # bare filename; same as above
 
     cmor_comp_save(wrfout_path, 'sftlf', sftlf_fout, sftlf_qnt, sftlf_info[0], sftlf_info[1],
                    sftlf_levels, 'None', sftlf_info[2], sftlf_info[3], sftlf_info[4])
@@ -603,12 +614,4 @@ else:
         if any(_output_needed(v, make_fname(v, f)) for v, f in outputs):
             write_vars(clean_fn(load_by_tag(loader_tag)))
 
-subprocess.run(['python', './plot.postprocess.var.py', year, variable])
-
-if variable == 'sfcWind':
-    subprocess.run(['python', './plot.postprocess.var.py', year, 'uas'])
-    subprocess.run(['python', './plot.postprocess.var.py', year, 'vas'])
-
-if variable == 'tas':
-    subprocess.run(['python', './plot.postprocess.var.py', year, 'tasmax'])
-    subprocess.run(['python', './plot.postprocess.var.py', year, 'tasmin'])
+# Plotting is handled separately; see plot.sh (or README)
