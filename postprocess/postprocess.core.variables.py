@@ -112,49 +112,25 @@ def get_specs(var):
 
 # PARSE CMOR Tables from WCRP-CORDEX
 # ----------------------------------
-
-# Load JSON file from CMIP6 CMOR tables
-# -------------------------------------
 def parse_json(url):
     resp = requests.get(url)
     resp.raise_for_status()
     data = resp.json()
-    variables = data.get("variable_entry", {})
-    return(variables)
+    return data.get("variable_entry", {})
 
-fx_url  = "https://raw.githubusercontent.com/WCRP-CORDEX/cordex-cmip6-cmor-tables/refs/heads/main/Tables/CORDEX-CMIP6_fx.json"
-hr_url  = "https://raw.githubusercontent.com/WCRP-CORDEX/cordex-cmip6-cmor-tables/main/Tables/CORDEX-CMIP6_1hr.json"
-day_url = "https://raw.githubusercontent.com/WCRP-CORDEX/cordex-cmip6-cmor-tables/refs/heads/main/Tables/CORDEX-CMIP6_day.json"
-
-fx_cmor_vars  = parse_json(fx_url)
-hr_cmor_vars  = parse_json(hr_url)
-day_cmor_vars = parse_json(day_url)
+_cmor_base = "https://raw.githubusercontent.com/WCRP-CORDEX/cordex-cmip6-cmor-tables/main/Tables/CORDEX-CMIP6"
+cmor_vars = {freq: parse_json(f"{_cmor_base}_{freq}.json") for freq in ('fx', '1hr', 'day')}
 # ----------------------------------
 
-# Function to grab CMOR specs from WCRP JSON
-# ------------------------------------------
 def pull_cmor_specs(var, freq):
-
-    if freq == 'hr':
-        variables = hr_cmor_vars
-    elif freq == 'day':
-        variables = day_cmor_vars
-    elif freq == 'fx':
-        variables = fx_cmor_vars
-
-    var_info = variables.get(var)
-
-    freq  = var_info.get('frequency')     # 0
-    units = var_info.get('units')         # 1
-    cell  = var_info.get('cell_methods')  # 2
-    ln    = var_info.get('long_name')     # 3
-    stdn  = var_info.get('standard_name') # 4
-    pos   = var_info.get('positive')      # 5
-
-    out = [freq,units,cell,stdn,ln,pos]
-
-    return(out)
-# ------------------------------------------
+    var_info = cmor_vars[freq].get(var)
+    freq  = var_info.get('frequency')
+    units = var_info.get('units')
+    cell  = var_info.get('cell_methods')
+    ln    = var_info.get('long_name')
+    stdn  = var_info.get('standard_name')
+    pos   = var_info.get('positive')
+    return [freq, units, cell, stdn, ln, pos]
 
 # File naming
 # -----------
@@ -181,8 +157,8 @@ def make_fname(var, cmor_freq):
     For all others, returns a complete filename with timespan."""
     if cmor_freq == 'fx':
         return f'{var}_{fname_base}_fx.nc'
-    elif cmor_freq == 'hr':
-        return f'{var}_{fname_base}_hr_{year}010100-{year}123123.nc'
+    elif cmor_freq == '1hr':
+        return f'{var}_{fname_base}_1hr_{year}010100-{year}123123.nc'
     elif cmor_freq == 'day':
         return f'{var}_{fname_base}_day_{year}0101-{year}1231.nc'
     elif cmor_freq == 'mon':
@@ -316,7 +292,7 @@ def clean_tas(ds):
     tas_min = tas_min.rename({'dayofyear':'time', 'tas':'tasmin'})
     tas_max = tas_max.rename({'dayofyear':'time', 'tas':'tasmax'})
 
-    return [('tas', 'hr', tas), ('tasmax', 'day', tas_max), ('tasmin', 'day', tas_min)]
+    return [('tas', '1hr', tas), ('tasmax', 'day', tas_max), ('tasmin', 'day', tas_min)]
 # ---------------------------------------------------
 
 # Hourly precipitation accumulation
@@ -341,7 +317,7 @@ def clean_pr(ds):
     tp = ( ((da['I_RAINC']*100.) + da['RAINC']) + ((da['I_RAINNC']*100.) + da['RAINNC']) ) / 3600  
     pr = tp.diff(dim='time').to_dataset(name='pr').sel(time=time_dim)
 
-    return [('pr', 'hr', pr)]
+    return [('pr', '1hr', pr)]
 # ---------------------------------------------------
 
 # Evaporation including sublimation and transpiration
@@ -356,7 +332,7 @@ def clean_evspsbl(ds):
     da['time'] = time_dim
     evspsbl = (da['EDIR'] + da['ETRAN']).to_dataset(name='evspsbl')
 
-    return [('evspsbl', 'hr', evspsbl)]
+    return [('evspsbl', '1hr', evspsbl)]
 # ---------------------------------------------------
 
 # Near surface specific humidity 
@@ -369,7 +345,7 @@ def clean_huss(ds):
     da['time'] = time_dim
     huss = (da / (1 + da))  # Convert mixing ratio to specific humidity
 
-    return [('huss', 'hr', huss)]
+    return [('huss', '1hr', huss)]
 # ---------------------------------------------------
 
 # Near surface relative humidity
@@ -408,7 +384,7 @@ def clean_hurs(ds):
     hurs = hurs.to_dataset(name='hurs').rename({'Time':'time'})
     hurs['time'] = time_dim
 
-    return [('hurs', 'hr', hurs)]
+    return [('hurs', '1hr', hurs)]
 # ---------------------------------------------------
 
 # Surface pressure
@@ -421,7 +397,7 @@ def clean_ps(ds):
     ps['time'] = time_dim
     ps = ps.to_dataset(name='ps').drop_attrs()
 
-    return [('ps', 'hr', ps)]
+    return [('ps', '1hr', ps)]
 # ---------------------------------------------------
 
 # Mean sea level pressure
@@ -434,7 +410,7 @@ def clean_psl(ds):
     psl['time'] = time_dim
     psl = psl.to_dataset(name='psl').drop_attrs()
 
-    return [('psl', 'hr', psl)]
+    return [('psl', '1hr', psl)]
 # ---------------------------------------------------
 
 # Near surface wind speed
@@ -461,9 +437,9 @@ def clean_sfcWind(ds):
     sfcWind = xr.ufuncs.sqrt( (uas**2 + vas**2) )
 
     return [
-        ('sfcWind', 'hr', sfcWind.to_dataset(name='sfcWind')),
-        ('uas',     'hr', uas.to_dataset(name='uas')),
-        ('vas',     'hr', vas.to_dataset(name='vas')),
+        ('sfcWind', '1hr', sfcWind.to_dataset(name='sfcWind')),
+        ('uas',     '1hr', uas.to_dataset(name='uas')),
+        ('vas',     '1hr', vas.to_dataset(name='vas')),
     ]
 # ---------------------------------------------------
 
@@ -476,14 +452,13 @@ def clean_rsds(ds):
     da = ds[['ACSWDNB','I_ACSWDNB']].rename({'Time':'time'})
     da['time'] = acc_time_dim
 
-    acc_rsds = ( (da['I_ACSWDNB'] * 1e9) + da['ACSWDNB'] ) / 3600  # J/Hour/m-2 accumulation to W/m2
+    # accumulate J/hour/m-2 to W/m2
+    acc_rsds = ( (da['I_ACSWDNB'] * np.float32(1e9)) + da['ACSWDNB'] ) / np.float32(3600)
     rsds = acc_rsds.diff(dim='time').sel(time=time_dim).to_dataset(name='rsds')
 
-    # Set positive attribute here so it is written into the netcdf file
-    # directly, rather than requiring a post-processing ncatted call
     rsds['rsds'].attrs['positive'] = 'down'
 
-    return [('rsds', 'hr', rsds)]
+    return [('rsds', '1hr', rsds)]
 # ---------------------------------------------------
 
 # Surface downwelling longwave radiation 
@@ -495,14 +470,13 @@ def clean_rlds(ds):
     da = ds[['ACLWDNB','I_ACLWDNB']].rename({'Time':'time'})
     da['time'] = acc_time_dim
 
-    acc_rlds = ( (da['I_ACLWDNB'] * 1e9) + da['ACLWDNB'] ) / 3600  # J/Hour/m-2 accumulation to W/m2
+    # accumulate J/hour/m-2 to W/m2
+    acc_rlds = ( (da['I_ACLWDNB'] * np.float32(1e9)) + da['ACLWDNB'] ) / np.float32(3600)
     rlds = acc_rlds.diff(dim='time').sel(time=time_dim).to_dataset(name='rlds')
 
-    # Set positive attribute here so it is written into the netcdf file
-    # directly, rather than requiring a post-processing ncatted call
     rlds['rlds'].attrs['positive'] = 'down'
 
-    return [('rlds', 'hr', rlds)]
+    return [('rlds', '1hr', rlds)]
 # ---------------------------------------------------
 
 # Total cloud cover percentage
@@ -515,7 +489,7 @@ def clean_clt(ds):
     clt['time'] = time_dim
     clt = clt.to_dataset(name='clt').drop_attrs()
 
-    return [('clt', 'hr', clt)]
+    return [('clt', '1hr', clt)]
 # ---------------------------------------------------
 
 # Time invariant variables (orog and sftlf)
@@ -566,7 +540,7 @@ def clean_fx(ds):
 # Dispatch table
 # --------------
 # Maps variable names to their clean function and loader tag.
-# The default case is: output var = input var, freq = 'hr', loader = 'hr'.
+# The default case is: output var = input var, freq = '1hr', loader = 'hr'.
 # Only deviations from that default are listed here.
 #
 # Loader tags:
@@ -579,8 +553,8 @@ _CLEAN = {var: globals()[f'clean_{var}']
                       'sfcWind','rsds','rlds','clt']}
 
 _OUTPUTS = {
-    'tas'     : [('tas','hr'), ('tasmax','day'), ('tasmin','day')],
-    'sfcWind' : [('sfcWind','hr'), ('uas','hr'), ('vas','hr')],
+    'tas'     : [('tas','1hr'), ('tasmax','day'), ('tasmin','day')],
+    'sfcWind' : [('sfcWind','1hr'), ('uas','1hr'), ('vas','1hr')],
 }
 
 _LOADER = {
@@ -595,7 +569,7 @@ def get_dispatch(var):
     applying defaults for anything not explicitly overridden."""
     if var not in _CLEAN:
         return None
-    outputs    = _OUTPUTS.get(var, [(var, 'hr')])
+    outputs    = _OUTPUTS.get(var, [(var, '1hr')])
     loader_tag = _LOADER.get(var, 'hr')
     return outputs, _CLEAN[var], loader_tag
 
