@@ -260,7 +260,9 @@ def write_vars(var_da_list):
         info = pull_cmor_specs(var, cmor_freq)
         vardir = os.path.join(outdir, var)
         os.makedirs(vardir, exist_ok=True)
-        da.to_netcdf(fout)  # bare filename; cmorize.compress.sh reads from cwd, writes to outdir/var/, then removes this file
+        da.astype(np.float32).to_netcdf(fout)
+        # bare filename; cmorize.compress.sh reads from cwd,
+        # writes to outdir/var/, then removes this file
         cmor_comp_save(wrfout_path, var, fout, qnt, info[0], info[1],
                        levels, refh, info[2], info[3], info[4])
 # ------------------------------------------------------------
@@ -309,12 +311,13 @@ def clean_pr(ds):
 
     pr_vars = ['XLONG','XLAT','XTIME','I_RAINC','I_RAINNC','RAINC','RAINNC']
 
-    da = ds[pr_vars].rename({'Time':'time'}).astype(np.float32)
+    da = ds[pr_vars].rename({'Time':'time'}) # .astype(np.float32)
     da['time'] = acc_time_dim
 
     #  ((I_RAINC * 100) + RAINC) + ((I_RAINNC * 100) + RAINNC) 
     #  / 3600 : mm/hour --> mm/sec
-    tp = ( ((da['I_RAINC']*100.) + da['RAINC']) + ((da['I_RAINNC']*100.) + da['RAINNC']) ) / 3600  
+    tp = ( ((da['I_RAINC']*100.) + da['RAINC']) +
+           ((da['I_RAINNC']*100.) + da['RAINNC']) ) / 3600  
     pr = tp.diff(dim='time').to_dataset(name='pr').sel(time=time_dim)
 
     return [('pr', '1hr', pr)]
@@ -341,7 +344,7 @@ def clean_huss(ds):
     # Q2 units: kg kg-1
     # Q2 description: mixing ratio (QV) at 2 M
 
-    da = ds[['Q2']].rename({'Q2':'huss', 'Time':'time'}).load()
+    da = ds[['Q2']].rename({'Q2':'huss', 'Time':'time'})
     da['time'] = time_dim
     huss = (da / (1 + da))  # Convert mixing ratio to specific humidity
 
@@ -393,7 +396,7 @@ def clean_ps(ds):
     # PSFC units: Pa
     # PSFC description: Surface pressure
 
-    ps = ds['PSFC'].rename({'Time':'time'}).load()
+    ps = ds['PSFC'].rename({'Time':'time'})
     ps['time'] = time_dim
     ps = ps.to_dataset(name='ps').drop_attrs()
 
@@ -406,7 +409,7 @@ def clean_psl(ds):
     # AFWA_MSLP units: Pa
     # AFWA_MSLP description: Mean sea level pressure
 
-    psl = ds['AFWA_MSLP'].rename({'Time':'time'}).load()
+    psl = ds['AFWA_MSLP'].rename({'Time':'time'})
     psl['time'] = time_dim
     psl = psl.to_dataset(name='psl').drop_attrs()
 
@@ -453,7 +456,7 @@ def clean_rsds(ds):
     da['time'] = acc_time_dim
 
     # accumulate J/hour/m-2 to W/m2
-    acc_rsds = ( (da['I_ACSWDNB'] * np.float32(1e9)) + da['ACSWDNB'] ) / np.float32(3600)
+    acc_rsds = ( (da['I_ACSWDNB'] * 1e9) + da['ACSWDNB'] ) / 3600
     rsds = acc_rsds.diff(dim='time').sel(time=time_dim).to_dataset(name='rsds')
 
     rsds['rsds'].attrs['positive'] = 'down'
@@ -471,7 +474,7 @@ def clean_rlds(ds):
     da['time'] = acc_time_dim
 
     # accumulate J/hour/m-2 to W/m2
-    acc_rlds = ( (da['I_ACLWDNB'] * np.float32(1e9)) + da['ACLWDNB'] ) / np.float32(3600)
+    acc_rlds = ( (da['I_ACLWDNB'] * 1e9) + da['ACLWDNB'] ) / 3600
     rlds = acc_rlds.diff(dim='time').sel(time=time_dim).to_dataset(name='rlds')
 
     rlds['rlds'].attrs['positive'] = 'down'
@@ -525,13 +528,17 @@ def clean_fx(ds):
 
     os.makedirs(os.path.join(outdir, 'sftlf'), exist_ok=True)
     os.makedirs(os.path.join(outdir, 'orog'),  exist_ok=True)
-    sftlf.to_netcdf(sftlf_fout)  # bare filename; cmorize.compress.sh reads from cwd, writes to outdir/var/, then removes this file
-    orog.to_netcdf(orog_fout)    # bare filename; same as above
+    sftlf.to_netcdf(sftlf_fout)  
+    orog.to_netcdf(orog_fout)
+    # bare filenames; cmorize.compress.sh reads from cwd,
+    # writes to outdir/var/, then removes file
 
-    cmor_comp_save(wrfout_path, 'sftlf', sftlf_fout, sftlf_qnt, sftlf_info[0], sftlf_info[1],
-                   sftlf_levels, 'None', sftlf_info[2], sftlf_info[3], sftlf_info[4])
-    cmor_comp_save(wrfout_path, 'orog', orog_fout, orog_qnt, orog_info[0], orog_info[1],
-                   orog_levels, 'None', orog_info[2], orog_info[3], orog_info[4])
+    cmor_comp_save(wrfout_path, 'sftlf', sftlf_fout, sftlf_qnt,
+                   sftlf_info[0], sftlf_info[1],  sftlf_levels, 'None',
+                   sftlf_info[2], sftlf_info[3], sftlf_info[4])
+    cmor_comp_save(wrfout_path, 'orog', orog_fout, orog_qnt,
+                   orog_info[0], orog_info[1], orog_levels, 'None',
+                   orog_info[2], orog_info[3], orog_info[4])
 
     return()
 # ---------------------------------------------------
