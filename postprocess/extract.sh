@@ -7,7 +7,7 @@
 set -euo pipefail
 
 # Default variable list for NA-CORDEX-CMIP6 postprocessing
-DEFAULT_VARS="rsds,rlds,pr,evspsbl,tas,hurs,ps,psl,huss,sfcWind,clt,fx"
+DEFAULT_VARS="fx,clt,evspsbl,hurs,huss,pr,ps,psl,rlds,rsds,sfcWind,tas,tasmax,tasmin,uas,vas"
 
 usage() {
     cat >&2 <<EOF
@@ -144,8 +144,4 @@ echo ""
 echo "Commandfiles written to: $CMDDIR"
 echo ""
 echo "To run with launch_multi:"
-echo "  launch_multi --run RUNDIR \\"
-echo "    --copy ${SCRIPTS_DIR}/postprocess.core.variables.py \\"
-echo "    --copy ${SCRIPTS_DIR}/cmorize.compress.sh \\"
-echo "    --copy ${SCRIPTS_DIR}/var_specs.yml \\"
-echo "    ${CMDDIR}/*.cmd"
+echo "  launch_multi --run RUNDIR --workflow cordex ${CMDDIR}/*.cmd"

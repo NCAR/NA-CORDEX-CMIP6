@@ -47,6 +47,7 @@
 # $ python postprocess.core.variables.py {wrfout_path} 1980 tas {outdir}
 # ------------------------------------------------
 
+from collections import defaultdict
 import xarray as xr
 from xarray import ufuncs
 from datetime import date
@@ -174,8 +175,8 @@ def make_fname(var, cmor_freq):
 start_date   = pd.Timestamp(f'{year}-01-01')
 day_before   = start_date - pd.Timedelta(days=1)
 end_of_month = start_date + pd.offsets.MonthEnd(0)
-#end_date     = start_date + pd.offsets.YearEnd(0) + pd.Timedelta(hours=23)
-end_date = start_date + pd.offsets.MonthEnd(0) + pd.Timedelta(hours=23) # Uncomment for quicker testing
+end_date     = start_date + pd.offsets.YearEnd(0) + pd.Timedelta(hours=23)
+#end_date = start_date + pd.offsets.MonthEnd(0) + pd.Timedelta(hours=23) # Uncomment for quicker testing
 
 time_dim     = pd.date_range(start_date, end_date, freq='h')
 acc_time_dim = pd.date_range(day_before, end_date, freq='h')
@@ -214,7 +215,7 @@ def load_wrf(files, accumulated=False):
                              decode_times=False,
                              decode_coords=False).fillna(1.e20)
 
-# Loader tags used in DISPATCH_OVERRIDES:
+# Loader tags:
 #   'hr'   : standard hourly files, skip day-before timestep
 #   'acc'  : hourly files including day-before timestep, for accumulated vars
 #   'afwa' : AFWA diagnostic files, skip day-before timestep
@@ -231,7 +232,6 @@ ds_fx_inp = xr.open_dataset(f'{wrfinput_path}wrfinput_d01', decode_times=False).
 # Function for cmorizing and editing NETCDF attributes
 # ----------------------------------------------------
 def cmor_comp_save(wrfout_path, var, fname, qnt, freq, units, lev, refh, cell, ln, stdn):
-
     cmd = (
     f'bash ./cmorize.compress.sh "{wrfout_path}" "{var}" "{fname}" "{qnt}" "{freq}" '
     f'"{units}" "{lev}" "{refh}" "{cell}" "{ln}" "{stdn}" "{year}" "{outdir}"'
@@ -261,6 +261,7 @@ def write_vars(var_da_list):
         vardir = os.path.join(outdir, var)
         os.makedirs(vardir, exist_ok=True)
         da.astype(np.float32).to_netcdf(fout)
+        
         # bare filename; cmorize.compress.sh reads from cwd,
         # writes to outdir/var/, then removes this file
         cmor_comp_save(wrfout_path, var, fout, qnt, info[0], info[1],
@@ -273,28 +274,49 @@ def write_vars(var_da_list):
 # Each takes a loaded dataset and returns a list of
 # (var, cmor_freq, dataset) tuples for write_vars to process.
 
-# Near-Surface Air Temperature : Also TMAX / TMIN
+# Near-Surface Air Temperature
 # ---------------------------------------------------
-# tas, tasmax, and tasmin are all derived from T2, so they are
-# processed together to avoid reading the dataset twice.
 def clean_tas(ds):
     # T2 units : K
     # T2 description : 2-meter temperature
 
-    tas = ds['T2'].rename({'Time':'time'}).load()
+    tas = ds['T2'].rename({'Time':'time'})
     tas['time'] = time_dim
     tas = tas.to_dataset(name='tas').drop_attrs()
 
-    # Daily maximum and minimum from hourly data
+    return [('tas', '1hr', tas)]
+# ---------------------------------------------------
+
+# Daily maximum near-surface air temperature
+# ---------------------------------------------------
+def clean_tasmax(ds):
+    # T2 units : K
+    # T2 description : 2-meter temperature
+
+    tas = ds['T2'].rename({'Time':'time'})
+    tas['time'] = time_dim
+
     tas_max = tas.groupby('time.dayofyear').max()
     tas_max['dayofyear'] = day_time_dim[1:]
+    tas_max = tas_max.rename({'dayofyear':'time'}).to_dataset(name='tasmax')
+
+    return [('tasmax', 'day', tas_max)]
+# ---------------------------------------------------
+
+# Daily minimum near-surface air temperature
+# ---------------------------------------------------
+def clean_tasmin(ds):
+    # T2 units : K
+    # T2 description : 2-meter temperature
+
+    tas = ds['T2'].rename({'Time':'time'})
+    tas['time'] = time_dim
+
     tas_min = tas.groupby('time.dayofyear').min()
     tas_min['dayofyear'] = day_time_dim[1:]
+    tas_min = tas_min.rename({'dayofyear':'time'}).to_dataset(name='tasmin')
 
-    tas_min = tas_min.rename({'dayofyear':'time', 'tas':'tasmin'})
-    tas_max = tas_max.rename({'dayofyear':'time', 'tas':'tasmax'})
-
-    return [('tas', '1hr', tas), ('tasmax', 'day', tas_max), ('tasmin', 'day', tas_min)]
+    return [('tasmin', 'day', tas_min)]
 # ---------------------------------------------------
 
 # Hourly precipitation accumulation
@@ -303,19 +325,18 @@ def clean_pr(ds):
     # I_RAINC units : mm
     # I_RAINC description: integer bucket variable for convective precipitation (tips at 100 mm)
     # I_RAINNC units : mm
-    # I_RAINNC description: integer bucket variable for convective precipitation (tips at 100 mm)
+    # I_RAINNC description: integer bucket variable for non-convective precipitation (tips at 100 mm)
     # RAINC units : mm
     # RAINC description : accumulated convective precipitation
     # RAINNC units : mm
     # RAINNC description : accumulated non-convective precipitation
 
-    pr_vars = ['XLONG','XLAT','XTIME','I_RAINC','I_RAINNC','RAINC','RAINNC']
+    pr_vars = ['I_RAINC','I_RAINNC','RAINC','RAINNC']
 
-    da = ds[pr_vars].rename({'Time':'time'}) # .astype(np.float32)
+    da = ds[pr_vars].rename({'Time':'time'})
     da['time'] = acc_time_dim
 
-    #  ((I_RAINC * 100) + RAINC) + ((I_RAINNC * 100) + RAINNC) 
-    #  / 3600 : mm/hour --> mm/sec
+    #  / 3600 : mm/hour --> mm/sec == kg s-1 m-2
     tp = ( ((da['I_RAINC']*100.) + da['RAINC']) +
            ((da['I_RAINNC']*100.) + da['RAINNC']) ) / 3600  
     pr = tp.diff(dim='time').to_dataset(name='pr').sel(time=time_dim)
@@ -416,12 +437,12 @@ def clean_psl(ds):
     return [('psl', '1hr', psl)]
 # ---------------------------------------------------
 
-# Near surface wind speed
+# Near-surface wind components and speed
 # ---------------------------------------------------
-# sfcWind, uas, and vas are all derived from U10/V10, so they are
-# processed together to avoid reading the dataset twice.
 # ds_fx is a module-level variable (loaded at startup).
-def clean_sfcWind(ds):
+def _wind_components(ds):
+    """Shared helper: load U10/V10 and rotate to earth-relative coordinates.
+    Returns (uas, vas) as DataArrays."""
     # U10/V10 units: m s-1
     # U10/V10 description: U/V at 10 M
 
@@ -437,13 +458,20 @@ def clean_sfcWind(ds):
     # https://www-k12.atmos.washington.edu/~ovens/wrfwinds.html
     uas = (da['U10'] * cosa) - (da['V10'] * sina)
     vas = (da['V10'] * cosa) + (da['U10'] * sina)
-    sfcWind = xr.ufuncs.sqrt( (uas**2 + vas**2) )
+    return uas, vas
 
-    return [
-        ('sfcWind', '1hr', sfcWind.to_dataset(name='sfcWind')),
-        ('uas',     '1hr', uas.to_dataset(name='uas')),
-        ('vas',     '1hr', vas.to_dataset(name='vas')),
-    ]
+def clean_sfcWind(ds):
+    uas, vas = _wind_components(ds)
+    sfcWind = xr.ufuncs.sqrt(uas**2 + vas**2)
+    return [('sfcWind', '1hr', sfcWind.to_dataset(name='sfcWind'))]
+
+def clean_uas(ds):
+    uas, _ = _wind_components(ds)
+    return [('uas', '1hr', uas.to_dataset(name='uas'))]
+
+def clean_vas(ds):
+    _, vas = _wind_components(ds)
+    return [('vas', '1hr', vas.to_dataset(name='vas'))]
 # ---------------------------------------------------
 
 # Surface downwelling shortwave radiation 
@@ -528,13 +556,13 @@ def clean_fx(ds):
 
     os.makedirs(os.path.join(outdir, 'sftlf'), exist_ok=True)
     os.makedirs(os.path.join(outdir, 'orog'),  exist_ok=True)
-    sftlf.to_netcdf(sftlf_fout)  
+    sftlf.to_netcdf(sftlf_fout)
     orog.to_netcdf(orog_fout)
     # bare filenames; cmorize.compress.sh reads from cwd,
     # writes to outdir/var/, then removes file
 
     cmor_comp_save(wrfout_path, 'sftlf', sftlf_fout, sftlf_qnt,
-                   sftlf_info[0], sftlf_info[1],  sftlf_levels, 'None',
+                   sftlf_info[0], sftlf_info[1], sftlf_levels, 'None',
                    sftlf_info[2], sftlf_info[3], sftlf_info[4])
     cmor_comp_save(wrfout_path, 'orog', orog_fout, orog_qnt,
                    orog_info[0], orog_info[1], orog_levels, 'None',
@@ -547,8 +575,8 @@ def clean_fx(ds):
 # Dispatch table
 # --------------
 # Maps variable names to their clean function and loader tag.
-# The default case is: output var = input var, freq = '1hr', loader = 'hr'.
-# Only deviations from that default are listed here.
+# The default output frequency is '1hr'; exceptions are listed in _OUTFREQ.
+# The default loader is 'hr'; exceptions are listed in _LOADER.
 #
 # Loader tags:
 #   'hr'   : standard hourly files, skip day-before timestep
@@ -556,13 +584,11 @@ def clean_fx(ds):
 #   'afwa' : AFWA diagnostic files, skip day-before timestep
 
 _CLEAN = {var: globals()[f'clean_{var}']
-          for var in ['tas','pr','evspsbl','huss','hurs','ps','psl',
-                      'sfcWind','rsds','rlds','clt']}
+          for var in ['clt','evspsbl','hurs','huss','pr','ps',
+                      'psl','rlds','rsds','sfcWind','tas',
+                      'tasmax','tasmin','uas','vas']}
 
-_OUTPUTS = {
-    'tas'     : [('tas','1hr'), ('tasmax','day'), ('tasmin','day')],
-    'sfcWind' : [('sfcWind','1hr'), ('uas','1hr'), ('vas','1hr')],
-}
+_OUTFREQ = defaultdict(lambda: '1hr', tasmax='day', tasmin='day')
 
 _LOADER = {
     'pr'  : 'acc',
@@ -572,13 +598,11 @@ _LOADER = {
 }
 
 def get_dispatch(var):
-    """Return (outputs, clean_fn, loader_tag) for a variable,
+    """Return (clean_fn, loader_tag) for a variable,
     applying defaults for anything not explicitly overridden."""
     if var not in _CLEAN:
         return None
-    outputs    = _OUTPUTS.get(var, [(var, '1hr')])
-    loader_tag = _LOADER.get(var, 'hr')
-    return outputs, _CLEAN[var], loader_tag
+    return _CLEAN[var], _LOADER.get(var, 'hr')
 
 
 # Call functions
@@ -590,9 +614,8 @@ else:
     if entry is None:
         print(f'Warning: unknown variable {variable}')
     else:
-        outputs, clean_fn, loader_tag = entry
-        # Check existence of all outputs before loading data
-        if any(_output_needed(v, make_fname(v, f)) for v, f in outputs):
+        clean_fn, loader_tag = entry
+        if _output_needed(variable, make_fname(variable, _OUTFREQ[variable])):
             write_vars(clean_fn(load_by_tag(loader_tag)))
 
 # Plotting is handled separately; see plot.sh (or README)

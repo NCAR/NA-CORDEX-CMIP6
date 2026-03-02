@@ -19,14 +19,10 @@
     python ./postprocess.core.variables.py /path/to/raw/WRF/data/1977_chunk \
       1980 uas /path/to/output
 	```
-3. Use `launch_multi` to run the commandfiles:
+3. Use `launch_multi` to run the commandfiles with suitable defaults for this workflow:
 
     ```
-    launch_multi --run $rundir --wall 1:00:00 --mem 150GB\
-      --copy postprocess.core.variables.py \
-      --copy cmorize.compress.sh \
-      --copy var_specs.yml \
-      $cmddir/*.cmd
+    launch_multi --run $rundir --workflow cordex $cmddir/*.cmd
     ```  
     
 4. After everything has finished, check captured output in the run directories.   If all of the `jobname.o[number].N` files end with a line that starts `Done`, and all the `step-NNNNN.out` files in the stdout directory are empty, you're all set.  Otherwise, debug and try again.  

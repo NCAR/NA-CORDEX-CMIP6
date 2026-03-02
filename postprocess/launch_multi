@@ -9,17 +9,27 @@
 #
 # Options:
 #   --run DIR           Directory where run subdirectories are created (required)
+#   --workflow NAME     Apply a predefined workflow configuration (see below)
+#   --scripts PATH      Directory containing workflow scripts to copy
+#                       (default: directory containing launch_multi)
 #   --config FILE       Environment config file (default: ~/config_env.sh)
 #   --copy FILE         Additional file/dir to copy (can be repeated)
 #   --dry               Print commands without executing
 #   --sleep N           Delay in seconds between job submissions (default: 1)
 #   --wall TIME         Walltime (default: 00:20:00)
+#   --mem MEM           Memory (e.g. 25GB)
 #   -A ACCOUNT          PBS account (default: $PROJECT)
 #   -N NAME             Job name or prefix (default: basename of cmdfile)
 #   -j JOIN             Join stdout/stderr (default: oe)
 #   -m MAIL             Mail options (default: a)
 #   -q QUEUE            PBS queue (default: casper)
 #   --help              Show this help
+#
+# Workflows (--workflow NAME):
+#   cordex    Sets --wall 1:00:00, --mem 25GB, --config ~/config_env.npl.sh,
+#             and copies postprocess.core.variables.py, cmorize.compress.sh,
+#             and var_specs.yml from SCRIPTS_DIR.
+#             All of these can be overridden by flags that follow --workflow.
 #
 # Any other arguments are passed through to launch_cf (and then to qsub).
 
@@ -35,9 +45,11 @@ dry=0
 jobprefix=""
 join="oe"
 mail="a"
+mem=""
 passthrough=()
 queue="casper"
 runpath=""
+scripts_dir="$(dirname "$(realpath "$0")")"
 sleep=1
 walltime="00:20:00"
 
@@ -63,6 +75,28 @@ run_cmd() {
     fi
 }
 
+# Apply a named workflow configuration.
+# Flags that appear after --workflow on the command line will override these.
+apply_workflow() {
+    local name="$1"
+    case "$name" in
+        cordex)
+            walltime="1:00:00"
+            mem="25GB"
+            config="$HOME/config_env.npl.sh"
+            config_specified=1
+            copyfiles+=(
+                "$scripts_dir/postprocess.core.variables.py"
+                "$scripts_dir/cmorize.compress.sh"
+                "$scripts_dir/var_specs.yml"
+            )
+            ;;
+        *)
+            die "Unknown workflow: $name"
+            ;;
+    esac
+}
+
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -73,8 +107,20 @@ while [[ $# -gt 0 ]]; do
             runpath="$2"
             shift 2
             ;;
+        --workflow)
+            apply_workflow "$2"
+            shift 2
+            ;;
+        --scripts)
+            scripts_dir="$(realpath "$2")"
+            shift 2
+            ;;
         --wall)
             walltime="$2"
+            shift 2
+            ;;
+        --mem)
+            mem="$2"
             shift 2
             ;;
         --config)
@@ -86,10 +132,10 @@ while [[ $# -gt 0 ]]; do
             copyfiles+=("$2")
             shift 2
             ;;
-	--sleep)
-	    sleep="$2"
-	    shift 2
-	    ;;
+        --sleep)
+            sleep="$2"
+            shift 2
+            ;;
         -N)
             jobprefix="$2"
             shift 2
@@ -200,6 +246,9 @@ for cmdfile in "${cmdfiles[@]}"; do
     launch_cmd="launch_cf -A $(printf %q "$account") -q $(printf %q "$queue")"
     launch_cmd+=" -m $(printf %q "$mail") -j $(printf %q "$join")"
     launch_cmd+=" -N $(printf %q "$jobname") -l walltime=$(printf %q "$walltime")"
+    if [[ -n "$mem" ]]; then
+        launch_cmd+=" --mem $(printf %q "$mem")"
+    fi
     for arg in "${passthrough[@]}"; do
         launch_cmd+=" $(printf %q "$arg")"
     done
