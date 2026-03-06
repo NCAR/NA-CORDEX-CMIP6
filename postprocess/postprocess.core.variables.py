@@ -60,6 +60,10 @@ import subprocess
 import yaml
 import requests
 import json
+import time
+import resource
+
+t0 = time.perf_counter()
 
 # -----------------
 # keyword arguments
@@ -261,11 +265,20 @@ def write_vars(var_da_list):
         vardir = os.path.join(outdir, var)
         os.makedirs(vardir, exist_ok=True)
         da.astype(np.float32).to_netcdf(fout)
+
+        print(f'postproc script time: {time.perf_counter() - t0:.1f} sec')
+        mem1 = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        print(f'max postproc memory: {mem1 / (1024*1024):.1f} GB')
         
         # bare filename; cmorize.compress.sh reads from cwd,
         # writes to outdir/var/, then removes this file
         cmor_comp_save(wrfout_path, var, fout, qnt, info[0], info[1],
                        levels, refh, info[2], info[3], info[4])
+
+        print(f'grand total time: {time.perf_counter() - t0:.1f} sec')
+        mem2 = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+        print(f'max total memory: {(mem1+mem2) / (1024*1024):.1f} GB')
+        
 # ------------------------------------------------------------
 
 
