@@ -1,8 +1,11 @@
 #!/bin/bash
 
-# extract.sh - Generate per-variable commandfiles for extracting and CMORizing
-# variables from raw WRF output.  Designed for use with launch_multi and
-# launch_cf, matching the pattern established by aggregate.sh.
+# extract.sh - Generate per-variable commandfiles for extracting variables
+# from raw WRF output.  Designed for use with launch_multi and launch_cf,
+# matching the pattern established by aggregate.sh.
+#
+# Requires setup.sh to have been run first (OUTDIR must contain cached CMOR
+# JSON tables).
 
 set -euo pipefail
 
@@ -24,8 +27,7 @@ Arguments:
 Options:
   --vars VAR[,VAR,...]  Comma-separated list of variables to process
                         (default: all supported variables)
-  --scripts PATH        Directory containing postprocess.core.variables.py,
-                        cmorize.compress.sh, and var_specs.yml
+  --scripts PATH        Directory containing postprocess.core.variables.py
                         (default: directory containing extract.sh)
   -h, --help            Show this help message
 EOF
@@ -33,8 +35,8 @@ EOF
 }
 
 # Chunk-directory naming convention for NA-CORDEX-CMIP6 simulations:
-# Each decade is run as a separate simulation with 3 years of spinup.
-# The simulation for decade XXXX starts at year (XXXX - 3), so the
+# Each decade is run as a separate simulation with 2.5 years of spinup.
+# The simulation for decade XXXX starts with year (XXXX - 3), so the
 # chunk directory for year Y is named ((Y/10)*10 - 3)_chunk.
 # Adjust this function if the simulation layout changes.
 chunk_dir_for_year() {
@@ -60,9 +62,11 @@ done
 [[ $# -lt 3 ]] && usage
 
 WRFDIR="$(realpath "$1")"
+mkdir -p $2
 OUTDIR="$(realpath "$2")"
 YEARS_ARG="$3"
 CMDDIR="${4:-.}"
+mkdir -p $CMDDIR
 CMDDIR="$(realpath "$CMDDIR")"
 
 # Parse year range
@@ -85,12 +89,11 @@ fi
 # Validate inputs
 [[ ! -d "$WRFDIR" ]] && { echo "Error: WRFDIR not found: $WRFDIR" >&2; exit 1; }
 
-for f in postprocess.core.variables.py cmorize.compress.sh var_specs.yml; do
-    [[ ! -f "$SCRIPTS_DIR/$f" ]] && {
-        echo "Error: Required script not found: $SCRIPTS_DIR/$f" >&2
-        exit 1
-    }
-done
+[[ ! -f "$SCRIPTS_DIR/postprocess.core.variables.py" ]] && {
+    echo "Error: postprocess.core.variables.py not found in $SCRIPTS_DIR" >&2
+    exit 1
+}
+
 
 # Verify that each year's chunk directory exists and contains expected files
 for (( year = START_YEAR; year <= END_YEAR; year++ )); do

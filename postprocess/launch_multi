@@ -26,7 +26,7 @@
 #   --help              Show this help
 #
 # Workflows (--workflow NAME):
-#   cordex    Sets --wall 1:00:00, --mem 25GB, --config ~/config_env.npl.sh,
+#   cordex    Sets --wall 1:00:00, --mem 50GB, --config ~/config_env.npl.sh,
 #             and copies postprocess.core.variables.py, cmorize.compress.sh,
 #             and var_specs.yml from SCRIPTS_DIR.
 #             All of these can be overridden by flags that follow --workflow.
@@ -82,12 +82,12 @@ apply_workflow() {
     case "$name" in
         cordex)
             walltime="1:00:00"
-            mem="25GB"
+            mem="50GB"
             config="$HOME/config_env.npl.sh"
             config_specified=1
             copyfiles+=(
                 "$scripts_dir/postprocess.core.variables.py"
-                "$scripts_dir/cmorize.compress.sh"
+                "$scripts_dir/cmorize.sh"
                 "$scripts_dir/var_specs.yml"
             )
             ;;

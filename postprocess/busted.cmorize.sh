@@ -1,38 +1,40 @@
-#!/bin/bash -l
-# Jacob Stuivenvolt-Allen: jsallen@ucar.edu
+#!/bin/bash -x
+# Authors: Jacob Stuivenvolt-Allen, Seth McGinnis
 
 # Purpose:
 # --------
-# Generated for the NA-CORDEX post-processing workflow, this script 
-# is used by the python wrapper, postprocess.core.variables.py, and
-# adds in the necessary/correct metadata and variable attributes for
-# CF compliance and WCRP-CORDEX archiving specifications. 
+#
+# This script adds the coordinates and metadata (global and variable
+# attributes) required by the CF and CORDEX archiving spcs to
+# bare-bones netCDF files created in the extraction step of the
+# workflow
+#
+# The coordinate reference files (wrf.xy.coords.nc, wrf.xy.stagger.coords.nc)
+# must exist in $outdir; they are created by setup.sh.
 
-# load modules 
+# load modules
 # ------------
 module load nco
 module load cdo
 
-wrfout_path=$1 # wrfoutput path
-var=$2         # variable name CMOR
+wrfout_path=$1 # path to directory containing wrfout files (for XTIME units)
+var=$2         # variable name
 fname=$3       # wrfout filename
-pcc=$4         # compression level
-freq=$5        # Write frequency
-units=$6       # units
-lev=$7         # single, pressure, soil, work in progress...
-refh=$8        # reference height
-cell=$9        # cell_methods
-ln=${10}       # longname
-stdn=${11}     # standard name
-year=${12}     # year...
-outdir=${13}   # output directory (variable subdirs created here)
+freq=$4        # write frequency
+units=$5       # units
+lev=$6         # single, pressure, soil, work in progress...
+refh=$7        # reference height
+cell=$8        # cell_methods
+ln=$9          # longname
+stdn=${10}     # standard name
+year=${11}     # year
+outdir=${12}   # output directory (variable subdirs created here)
 
-readonly coord_ref_file="${wrfout_path}/wrfout_d01_${year}-12-31_00:00:00" # Example WRF file for coordinates and time dimension!!
+readonly time_ref_file="${wrfout_path}/wrfout_d01_${year}-12-31_00:00:00"
 
 echo "-------------------------------"
 echo "Variable: " $var
 echo "Output filename: " $fname
-echo "Compression level: " $pcc 
 echo "Timestep: " $freq
 echo "Units: " $units
 echo $lev
@@ -78,104 +80,35 @@ readonly tracking_id="hdl:21.14103/$(uuidgen)"
 # ---------------------------------------
 # END OF USER DEFINED VARIABLES
 # ---------------------------------------
-# Either move forward with confidence to edit
-# program below, or email jsallen@ucar.edu with
-# any bugs/issues. 
 
 # time units
-time_old_units=$(ncdump -h "$coord_ref_file" | grep "XTIME:units" | cut -d '"' -f2)
+time_old_units=$(ncdump -h "$time_ref_file" | grep "XTIME:units" | cut -d '"' -f2)
 time_start_year="${time_old_units:14:19}"
 
-
-# -----------------------------
-# Check for wrf coordinate file
-# TODO: fix race condition - concurrent jobs in the same outdir may
-# both find the file absent and attempt to create it simultaneously.
-# -----------------------------
+# Coordinate files are created once by setup.sh and read here.
 readonly coord_xy_file="${outdir}/wrf.xy.coords.nc"
 readonly coord_xy_stag_file="${outdir}/wrf.xy.stagger.coords.nc"
 
-if [ ! -f $coord_xy_file ]; then
-  echo "WRF coordinate file not found ---------- creating"
-  ncks -h -3 --chunk_cache 4000000000 -C -d Time,0 -v XLONG,XLAT --no_tmp_fl $coord_ref_file $coord_xy_file
-
-  # Delete all uneeded attributes : wrf-holdovers
-  ncatted -h -a ,XLONG,d,, $coord_xy_file
-  ncatted -h -a ,XLAT,d,, $coord_xy_file
-  ncatted -h -a '^[A-Z0-9_-]+$',global,d,, $coord_xy_file
-  ncatted -h -a stagger,,d,, $coord_xy_file
-  ncatted -h -a coordinates,,d,, $coord_xy_file
-
-  ncrename -h -d Time,time $coord_xy_file
-  ncrename -h -d south_north,y -d west_east,x $coord_xy_file
-  ncrename -h -v XLAT,lat -v XLONG,lon $coord_xy_file
-
-  # Get rid of time in spatial coordiantes
-  ncwa -h -O -a time $coord_xy_file $coord_xy_file
-
-  # Add the projection information 
-  ncap2 -h -A -s "crs=-9999" $coord_xy_file
-  ncatted -h -a long_name,crs,o,c,"coordinate reference system" $coord_xy_file
-  ncatted -h -a grid_mapping_name,crs,o,c,lambert_conformal_conic $coord_xy_file
-  ncatted -h -a standard_parallel,crs,o,f,"35.,60." "$coord_xy_file"
-  ncatted -h -a longitude_of_central_meridian,crs,o,f,-97. $coord_xy_file
-  ncatted -h -a latitude_of_projection_origin,crs,o,f,46. $coord_xy_file
-  ncatted -h -a semi_major_axis,crs,o,f,6370000. $coord_xy_file
-  ncatted -h -a semi_minor_axis,crs,o,f,6370000. $coord_xy_file
-
-  #ncatted -h -a inverse_flattening,crs,o,d,298.257223563 $coord_xy_file
-  ncatted -h -a false_easting,crs,o,f,0. $coord_xy_file
-  ncatted -h -a false_northing,crs,o,f,0. $coord_xy_file
-  ncatted -h -a units,crs,o,c,"m" $coord_xy_file
-
-  #ncap2 -h -A -s 'x=array(-4242000.,12000.,$x); y=array(-4038000.,12000.,$y)' "$coord_xy_file"
-  ncap2 -h -A -s 'x=array(-(($x.size-1)/2)*12000.,12000.,$x); y=array(-(($y.size-1)/2)*12000.,12000.,$y)' "$coord_xy_file"
-  #ncap2 -h -A -s 'y=array(0.,12000.,$y); x=array(0.,12000.,$x)' $coord_xy_file
-  ncatted -h -a units,y,o,c,m -a units,x,o,c,m $coord_xy_file
-  ncatted -h -a long_name,y,o,c,"y coordinate in Cartesian system" $coord_xy_file
-  ncatted -h -a long_name,x,o,c,"x-coordinate in Cartesian system" $coord_xy_file
-  ncatted -h -a standard_name,y,o,c,projection_y_coordinate $coord_xy_file
-  ncatted -h -a standard_name,x,o,c,projection_x_coordinate $coord_xy_file
-  ncatted -h -a axis,x,o,c,X -a axis,y,o,c,Y $coord_xy_file
-
-  # Add all appropriate names to the coordinate variables
-  ncatted -h -a ,lat,d,, $coord_xy_file
-  ncatted -h -a ,lon,d,, $coord_xy_file
-
-  ncatted -h -a units,lat,o,c,degrees_north $coord_xy_file
-  ncatted -h -a units,lon,o,c,degrees_east $coord_xy_file
-  ncatted -h -a long_name,lat,o,c,latitude $coord_xy_file
-  ncatted -h -a long_name,lon,o,c,longitude $coord_xy_file
-  ncatted -h -a standard_name,lat,o,c,latitude $coord_xy_file 
-  ncatted -h -a standard_name,lon,o,c,longitude $coord_xy_file
-
-  ncap2 -O -s 'lat=double(lat)' $coord_xy_file $coord_xy_file
-  ncap2 -O -s 'lon=double(lon)' $coord_xy_file $coord_xy_file
-
-  # Conventions attribute
-  ncatted -h -a Conventions,global,o,c,"CF-1.11" $coord_xy_file
-  ncatted -h -a institution,global,o,c,"National Center for Atmospheric Research: Research Applications Laboratory" $coord_xy_file
-  ncatted -h -a source,global,o,c,"Weather Research and Forecasting Model Version 4.6.1" $coord_xy_file
-
-  # Add one more file for winds or staggered coordinate vars...
-  ncks -h -O -d x,1, -d y,1, $coord_xy_file $coord_xy_stag_file
-
+if [ ! -f "$coord_xy_file" ]; then
+    echo "Error: coordinate file not found: $coord_xy_file" >&2
+    echo "Run setup.sh before cmorize.sh." >&2
+    exit 1
 fi
 
 # ------------------------------------------------------
 # Function to clean single level variables output by WRF
 # ------------------------------------------------------
 clean_single_level () {
-  # Rename 
+  # Rename
   ncrename -O -h -d west_east,x -d south_north,y $2 $3
 
-  # Time  and calendar attributes : must be set before reference time
+  # Time and calendar attributes: must be set before reference time
   ncatted -h -a long_name,time,o,c,time $3
   ncatted -h -a standard_name,time,o,c,time $3
   ncatted -h -a axis,time,o,c,T $3
   ncatted -h -a calendar,time,o,c,proleptic_gregorian $3
 
-  # Set reftime and corrrect time units
+  # Set reftime and correct time units
   cdo -setreftime,1950-01-01,00:00:00,1day $3 ${outdir}/${1}.cdo.tmp.${7}.nc
   mv "${outdir}/${1}.cdo.tmp.${7}.nc" $3
   ncap2 -O -s 'time=double(time)' $3 $3
@@ -211,13 +144,6 @@ clean_single_level () {
   # Correct lon easting
   ncap2 -h -O -s 'where(lon < 0) lon = lon + 360' $3 $3
 
-  # Lossy compression
-  if [[ "${4}" != "None" ]]; then
-    echo "Compressing ${1} --------------------- "
-    ncks -h -O -7 -L1 --ppc $1=$4 --chunk_cache 4000000000 --chunk_map rd1 $3 $3 
-    ncap2 -O -s 'quantization_info=int(quantization_info)' $3 $3
-  fi
-
   rm $2
 }
 
@@ -226,21 +152,13 @@ clean_single_level () {
 # Function to clean time invariant variables output by WRF
 # -------------------------------------------------------
 clean_time_invariant () {
-  #echo 'Variable='$1 ', output='$3 ', decimal threshold for compression='$4
-
   ncrename -O -h -d west_east,x -d south_north,y $2 $3
   coords="lat lon"
 
-  # append in the lat,lon from coordinate file
+  # Append in the lat,lon from coordinate file
   ncatted -h -a cell_methods,lat,d,, $coord_xy_file
   ncatted -h -a cell_methods,lon,d,, $coord_xy_file
   ncks -h -A -v crs,lat,lon,y,x $coord_xy_file $3
-
-  # Lossy compression
-  if [[ "${4}" != "None" ]]; then
-    echo "Compressing ${1} --------------------- "
-    ncks -h -O -7 -L1 --ppc $1=$4 --chunk_cache 4000000000 --chunk_map rd1 $3 $3
-  fi
 
   rm $2
 
@@ -294,7 +212,7 @@ function add_var_attrs {
   ncatted -h -a long_name,"${1}",o,c,"${5}" $2
   ncatted -h -a coordinates,"${1}",o,c,"${coords}" $2
   ncatted -h -a grid_mapping,"${1}",o,c,"crs" $2
-  
+
   # If cell_methods is provided:
   if [[ "${6}" != "None" ]]; then
     ncatted -h -a cell_methods,$1,o,c,"${6}" $2
@@ -305,7 +223,7 @@ function add_var_attrs {
 
     # Use ncap2 with in-place modification - this should preserve attributes
     ncap2 -h -O -s 'time+=1.0/48.0' $2 $2
-    
+
     # Add time bounds
     ncap2 -h -A -s 'defdim("nv",2)' $2 $2
     ncap2 -h -A -s 'time_bnds[$time,$nv]=0.0; time_bnds(:,0)=time-1.0/48.0; time_bnds(:,1)=time+1.0/48.0' $2 $2
@@ -318,7 +236,7 @@ function add_var_attrs {
 
     # Use ncap2 with in-place modification - this should preserve attributes
     ncap2 -h -O -s 'time+=0.5' $2 $2
-    
+
     # Add time bounds
     ncap2 -h -A -s 'defdim("nv",2)' $2 $2
     ncap2 -h -A -s 'time_bnds[$time,$nv]=0.0; time_bnds(:,0)=time-0.5; time_bnds(:,1)=time+0.5' $2 $2
@@ -361,5 +279,6 @@ function clean_wrf_data {
 }
 # -----------------------------------------
 clean_wrf_data "${1}" "${2}" "${3}" "${4}" "${5}" "${6}" "${7}" "${8}" "${9}" "${10}" "${11}" "${12}" "${13}"
- 
+
+#echo "Done"
 exit
