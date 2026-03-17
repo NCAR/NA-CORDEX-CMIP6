@@ -9,14 +9,15 @@
 # separately by compress.sh.
 #
 # Creates output by:
-#   1. Copying the appropriate coordinate reference file (tiny)
-#   2. Appending the time coordinate and ancillary variables from infile
-#   3. Running CDO setreftime on the small file (before data is appended)
-#   4. Appending the data variable with the sponge layer trimmed
-#   5. Applying CF metadata attributes
-#
-# Coordinate reference files (wrf.xy.coords.nc, wrf.xy.stagger.coords.nc)
-# must exist in INDIR; they are created by setup.sh.
+#   1. Extracting time coordinate from infile
+#   2. Changing the epoch
+#   3. Adjusting time coordinates based on cell_methods & frequency
+#   4. Appending in the other coordinates from wrf.xy.coords.nc
+#   5. Trimming & adding in the data variable from infile
+#   6. Adding all the metadata
+# Doing is this way avoids rewriting a very large file multiple times,
+# which is slow.  The coordinate reference file wrf.xy.coords.nc must
+# exist in INDIR; it's created by setup.sh.
 
 # load modules
 # ------------
@@ -80,7 +81,7 @@ readonly tracking_id="hdl:21.14103/$(uuidgen)"
 
 # Coordinate files (created by setup.sh)
 readonly coord_xy_file="${indir}/wrf.xy.coords.nc"
-readonly coord_xy_stag_file="${indir}/wrf.xy.stagger.coords.nc"
+#readonly coord_xy_stag_file="${indir}/wrf.xy.stagger.coords.nc"
 
 if [ ! -f "$coord_xy_file" ]; then
     echo "Error: coordinate file not found: $coord_xy_file" >&2
@@ -115,9 +116,6 @@ if [ "$lev" = "single" ]; then
     # change the epoch, add in the coordinates file, and only then do
     # we append in the data
 
-    #    # Step 1: Start output file
-    #    cp "$coord_file" "$tempfile"
-
     # Step 1: Start with the time coordinate from extracted data.  cdo
     # will delete it if there's no data variable, so we also create a
     # dummy variable.
@@ -148,15 +146,15 @@ if [ "$lev" = "single" ]; then
     if [[ "$cell" = "area: time: mean" ]]; then
         # Shift time to interval midpoint, add bounds
         ncap2 -h -O -s 'time+=1.0/48.0' "$outfile" "$outfile"
-        ncap2 -h -A -s 'defdim("nv",2)' "$outfile" "$outfile"
-        ncap2 -h -A -s 'time_bnds[$time,$nv]=0.0; time_bnds(:,0)=time-1.0/48.0; time_bnds(:,1)=time+1.0/48.0' "$outfile" "$outfile"
+        ncap2 -h -A -s 'defdim("bnds",2)' "$outfile" "$outfile"
+        ncap2 -h -A -s 'time_bnds[$time,$bnds]=0.0; time_bnds(:,0)=time-1.0/48.0; time_bnds(:,1)=time+1.0/48.0' "$outfile" "$outfile"
         ncatted -h -O -a bounds,time,o,c,"time_bnds" "$outfile" "$outfile"
 
     elif [[ "$cell" = "area: mean time: maximum" || "$cell" = "area: mean time: minimum" ]]; then
         # Shift time to noon, add day bounds
         ncap2 -h -O -s 'time+=0.5' "$outfile" "$outfile"
-        ncap2 -h -A -s 'defdim("nv",2)' "$outfile" "$outfile"
-        ncap2 -h -A -s 'time_bnds[$time,$nv]=0.0; time_bnds(:,0)=time-0.5; time_bnds(:,1)=time+0.5' "$outfile" "$outfile"
+        ncap2 -h -A -s 'defdim("bnds",2)' "$outfile" "$outfile"
+        ncap2 -h -A -s 'time_bnds[$time,$bnds]=0.0; time_bnds(:,0)=time-0.5; time_bnds(:,1)=time+0.5' "$outfile" "$outfile"
         ncatted -h -O -a bounds,time,o,c,"time_bnds" "$outfile" "$outfile"
     fi
 
@@ -201,6 +199,9 @@ elif [ "$lev" = "fixed" ]; then
     ncks -h -A -d x,$x_trim -d y,$y_trim -v "$var" "$infile" "$outfile"
 
 fi
+
+# Step 6: add all the metadata
+
 
 # Global attributes
 # -----------------
