@@ -105,22 +105,21 @@ if [[ -f "$coord_xy_file" && -f "$coord_xy_stag_file" ]]; then
 else
     echo "Creating coordinate reference files from $coord_ref_file ..."
 
-    ncks -h -3 --chunk_cache 4000000000 -C -d Time,0 -v XLONG,XLAT \
-        --no_tmp_fl "$coord_ref_file" "$coord_xy_file"
+    ncwa -h -3 -a Time -C -v XLAT,XLONG "$coord_ref_file" "$coord_xy_file"
 
-    # Delete all unneeded attributes: WRF holdovers
+    # Delete (lots of) unneeded attributes from WRF
     ncatted -h -a ,XLONG,d,, "$coord_xy_file"
     ncatted -h -a ,XLAT,d,, "$coord_xy_file"
     ncatted -h -a '^[A-Z0-9_-]+$',global,d,, "$coord_xy_file"
     ncatted -h -a stagger,,d,, "$coord_xy_file"
     ncatted -h -a coordinates,,d,, "$coord_xy_file"
 
-    ncrename -h -d Time,time "$coord_xy_file"
     ncrename -h -d south_north,y -d west_east,x "$coord_xy_file"
     ncrename -h -v XLAT,lat -v XLONG,lon "$coord_xy_file"
 
-    # Get rid of time in spatial coordinates
-    ncwa -h -O -a time "$coord_xy_file" "$coord_xy_file"
+    # Ensure longitudes are monotonic
+    # NOTE: this fix is specific to the NAM-12 domain; other domains may differ
+    ncap2 -h -O -s 'where(lon < 0) lon = lon + 360' "$coord_xy_file" "$coord_xy_file"
 
     # Add the projection information
     ncap2 -h -A -s "crs=-9999" "$coord_xy_file"
@@ -143,9 +142,7 @@ else
     ncatted -h -a standard_name,x,o,c,projection_x_coordinate "$coord_xy_file"
     ncatted -h -a axis,x,o,c,X -a axis,y,o,c,Y "$coord_xy_file"
 
-    # Add all appropriate names to the coordinate variables
-    ncatted -h -a ,lat,d,, "$coord_xy_file"
-    ncatted -h -a ,lon,d,, "$coord_xy_file"
+    # Add metadata for lat & lon
     ncatted -h -a units,lat,o,c,degrees_north "$coord_xy_file"
     ncatted -h -a units,lon,o,c,degrees_east "$coord_xy_file"
     ncatted -h -a long_name,lat,o,c,latitude "$coord_xy_file"
@@ -153,8 +150,8 @@ else
     ncatted -h -a standard_name,lat,o,c,latitude "$coord_xy_file"
     ncatted -h -a standard_name,lon,o,c,longitude "$coord_xy_file"
 
-    ncap2 -O -s 'lat=double(lat)' "$coord_xy_file" "$coord_xy_file"
     ncap2 -O -s 'lon=double(lon)' "$coord_xy_file" "$coord_xy_file"
+    ncap2 -O -s 'lat=double(lat)' "$coord_xy_file" "$coord_xy_file"
 
     # Conventions attribute
     ncatted -h -a Conventions,global,o,c,"CF-1.11" "$coord_xy_file"
