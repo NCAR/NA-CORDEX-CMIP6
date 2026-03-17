@@ -35,17 +35,17 @@ stdn=$9     # standard_name
 outfile=${10}  # full path to output file
 indir=${11}    # extract/data directory (contains coordinate files)
 
-echo "-------------------------------"
-echo "Variable:         $var"
-echo "Input file:       $infile"
-echo "Output file:      $outfile"
-echo "Frequency:        $freq"
-echo "Units:            $units"
-echo "Level type:       $lev"
-echo "Reference height: $refh"
-echo "Cell methods:     $cell"
-echo "Long name:        $ln"
-echo "Standard name:    $stdn"
+# echo "-------------------------------"
+# echo "Variable:         $var"
+# echo "Input file:       $infile"
+# echo "Output file:      $outfile"
+# echo "Frequency:        $freq"
+# echo "Units:            $units"
+# echo "Level type:       $lev"
+# echo "Reference height: $refh"
+# echo "Cell methods:     $cell"
+# echo "Long name:        $ln"
+# echo "Standard name:    $stdn"
 
 # Global attributes
 # -----------------
@@ -105,33 +105,71 @@ fi
 #ncatted -h -a cell_methods,lat,d,, "$coord_file"
 #ncatted -h -a cell_methods,lon,d,, "$coord_file"
 
-# Step 1: Start output file from coordinate reference (tiny; coordinates first
-# in file speeds up downstream operations)
-cp "$coord_file" "$outfile"
 
 if [ "$lev" = "single" ]; then
 
-    # Step 2: Append time coordinate and ancillary variables from infile
-    # (rename WRF spatial dims to CF names first)
+    # This is a little roundabout to avoid rewriting the entire file
+    # multiple times, which is slow.  The CDO setreftime command
+    # (which is the best option for this operation) requires separate
+    # input and output files, so we start by extracting just that,
+    # change the epoch, add in the coordinates file, and only then do
+    # we append in the data
 
-    ncks -h -A -v time "$infile" "$outfile"
+    #    # Step 1: Start output file
+    #    cp "$coord_file" "$tempfile"
 
-    # Time and calendar attributes: must be set before setreftime
-    ncatted -h -a long_name,time,o,c,time "$outfile"
-    ncatted -h -a standard_name,time,o,c,time "$outfile"
-    ncatted -h -a axis,time,o,c,T "$outfile"
-    ##ncatted -h -a calendar,time,o,c,proleptic_gregorian "$outfile"
-    # currently inherited from wrfout, needs to be changed to whatever gcm uses
+    # Step 1: Start with the time coordinate from extracted data.  cdo
+    # will delete it if there's no data variable, so we also create a
+    # dummy variable.
 
-    
-    # Step 3: Set reference time on the small file (coords + time only)
-    cdo -setreftime,1950-01-01,00:00:00,1day "$outfile" "${outfile}.cdotmp.nc"
-    mv "${outfile}.cdotmp.nc" "$outfile"
-    ncap2 -O -s 'time=double(time)' "$outfile" "$outfile"
+    tempfile=${outfile}.cmortemp.nc
 
-    ##ncatted -h -a units,time,o,c,"days since 1950-01-01 00:00:00" "$outfile"
-    # is this needed?  What does CDO write?
-    
+    ncks -h -A -v time "$infile" "$tempfile"
+    ncatted -h -a history,global,d,, $tempfile
+    ncap2 -h -A -s 'dummy[$time]=0.0f' $tempfile $tempfile
+    ncap2 -h -O -s 'time=double(time)' $tempfile $tempfile
+
+    # Time and calendar attributes must be set before setreftime
+    ncatted -h -a long_name,time,o,c,time "$tempfile"
+    ncatted -h -a standard_name,time,o,c,time "$tempfile"
+    ncatted -h -a axis,time,o,c,T "$tempfile"
+    # #ncatted -h -a calendar,time,o,c,proleptic_gregorian "$outfile"
+    # currently calendar is inherited from wrfout
+    # needs to be changed to whatever gcm uses
+
+
+    # Step 2: Set reference time, add leading zeros to month/day, then delete dummy
+    cdo -setreftime,1950-01-01,00:00:00,1day "$tempfile" "$outfile"
+    ncatted -h -a units,time,o,c,"days since 1950-01-01 00:00:00" "$outfile"
+    ncks --no_alphabetize -h -O -x -v dummy $outfile $outfile
+
+
+    # Step 3: adjust time coordinates based on cell_methods
+    if [[ "$cell" = "area: time: mean" ]]; then
+        # Shift time to interval midpoint, add bounds
+        ncap2 -h -O -s 'time+=1.0/48.0' "$outfile" "$outfile"
+        ncap2 -h -A -s 'defdim("nv",2)' "$outfile" "$outfile"
+        ncap2 -h -A -s 'time_bnds[$time,$nv]=0.0; time_bnds(:,0)=time-1.0/48.0; time_bnds(:,1)=time+1.0/48.0' "$outfile" "$outfile"
+        ncatted -h -O -a bounds,time,o,c,"time_bnds" "$outfile" "$outfile"
+
+    elif [[ "$cell" = "area: mean time: maximum" || "$cell" = "area: mean time: minimum" ]]; then
+        # Shift time to noon, add day bounds
+        ncap2 -h -O -s 'time+=0.5' "$outfile" "$outfile"
+        ncap2 -h -A -s 'defdim("nv",2)' "$outfile" "$outfile"
+        ncap2 -h -A -s 'time_bnds[$time,$nv]=0.0; time_bnds(:,0)=time-0.5; time_bnds(:,1)=time+0.5' "$outfile" "$outfile"
+        ncatted -h -O -a bounds,time,o,c,"time_bnds" "$outfile" "$outfile"
+    fi
+
+
+    # Step 4: add in coordinates; this also preserves nice variable ordering
+
+    ncks -h -A $coord_file $outfile
+    # and add the crs back in, which CDO deletes because it was poorly raised
+    # ncks -h -A -v crs $coord_file $outfile
+
+    rm $tempfile
+
+
     # If ref_height is provided (e.g., 2-m temperature, 10-m wind)
     if [[ "$refh" != "None" ]]; then
         ncap2 -h -A -s "height=double(${refh})" "$outfile"
@@ -145,17 +183,19 @@ if [ "$lev" = "single" ]; then
         coords="lat lon"
     fi
 
-    # Step 4: Append data variable with sponge layer trimmed
-    ncks -h -A -d x,$x_trim -d y,$y_trim -v "$var" "$infile" "$outfile"
+    # Step 5: trim sponge zone from data variable and append into outfile
+    # N.B. chunking is important here
+    ncks -h -A -C --chunk_map rd1 -d x,$x_trim -d y,$y_trim -v "$var" "$infile" "$outfile"
 
-    # Correct lon easting
-    ncap2 -h -O -s 'where(lon < 0) lon = lon + 360' "$outfile" "$outfile"
 
 elif [ "$lev" = "fixed" ]; then
 
-    # fx variables have no time dimension
-    ncrename -O -h -d west_east,x -d south_north,y "$infile" "$infile"
     coords="lat lon"
+    
+    cp "$coord_file" "$outfile"
+
+    ## fx variables have no time dimension
+    ##ncrename -O -h -d west_east,x -d south_north,y "$infile" "$infile"
 
     # Append data variable with sponge layer trimmed
     ncks -h -A -d x,$x_trim -d y,$y_trim -v "$var" "$infile" "$outfile"
@@ -204,24 +244,6 @@ ncatted -h -a grid_mapping,"${var}",o,c,"crs" "$outfile"
 
 if [[ "$cell" != "None" ]]; then
     ncatted -h -a cell_methods,"${var}",o,c,"${cell}" "$outfile"
-fi
-
-# Time coordinate adjustments based on cell_methods
-if [ "$lev" = "single" ]; then
-    if [[ "$cell" = "area: time: mean" ]]; then
-        # Shift time to interval midpoint, add bounds
-        ncap2 -h -O -s 'time+=1.0/48.0' "$outfile" "$outfile"
-        ncap2 -h -A -s 'defdim("nv",2)' "$outfile" "$outfile"
-        ncap2 -h -A -s 'time_bnds[$time,$nv]=0.0; time_bnds(:,0)=time-1.0/48.0; time_bnds(:,1)=time+1.0/48.0' "$outfile" "$outfile"
-        ncatted -h -O -a bounds,time,o,c,"time_bnds" "$outfile" "$outfile"
-
-    elif [[ "$cell" = "area: mean time: maximum" || "$cell" = "area: mean time: minimum" ]]; then
-        # Shift time to noon, add day bounds
-        ncap2 -h -O -s 'time+=0.5' "$outfile" "$outfile"
-        ncap2 -h -A -s 'defdim("nv",2)' "$outfile" "$outfile"
-        ncap2 -h -A -s 'time_bnds[$time,$nv]=0.0; time_bnds(:,0)=time-0.5; time_bnds(:,1)=time+0.5' "$outfile" "$outfile"
-        ncatted -h -O -a bounds,time,o,c,"time_bnds" "$outfile" "$outfile"
-    fi
 fi
 
 echo "Done"
