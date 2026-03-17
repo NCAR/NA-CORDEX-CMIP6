@@ -145,16 +145,17 @@ if not (fx_matches := glob.glob(fx_glob)):
 ds_fx = xr.open_dataset(fx_matches[0])
 
 def load_wrf(files, accumulated=False):
-    """Load WRF output files into a dataset.
+    """Load WRF output files into a dataset and rename dimensions.
     accumulated=True sets mask_and_scale=False, needed for bucket variables
     like precipitation and radiation that use integer overflow accumulation."""
-    return xr.open_mfdataset(files,
+    ds = xr.open_mfdataset(files,
                              concat_dim='Time',
                              combine='nested',
                              chunks={'time':1,'south_north':673,'west_east':707},
                              mask_and_scale=(not accumulated),
                              decode_times=False,
                              decode_coords=False).fillna(1.e20)
+    return ds.rename({'Time': 'time', 'west_east': 'x', 'south_north': 'y'})
 
 # Loader tags:
 #   'hr'   : standard hourly files, skip day-before timestep
@@ -165,8 +166,6 @@ def load_by_tag(tag):
     if tag == 'acc' : return load_wrf(hr_files,    accumulated=True)
     if tag == 'afwa': return load_wrf(afwa_files[1:])
     raise ValueError(f'Unknown loader tag: {tag}')
-
-ds_fx_inp = xr.open_dataset(f'{wrfinput_path}wrfinput_d01', decode_times=False).fillna(1.e20)
 
 # ----------------------
 
@@ -209,7 +208,7 @@ def clean_tas(ds):
     # T2 units : K
     # T2 description : 2-meter temperature
 
-    tas = ds['T2'].rename({'Time':'time'})
+    tas = ds['T2']
     tas['time'] = time_dim
     tas = tas.to_dataset(name='tas').drop_attrs()
 
@@ -222,7 +221,7 @@ def clean_tasmax(ds):
     # T2 units : K
     # T2 description : 2-meter temperature
 
-    tas = ds['T2'].rename({'Time':'time'})
+    tas = ds['T2']
     tas['time'] = time_dim
 
     tas_max = tas.groupby('time.dayofyear').max()
@@ -238,7 +237,7 @@ def clean_tasmin(ds):
     # T2 units : K
     # T2 description : 2-meter temperature
 
-    tas = ds['T2'].rename({'Time':'time'})
+    tas = ds['T2']
     tas['time'] = time_dim
 
     tas_min = tas.groupby('time.dayofyear').min()
@@ -262,7 +261,7 @@ def clean_pr(ds):
 
     pr_vars = ['I_RAINC','I_RAINNC','RAINC','RAINNC']
 
-    da = ds[pr_vars].rename({'Time':'time'})
+    da = ds[pr_vars]
     da['time'] = acc_time_dim
 
     #  / 3600 : mm/hour --> mm/sec == kg s-1 m-2
@@ -281,7 +280,7 @@ def clean_evspsbl(ds):
     # ETRAN units : mm/s
     # ETRAN description : transpiration rate
 
-    da = ds[['EDIR','ETRAN']].rename({'Time':'time'})
+    da = ds[['EDIR','ETRAN']]
     da['time'] = time_dim
     evspsbl = (da['EDIR'] + da['ETRAN']).to_dataset(name='evspsbl')
 
@@ -294,7 +293,7 @@ def clean_huss(ds):
     # Q2 units: kg kg-1
     # Q2 description: mixing ratio (QV) at 2 M
 
-    da = ds[['Q2']].rename({'Q2':'huss', 'Time':'time'})
+    da = ds[['Q2']].rename({'Q2':'huss'})
     da['time'] = time_dim
     huss = (da / (1 + da))  # Convert mixing ratio to specific humidity
 
@@ -334,7 +333,7 @@ def clean_hurs(ds):
     # conditions at very low temperature), but nobody wants it, so clip.
     hurs = hurs.clip(min=0, max=100)
 
-    hurs = hurs.to_dataset(name='hurs').rename({'Time':'time'})
+    hurs = hurs.to_dataset(name='hurs')
     hurs['time'] = time_dim
 
     return [('hurs', '1hr', hurs)]
@@ -346,7 +345,7 @@ def clean_ps(ds):
     # PSFC units: Pa
     # PSFC description: Surface pressure
 
-    ps = ds['PSFC'].rename({'Time':'time'})
+    ps = ds['PSFC']
     ps['time'] = time_dim
     ps = ps.to_dataset(name='ps').drop_attrs()
 
@@ -359,7 +358,7 @@ def clean_psl(ds):
     # AFWA_MSLP units: Pa
     # AFWA_MSLP description: Mean sea level pressure
 
-    psl = ds['AFWA_MSLP'].rename({'Time':'time'})
+    psl = ds['AFWA_MSLP']
     psl['time'] = time_dim
     psl = psl.to_dataset(name='psl').drop_attrs()
 
@@ -375,7 +374,7 @@ def _wind_components(ds):
     # U10/V10 units: m s-1
     # U10/V10 description: U/V at 10 M
 
-    da = ds[['U10','V10']].rename({'Time':'time'})
+    da = ds[['U10','V10']]
     da['time'] = time_dim
 
     cosa = ds_fx['COSALPHA'].mean(dim='Time')
@@ -409,7 +408,7 @@ def clean_rsds(ds):
     # ACSWDNB/I_ACSWDNB units: J m-2
     # ACSWDNB/I_ACSWDNB description: Accumulated downwelling shortwave flux at bottom
 
-    da = ds[['ACSWDNB','I_ACSWDNB']].rename({'Time':'time'})
+    da = ds[['ACSWDNB','I_ACSWDNB']]
     da['time'] = acc_time_dim
 
     # accumulate J/hour/m-2 to W/m2
@@ -427,7 +426,7 @@ def clean_rlds(ds):
     # ACLWDNB/I_ACLWDNB units: J m-2
     # ACLWDNB/I_ACLWDNB description: Accumulated downwelling longwave flux at bottom
 
-    da = ds[['ACLWDNB','I_ACLWDNB']].rename({'Time':'time'})
+    da = ds[['ACLWDNB','I_ACLWDNB']]
     da['time'] = acc_time_dim
 
     # accumulate J/hour/m-2 to W/m2
@@ -445,7 +444,7 @@ def clean_clt(ds):
     # CLDFRAC2D units: %
     # CLDFRAC2D description: 2-D max cloud fraction
 
-    clt = (ds['CLDFRAC2D'].rename({'Time':'time'}) * 100)
+    clt = (ds['CLDFRAC2D'] * 100)
     clt['time'] = time_dim
     clt = clt.to_dataset(name='clt').drop_attrs()
 
@@ -456,7 +455,12 @@ def clean_clt(ds):
 # ---------------------------------------------------
 # orog & sftlf must be produced from a WRF *input* file rather than an output
 # file; this function handles both.  Note they have no time dimension.
-def clean_fx(ds):
+def clean_fx():
+
+    ds = xr.open_dataset(f'{wrfinput_path}wrfinput_d01', decode_times=False) \
+           .rename({'west_east': 'x', 'south_north': 'y'}) \
+           .fillna(1.e20)
+
     # LANDMASK units: 1 (0 = no land, 1 = land; binary)
     # HGT units: m
 
@@ -466,8 +470,8 @@ def clean_fx(ds):
     if os.path.exists(os.path.join(outdir, 'sftlf', sftlf_fout)):
         return
 
-    sftlf  = ds['LANDMASK'].mean(dim='Time')
     seaice = ds['SEAICE'].mean(dim='Time')
+    sftlf  = ds['LANDMASK'].mean(dim='Time')
     orog   = ds['HGT'].mean(dim='Time')
 
     seaice = xr.where(seaice!=0, 1, 0)
@@ -521,7 +525,7 @@ def get_dispatch(var):
 # Call functions
 # --------------
 if variable == 'fx':
-    clean_fx(ds_fx_inp)
+    clean_fx()
 else:
     entry = get_dispatch(variable)
     if entry is None:
