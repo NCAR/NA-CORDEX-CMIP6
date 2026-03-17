@@ -77,12 +77,19 @@ do_overwrite_existing = True
 # input files for the NA-CORDEX simulations.
 wrfinput_path     = "/glade/derecho/scratch/jsallen/NA-CORDEX-CMIP6/ERA5_HIST_E03/input_example/"
 
-wrfout_hour_fname = "wrfout_hour_d01_"  # Leading string of wrfout files with hourly output
-wrfout_fx_fname   = "wrfout_5day_d01_"  # Leading string of wrfout files with LANDFRAC and HGT
+wrfout_hour_fname = "wrfout_hour_d01_"  # prefix for files with hourly output
+wrfout_fx_fname   = "wrfout_5day_d01_"  # prefix for files with LANDFRAC and HGT
 
 # -------------------------------
 # END OF USER DEFINED VARIABLES
 # -------------------------------
+
+# Dimension renaming (specified by CORDEX)
+#-------------------
+dname_map_t = {'Time': 'time'}
+dname_map_xy = {'west_east': 'x', 'south_north': 'y'}
+dname_map_xyt = dname_map_t | dname_map_xy
+
 
 # File naming
 # -----------
@@ -155,7 +162,7 @@ def load_wrf(files, accumulated=False):
                              mask_and_scale=(not accumulated),
                              decode_times=False,
                              decode_coords=False).fillna(1.e20)
-    return ds.rename({'Time': 'time', 'west_east': 'x', 'south_north': 'y'})
+    return ds.rename(dname_map_xyt)
 
 # Loader tags:
 #   'hr'   : standard hourly files, skip day-before timestep
@@ -373,12 +380,13 @@ def _wind_components(ds):
     Returns (uas, vas) as DataArrays."""
     # U10/V10 units: m s-1
     # U10/V10 description: U/V at 10 M
+    # Note: U10/V10 are diagnostic and on mass grid; no unstagger needed
 
     da = ds[['U10','V10']]
     da['time'] = time_dim
 
-    cosa = ds_fx['COSALPHA'].mean(dim='Time')
-    sina = ds_fx['SINALPHA'].mean(dim='Time')
+    cosa = ds_fx['COSALPHA'].mean(dim='Time').rename(dname_map_xy)
+    sina = ds_fx['SINALPHA'].mean(dim='Time').rename(dname_map_xy)
 
     # Rotate winds to earth relative (lat/lon) coordinates.
     # NOTE: signs on sinalpha are correct as written; some sources
@@ -458,7 +466,7 @@ def clean_clt(ds):
 def clean_fx():
 
     ds = xr.open_dataset(f'{wrfinput_path}wrfinput_d01', decode_times=False) \
-           .rename({'west_east': 'x', 'south_north': 'y'}) \
+           .rename(_dname_map_xy) \
            .fillna(1.e20)
 
     # LANDMASK units: 1 (0 = no land, 1 = land; binary)
