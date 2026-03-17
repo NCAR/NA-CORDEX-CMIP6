@@ -57,8 +57,8 @@ CMDDIR="$(realpath $CMDDIR)"
 
 [[ ! -d "$INDIR" ]] && { echo "Error: INDIR not found: $INDIR" >&2; exit 1; }
 
-# Check that coordinate files exist in INDIR (produced by setup.sh)
-for cf in wrf.xy.coords.nc wrf.xy.stagger.coords.nc; do
+# Check that coordinate file exists in INDIR (produced by setup.sh)
+for cf in wrf.xy.coords.nc; do
     [[ ! -f "$INDIR/$cf" ]] && {
         echo "Error: Coordinate file not found: $INDIR/$cf" >&2
         echo "Run setup.sh with the same OUTDIR as extract.sh." >&2
