@@ -2,9 +2,9 @@
 
 # setup.sh - One-time setup for NA-CORDEX-CMIP6 postprocessing workflow.
 #
-# Creates WRF coordinate reference files and downloads the data request CSV
-# and CMOR JSON tables needed by later workflow steps.  Run once before
-# running extract.sh, format.sh, etc.
+# Creates WRF coordinate reference file and downloads the data request
+# CSV needed by later workflow steps.  Run once before running
+# extract.sh, format.sh, etc.
 #
 # All outputs are written to OUTDIR.  Use the same OUTDIR as extract.sh /
 # postprocess.core.variables.py so that aggregate.sh and cmorize.sh can find
@@ -72,38 +72,17 @@ else
     echo "  -> $DR_CSV"
 fi
 
-# # ---------------------------------------------------------------
-# # CMOR JSON tables: download if not already present
-# # ---------------------------------------------------------------
-# for freq in $CMOR_FREQS; do
-#     json="$OUTDIR/CORDEX-CMIP6_${freq}.json"
-#     if [[ -f "$json" ]]; then
-#         echo "CMOR table already exists: $json (skipping)"
-#     else
-#         echo "Downloading CMOR table for $freq..."
-#         curl -L -o "$json" "${CMOR_BASE}_${freq}.json"
-#         echo "  -> $json"
-#     fi
-# done
 
 # ---------------------------------------------------------------
-# WRF coordinate reference files
+# WRF coordinate reference file
 # ---------------------------------------------------------------
-# wrf.xy.coords.nc        : lat/lon/x/y/crs for non-staggered variables
-# wrf.xy.stagger.coords.nc: trimmed by 1 in x and y, for staggered wind
-#                           variables (uas, vas, sfcWind)
-#
-# This code is moved here from cmorize.sh, where it ran once per job and
-# was subject to race conditions under parallel execution.  Running it once
-# in setup eliminates both problems.
 
 readonly coord_xy_file="${OUTDIR}/wrf.xy.coords.nc"
-readonly coord_xy_stag_file="${OUTDIR}/wrf.xy.stagger.coords.nc"
 
-if [[ -f "$coord_xy_file" && -f "$coord_xy_stag_file" ]]; then
-    echo "Coordinate files already exist (skipping)"
+if [[ -f "$coord_xy_file" ]]; then
+    echo "Coordinate file already exists (skipping)"
 else
-    echo "Creating coordinate reference files from $coord_ref_file ..."
+    echo "Creating coordinate reference file from $coord_ref_file ..."
 
     ncwa -h -3 -a Time -C -v XLAT,XLONG "$coord_ref_file" "$coord_xy_file"
 
@@ -158,11 +137,7 @@ else
     ncatted -h -a institution,global,o,c,"National Center for Atmospheric Research: Research Applications Laboratory" "$coord_xy_file"
     ncatted -h -a source,global,o,c,"Weather Research and Forecasting Model Version 4.6.1" "$coord_xy_file"
 
-    # Staggered version for wind variables
-    ncks -h -O -d x,1, -d y,1, "$coord_xy_file" "$coord_xy_stag_file"
-
     echo "  -> $coord_xy_file"
-    echo "  -> $coord_xy_stag_file"
 fi
 
 echo ""
