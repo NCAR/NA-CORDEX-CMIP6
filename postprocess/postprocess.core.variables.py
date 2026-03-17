@@ -466,7 +466,7 @@ def clean_clt(ds):
 def clean_fx():
 
     ds = xr.open_dataset(f'{wrfinput_path}wrfinput_d01', decode_times=False) \
-           .rename(_dname_map_xy) \
+           .rename(dname_map_xy) \
            .fillna(1.e20)
 
     # LANDMASK units: 1 (0 = no land, 1 = land; binary)
