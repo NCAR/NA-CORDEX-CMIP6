@@ -1,47 +1,52 @@
 #!/bin/bash
 
-# relocate.sh - Generate commandfiles for moving aggregated CORDEX data
-# into a CORDEX DRS output tree.
+# relocate.sh - Populate a CORDEX DRS output tree by hard-linking files
+# from the aggregate output directory.
 #
-# Reads from INDIR (the OUTDIR from aggregate.sh), where data is organized
-# in <var>.<freq> subdirectories, and generates cp commandfiles to place
-# files into the appropriate DRS paths under OUTDIR.
+# Input is organized in <var>.<freq> subdirectories (the OUTDIR from
+# aggregate.sh).  Output is a CORDEX DRS tree rooted at OUTDIR.
 #
-# Usage: relocate.sh [OPTIONS] INDIR OUTDIR VERSION [CMDDIR]
+# Hard links are used rather than copies to avoid duplicating the data.
+# INDIR and OUTDIR must be on the same filesystem for this to work.
+#
+# After the tree is populated, use Globus to transfer from OUTDIR to
+# campaign storage.
+#
+# Usage: relocate.sh [OPTIONS] INDIR OUTDIR VERSION
 
 set -euo pipefail
 
-# project id (esgf-qa wants this as root of output tree)
-PROJECT="cordex-cmip6"
+# CORDEX-CMIP6 DRS constants
+PROJECT="CORDEX-CMIP6"
+ACTIVITY_ID="DD"
 
 usage() {
     cat >&2 <<EOF
-Usage: $(basename "$0") [OPTIONS] INDIR OUTDIR VERSION [CMDDIR]
+Usage: $(basename "$0") [OPTIONS] INDIR OUTDIR VERSION
 
-Generate commandfiles for placing aggregated CORDEX files into a DRS output tree.
+Populate a CORDEX DRS output tree by hard-linking aggregated files.
 
 Arguments:
   INDIR    Input directory containing <var>.<freq> subdirectories
            (the OUTDIR from aggregate.sh)
   OUTDIR   DRS output tree root
   VERSION  Dataset version string (e.g. v20250101)
-  CMDDIR   Directory for commandfiles (default: current directory)
 
 Options:
   --force     Overwrite existing output files
+  --dry-run   Print what would be done without executing
   -h, --help  Show this help message
-
-One commandfile per variable (<var>.<freq>.cmd) is generated for parallel
-execution via launch_cf.
 EOF
     exit 1
 }
 
 FORCE=0
+DRY=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --force) FORCE=1; shift ;;
+        --force)   FORCE=1; shift ;;
+        --dry-run) DRY=1; shift ;;
         -h|--help) usage ;;
         -*) echo "Error: Unknown option $1" >&2; usage ;;
         *) break ;;
@@ -51,12 +56,8 @@ done
 [[ $# -lt 3 ]] && usage
 
 INDIR="$(realpath "$1")"
-mkdir -p "$2"
 OUTDIR="$(realpath "$2")"
 VERSION="$3"
-CMDDIR="${4:-.}"
-mkdir -p "$CMDDIR"
-CMDDIR="$(realpath "$CMDDIR")"
 
 # Validate version string
 if ! [[ "$VERSION" =~ ^v[0-9]{8}$ ]]; then
@@ -66,19 +67,20 @@ fi
 
 [[ ! -d "$INDIR" ]] && { echo "Error: Input directory not found: $INDIR" >&2; exit 1; }
 
-mkdir -p "$OUTDIR" "$CMDDIR"
-
-# Function to generate DRS output directory path from a CORDEX filename
-# Format: var_domain_drvsrc_drvexp_drvvar_inst_src_verreal_freq[_timespan].nc
-# DRS:    PROJECT/drvsrc/drvexp/drvvar/src/verreal/freq/var/VERSION/
-gen_drs_dir() {
-    local fname="$1" freq="$2"
-    local base="${fname%.nc}"
-    IFS='_' read -r var domain drvsrc drvexp drvvar inst src verreal _freq _rest <<< "$base"
-    echo "$OUTDIR/$PROJECT/$drvsrc/$drvexp/$drvvar/$src/$verreal/$freq/$var/$VERSION"
+do_cmd() {
+    if [[ $DRY -eq 1 ]]; then
+        echo "  $*"
+    else
+        "$@"
+    fi
 }
 
+nlinked=0
+nskipped=0
+nfailed=0
+
 echo "Scanning input directory: $INDIR"
+[[ $DRY -eq 1 ]] && echo "(dry run)"
 
 for vardir in "$INDIR"/*/; do
     [[ ! -d "$vardir" ]] && continue
@@ -88,45 +90,49 @@ for vardir in "$INDIR"/*/; do
     freq="${dirname##*.}"
 
     files=("$vardir"*.nc)
-    [[ ! -f "${files[0]:-}" ]] && {
-        echo "Warning: No NetCDF files found in $vardir" >&2
-        continue
-    }
+    [[ ! -f "${files[0]:-}" ]] && continue
 
     echo "Processing: $dirname"
-
-    cmdfile="$CMDDIR/${varname}.${freq}.cmd"
-    > "$cmdfile"
-    ncommands=0
-    nskipped=0
 
     for infile in "${files[@]}"; do
         [[ ! -f "$infile" ]] && continue
         fname="$(basename "$infile")"
 
-        drsdir="$(gen_drs_dir "$fname" "$freq")"
+        # Parse DRS components from CORDEX filename:
+        # var_domain_drvsrc_drvexp_drvvar_inst_src_verreal_freq[_timespan].nc
+        base="${fname%.nc}"
+        IFS='_' read -r _var domain drvsrc drvexp drvvar inst src verreal _rest <<< "$base"
+
+        # DRS: PROJECT/activity_id/domain_id/institution_id/driving_source_id/
+        #      driving_experiment_id/driving_variant_label/source_id/
+        #      version_realization/frequency/variable_id/version/
+        drsdir="$OUTDIR/$PROJECT/$ACTIVITY_ID/$domain/$inst/$drvsrc/$drvexp/$drvvar/$src/$verreal/$freq/$varname/$VERSION"
         outpath="$drsdir/$fname"
 
-        ((ncommands++)) || true
-
-        if [[ -f "$outpath" && $FORCE -eq 0 ]]; then
-            ((nskipped++)) || true
-            continue
+        if [[ -f "$outpath" ]]; then
+            if [[ $FORCE -eq 1 ]]; then
+                do_cmd rm "$outpath"
+            else
+                (( nskipped++ )) || true
+                continue
+            fi
         fi
 
-        mkdir -p "$drsdir"
-        echo "cp $infile $outpath" >> "$cmdfile"
+        do_cmd mkdir -p "$drsdir"
+        if do_cmd ln "$infile" "$outpath"; then
+            (( nlinked++ )) || true
+        else
+            (( nfailed++ )) || true
+        fi
     done
-
-    ngenerated=$((ncommands - nskipped))
-    echo "  $dirname: $ngenerated commands, skipped $nskipped/$ncommands existing"
-
-    [[ ! -s "$cmdfile" ]] && rm "$cmdfile"
 done
 
 echo ""
-echo "Commandfile generation complete!"
-echo "Commandfiles written to: $CMDDIR"
-echo ""
-echo "To run with launch_cf:"
-echo "  launch_multi --run RUNDIR $CMDDIR/*.cmd"
+echo "Done."
+echo "  Linked:  $nlinked"
+echo "  Skipped: $nskipped"
+echo "  Failed:  $nfailed"
+if [[ $nfailed -gt 0 ]]; then
+    echo "  WARNING: Some files failed to link. Check for cross-device link errors."
+    exit 1
+fi
