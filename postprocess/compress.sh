@@ -80,17 +80,18 @@ print('' if val is None else val)
 
 echo "Scanning input directory: $INDIR"
 
-for vardir in "$INDIR"/*/; do
-    [[ ! -d "$vardir" ]] && continue
-    varname="$(basename "$vardir")"
+for dir in "$INDIR"/*/; do
+    [[ ! -d "$dir" ]] && continue
+    dirname="$(basename "$dir")"
+    varname="${dirname%.*}"      # strip .freq suffix
 
-    files=("$vardir"*.nc)
+    files=("$dir"*.nc)
     [[ ! -f "${files[0]:-}" ]] && continue
 
     # Look up quantization level for this variable
     qnt="$(get_spec "$varname" qnt)"
 
-    cmdfile="$CMDDIR/${varname}.cmd"
+    cmdfile="$CMDDIR/${dirname}.cmd"
     > "$cmdfile"
     ncommands=0
     nskipped=0
@@ -99,7 +100,7 @@ for vardir in "$INDIR"/*/; do
         [[ ! -f "$infile" ]] && continue
         fname="$(basename "$infile")"
 
-        outdir_var="$OUTDIR/$varname"
+        outdir_var="$OUTDIR/$dirname"
         outfile="$outdir_var/$fname"
 
         if [[ -f "$outfile" && $FORCE -eq 0 ]]; then
@@ -121,7 +122,7 @@ for vardir in "$INDIR"/*/; do
     done
 
     ngenerated=$(( ncommands - nskipped ))
-    echo "  $varname: $ngenerated commands (qnt=${qnt:-lossless}), skipped $nskipped/$ncommands existing"
+    echo "  $dirname: $ngenerated commands (qnt=${qnt:-lossless}), skipped $nskipped/$ncommands existing"
 
     [[ ! -s "$cmdfile" ]] && rm "$cmdfile"
 done
