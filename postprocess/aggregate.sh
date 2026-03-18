@@ -1,33 +1,32 @@
 #!/bin/bash
 
-# aggregate_cordex.sh - Generate commandfiles for NA-CORDEX (WRF) aggregation
-# Aggregates hourly -> daily -> monthly according to CORDEX-CMIP6 specs
-# Also generates commandfiles to copy hourly files into the DRS output tree.
+# aggregate.sh - Generate commandfiles for NA-CORDEX (WRF) aggregation
+# Aggregates hourly -> daily -> monthly according to CORDEX-CMIP6 specs.
+# Also generates commandfiles to copy hourly and fx files into the output tree.
+#
+# Output is organized in per-variable subdirectories named <var>.<freq>.
+# Use relocate.sh to move the results into a CORDEX DRS output tree.
 #
 # The data request CSV (dreq_default.csv) is expected in INDIR, where it is
-# placed by setup.sh alongside the extracted data files.
+# placed by format.sh.
 
 set -euo pipefail
 
 # URL shown in help if CSV is missing from INDIR
 DR_CSV_URL="https://raw.githubusercontent.com/WCRP-CORDEX/data-request-table/main/data-request/dreq_default.csv"
 
-# project id (esgf-qa wants this as root of output tree)
-PROJECT="cordex-cmip6"
-
 usage() {
     cat >&2 <<EOF
-Usage: $(basename "$0") [OPTIONS] INDIR OUTDIR VERSION [CMDDIR]
+Usage: $(basename "$0") [OPTIONS] INDIR OUTDIR [CMDDIR]
 
 Generate CDO commandfiles for aggregating CORDEX data to requested frequencies,
-and cp commandfiles for placing hourly files into the DRS output tree.
+and cp commandfiles for placing hourly and fx files into the output tree.
 
 Arguments:
-  INDIR    Input directory containing variable subdirectories with yearly
+  INDIR    Input directory containing <var>.<freq> subdirectories with yearly
            NetCDF files; must also contain dreq_default.csv (placed here
-           by setup.sh)
-  OUTDIR   Output directory tree root
-  VERSION  Dataset version string (e.g. v20250101)
+           by format.sh)
+  OUTDIR   Output directory root (subdirs named <var>.<freq> created here)
   CMDDIR   Directory for commandfiles (default: current directory)
 
 Options:
@@ -55,27 +54,20 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-[[ $# -lt 3 ]] && usage
+[[ $# -lt 2 ]] && usage
 
 INDIR="$(realpath "$1")"
-mkdir -p $2
+mkdir -p "$2"
 OUTDIR="$(realpath "$2")"
-VERSION="$3"
-CMDDIR="${4:-.}"
-mkdir -p $CMDDIR
+CMDDIR="${3:-.}"
+mkdir -p "$CMDDIR"
 CMDDIR="$(realpath "$CMDDIR")"
 
-# Resolve CSV path: explicit override, or look in INDIR (placed there by setup.sh)
+# Resolve CSV path: explicit override, or look in INDIR (placed there by format.sh)
 if [[ -n "$CSV_OVERRIDE" ]]; then
     DR_CSV="$CSV_OVERRIDE"
 else
     DR_CSV="$INDIR/dreq_default.csv"
-fi
-
-# Validate version string
-if ! [[ "$VERSION" =~ ^v[0-9]{8}$ ]]; then
-    echo "Error: VERSION must match vYYYYMMDD (e.g. v20250101), got: $VERSION" >&2
-    exit 1
 fi
 
 # Validate inputs
@@ -84,14 +76,11 @@ fi
     cat >&2 <<EOF
 Error: Data request CSV not found: $DR_CSV
 
-Re-run setup.sh with the same OUTDIR as extract.sh, or download manually:
+Re-run format.sh with the same OUTDIR, or download manually:
   curl -L -o "$DR_CSV" "$DR_CSV_URL"
 EOF
     exit 1
 }
-
-# Create output directories
-mkdir -p "$OUTDIR" "$CMDDIR"
 
 # Validate CSV layout (columns must match exactly; update if dreq format changes)
 expected_header="out_name,frequency,units,long_name,standard_name,cell_methods,priority,comment"
@@ -101,6 +90,8 @@ expected_header="out_name,frequency,units,long_name,standard_name,cell_methods,p
     exit 1
 }
 
+mkdir -p "$OUTDIR" "$CMDDIR"
+
 # Aggregatable variables (non-fx): used to skip irrelevant input directories
 AGGVARS=$(tail -n +2 "$DR_CSV" | grep -v ',fx,' | cut -f1 -d, | sort -u)
 
@@ -108,28 +99,11 @@ AGGVARS=$(tail -n +2 "$DR_CSV" | grep -v ',fx,' | cut -f1 -d, | sort -u)
 # time units are assumed to be 'days since ...' throughout (guaranteed by cmorize.sh).
 POINTVARS=$(awk -F',' 'NR>1 && $2 ~ /hr/ && $6 ~ /time: point/ {print $1}' "$DR_CSV")
 
-# Function to parse CORDEX filename and extract DRS components
-parse_filename() {
-    local fname="$1"
-    local base="${fname%.nc}"
-
-    # Format: var_domain_drvsrc_drvexp_drvvar_inst_src_verreal_freq[_time]
-    IFS='_' read -r var domain drvsrc drvexp drvvar inst src verreal freq timespan <<< "$base"
-
-    echo "$var" "$domain" "$drvsrc" "$drvexp" "$drvvar" "$inst" "$src" "$verreal" "$freq" "$timespan"
-}
-
-# Function to extract year from timespan
-# (YYYY or YYYYMM-YYYYMM or YYYYMMDDhhmm-YYYYMMDDhhmm)
+# Function to extract year from CORDEX filename timespan field
+# (YYYYMMDDhhmm-YYYYMMDDhhmm or YYYYMMDD-YYYYMMDD or YYYYMM-YYYYMM)
 extract_year() {
     local timespan="$1"
     echo "${timespan:0:4}"
-}
-
-# Function to generate output directory path
-gen_outdir() {
-    local drvsrc="$1" drvexp="$2" drvvar="$3" src="$4" verreal="$5" freq="$6" var="$7"
-    echo "$OUTDIR/$PROJECT/$drvsrc/$drvexp/$drvvar/$src/$verreal/$freq/$var/$VERSION"
 }
 
 # Function to generate output filename
@@ -191,13 +165,47 @@ compute_ranges() {
     printf "%s\n" "${ranges[@]}"
 }
 
-# Process each variable directory
 echo "Scanning input directory: $INDIR"
 
 for vardir in "$INDIR"/*/; do
     [[ ! -d "$vardir" ]] && continue
 
-    varname=$(basename "$vardir")
+    # Input subdirs from format/compress are flat <var> dirs.
+    # infreq is determined from the first filename below.
+    varname="$(basename "$vardir")"
+
+    # Find all NetCDF files
+    files=("$vardir"*.nc)
+    [[ ! -f "${files[0]:-}" ]] && {
+        echo "Warning: No NetCDF files found in $vardir" >&2
+        continue
+    }
+
+    # Parse first file to get DRS components and input frequency from filename
+    fname=$(basename "${files[0]}")
+    # Format: var_domain_drvsrc_drvexp_drvvar_inst_src_verreal_freq_timespan.nc
+    base="${fname%.nc}"
+    IFS='_' read -r _var domain drvsrc drvexp drvvar inst src verreal infreq timespan <<< "$base"
+
+    # fx variables: just copy into <var>.fx subdir
+    if [[ "$infreq" == "fx" ]]; then
+        fx_cmdfile="$CMDDIR/${varname}.fx.cmd"
+        > "$fx_cmdfile"
+
+        for f in "${files[@]}"; do
+            [[ ! -f "$f" ]] && continue
+            outdir_var="$OUTDIR/${varname}.fx"
+            outpath="$outdir_var/$(basename "$f")"
+            if [[ -f "$outpath" && $FORCE -eq 0 ]]; then
+                continue
+            fi
+            mkdir -p "$outdir_var"
+            echo "cp $f $outpath" >> "$fx_cmdfile"
+        done
+
+        [[ ! -s "$fx_cmdfile" ]] && rm "$fx_cmdfile"
+        continue
+    fi
 
     # Check if variable is in data request
     echo "$AGGVARS" | grep -qw "$varname" || {
@@ -205,18 +213,7 @@ for vardir in "$INDIR"/*/; do
         continue
     }
 
-    # Find all NetCDF files
-    files=("$vardir"/*.nc)
-    [[ ! -f "${files[0]}" ]] && {
-        echo "Warning: No NetCDF files found for $varname" >&2
-        continue
-    }
-
-    echo "Processing variable: $varname"
-
-    # Parse first file to get DRS components
-    fname=$(basename "${files[0]}")
-    read -r var domain drvsrc drvexp drvvar inst src verreal infreq timespan <<< "$(parse_filename "$fname")"
+    echo "Processing: $varname ($infreq)"
 
     # Determine years available
     declare -A yearfiles
@@ -226,80 +223,66 @@ for vardir in "$INDIR"/*/; do
     for f in "${files[@]}"; do
         fname=$(basename "$f")
         [[ ! "$fname" =~ \.nc$ ]] && continue
-
-        read -r _ _ _ _ _ _ _ _ _ timespan <<< "$(parse_filename "$fname")"
+        base="${fname%.nc}"
+        timespan="${base##*_}"
         [[ -z "$timespan" ]] && continue
-
         year=$(extract_year "$timespan")
         yearfiles[$year]="$f"
-
         [[ $year -lt $minyear ]] && minyear=$year
         [[ $year -gt $maxyear ]] && maxyear=$year
     done
 
     [[ $minyear -eq 9999 ]] && {
-        echo "Warning: Could not determine year range for $varname" >&2
+        echo "Warning: Could not determine year range for $dirname" >&2
         continue
     }
 
-    echo "  Years available: $minyear-$maxyear"
+    echo "  Years available: $minyear-$maxyear ($varname)"
 
     # Generate hourly copy commandfile if input is hourly
     if [[ "$infreq" =~ hr$ ]]; then
-        hr_cmdfile="$CMDDIR/${varname}.hr.cmd"
+        hr_cmdfile="$CMDDIR/${varname}.${infreq}.cmd"
         > "$hr_cmdfile"
 
         for year in $(seq "$minyear" "$maxyear"); do
             [[ -z "${yearfiles[$year]:-}" ]] && continue
             src_file="${yearfiles[$year]}"
-            outdir="$(gen_outdir "$drvsrc" "$drvexp" "$drvvar" "$src" "$verreal" "$infreq" "$varname")"
-            outfile="$(basename "$src_file")"
-            outpath="$outdir/$outfile"
+            outdir_var="$OUTDIR/${varname}.${infreq}"
+            outpath="$outdir_var/$(basename "$src_file")"
 
             if [[ -f "$outpath" && $FORCE -eq 0 ]]; then
                 continue
             fi
 
-            mkdir -p "$outdir"
+            mkdir -p "$outdir_var"
             echo "cp $src_file $outpath" >> "$hr_cmdfile"
         done
 
         [[ ! -s "$hr_cmdfile" ]] && rm "$hr_cmdfile"
     fi
 
-    # Process each target frequency (day, mon) and check if inputs exist
+    # Process each target frequency (day, mon)
     for freq in day mon; do
         cmdfile="$CMDDIR/${varname}.${freq}.cmd"
-        > "$cmdfile"  # Truncate/create
+        > "$cmdfile"
 
-        # Determine where input files should be for this frequency
+        # Determine input files for this frequency
         declare -A freq_yearfiles=()
         freq_minyear=9999
         freq_maxyear=0
 
         if [[ "$freq" == "day" ]]; then
-            if [[ "$infreq" == "day" ]]; then
-                # Input is already daily: merge into DRS tree in 5-year chunks
-                for year in "${!yearfiles[@]}"; do
-                    freq_yearfiles[$year]="${yearfiles[$year]}"
-                    [[ $year -lt $freq_minyear ]] && freq_minyear=$year
-                    [[ $year -gt $freq_maxyear ]] && freq_maxyear=$year
-                done
-            elif [[ "$infreq" =~ hr$ ]]; then
-                # Input is hourly: aggregate to daily
+            if [[ "$infreq" == "day" || "$infreq" =~ hr$ ]]; then
                 for year in "${!yearfiles[@]}"; do
                     freq_yearfiles[$year]="${yearfiles[$year]}"
                     [[ $year -lt $freq_minyear ]] && freq_minyear=$year
                     [[ $year -gt $freq_maxyear ]] && freq_maxyear=$year
                 done
             else
-                # Input is neither hourly nor daily, skip
                 rm "$cmdfile"
                 continue
             fi
         elif [[ "$freq" == "mon" ]]; then
-            # Monthly aggregation: need daily input files
-            # Check input directory first (if input is already daily)
             if [[ "$infreq" == "day" ]]; then
                 for year in "${!yearfiles[@]}"; do
                     freq_yearfiles[$year]="${yearfiles[$year]}"
@@ -308,14 +291,14 @@ for vardir in "$INDIR"/*/; do
                 done
             else
                 # Look for daily output files from previous aggregation
-                daily_outdir="$(gen_outdir "$drvsrc" "$drvexp" "$drvvar" "$src" "$verreal" "day" "$varname")"
+                daily_dir="$OUTDIR/${varname}.day"
                 daily_pattern="${varname}_${domain}_${drvsrc}_${drvexp}_${drvvar}_${inst}_${src}_${verreal}_day_*.nc"
 
                 shopt -s nullglob
-                for f in "$daily_outdir"/$daily_pattern; do
+                for f in "$daily_dir"/$daily_pattern; do
                     [[ ! -f "$f" ]] && continue
-                    fname=$(basename "$f")
-                    read -r _ _ _ _ _ _ _ _ _ timespan <<< "$(parse_filename "$fname")"
+                    base="${f%.nc}"
+                    timespan="${base##*_}"
                     [[ -z "$timespan" ]] && continue
                     year=$(extract_year "$timespan")
                     freq_yearfiles[$year]="$f"
@@ -326,7 +309,6 @@ for vardir in "$INDIR"/*/; do
             fi
         fi
 
-        # Skip if no input files found for this frequency
         if [[ "${#freq_yearfiles[@]}" -eq 0 ]]; then
             rm "$cmdfile"
             continue
@@ -335,7 +317,6 @@ for vardir in "$INDIR"/*/; do
         echo "  Generating $cmdfile"
         echo "    Input years available: $freq_minyear-$freq_maxyear"
 
-        # Compute output ranges
         mapfile -t ranges < <(compute_ranges "$freq" "$freq_minyear" "$freq_maxyear")
 
         nskipped=0
@@ -344,7 +325,6 @@ for vardir in "$INDIR"/*/; do
         for range in "${ranges[@]}"; do
             IFS='-' read -r startyear endyear <<< "$range"
 
-            # Collect input files for this range
             infiles=()
             for ((year=startyear; year<=endyear; year++)); do
                 [[ -n "${freq_yearfiles[$year]:-}" ]] && infiles+=("${freq_yearfiles[$year]}")
@@ -352,18 +332,18 @@ for vardir in "$INDIR"/*/; do
 
             [[ ${#infiles[@]} -eq 0 ]] && continue
 
-            # Generate output path and filename
-            outdir="$(gen_outdir "$drvsrc" "$drvexp" "$drvvar" "$src" "$verreal" "$freq" "$varname")"
+            outdir_var="$OUTDIR/${varname}.${freq}"
             outfile="$(gen_outfile "$varname" "$domain" "$drvsrc" "$drvexp" "$drvvar" "$inst" "$src" "$verreal" "$freq" "$startyear" "$endyear")"
-            outpath="$outdir/$outfile"
+            outpath="$outdir_var/$outfile"
 
             ((ncommands++)) || true
 
-            # Check for existing files
             if [[ -f "$outpath" && $FORCE -eq 0 ]]; then
                 ((nskipped++)) || true
                 continue
             fi
+
+            mkdir -p "$outdir_var"
 
             # Determine CDO operator and generate command.
             # For instantaneous (time: point) variables aggregated to daily,
@@ -371,7 +351,6 @@ for vardir in "$INDIR"/*/; do
             # and ncap2 shifts the time coordinate from 11:30 to 12:00.
             # bash -c ensures && semantics regardless of the user's default shell.
             # Time units are assumed to be 'days since ...' throughout (guaranteed by cmorize.sh).
-            mkdir -p "$outdir"
             case "$freq" in
                 mon)
                     echo "cdo monmean -mergetime ${infiles[*]} $outpath" >> "$cmdfile"
@@ -390,11 +369,9 @@ for vardir in "$INDIR"/*/; do
             esac
         done
 
-        # Report stats
         ngenerated=$((ncommands - nskipped))
         echo "    Generated $ngenerated commands, skipped $nskipped/$ncommands existing files"
 
-        # Clean up empty commandfile
         [[ ! -s "$cmdfile" ]] && rm "$cmdfile"
 
     done
