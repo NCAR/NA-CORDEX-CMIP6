@@ -152,9 +152,7 @@ if [ "$lev" = "single" ]; then
 
     # Step 4: add in coordinates; this also preserves nice variable ordering
 
-    ncks -h -A $coord_file $outfile
-    # and add the crs back in, which CDO deletes because it was poorly raised
-    # ncks -h -A -v crs $coord_file $outfile
+    ncks -h -A -d x,$x_trim -d y,$y_trim $coord_file $outfile
 
     rm $tempfile
 
@@ -181,7 +179,7 @@ elif [ "$lev" = "fixed" ]; then
 
     coords="lat lon"
     
-    cp "$coord_file" "$outfile"
+    ncks -h -d x,$x_trim -d y,$y_trim "$coord_file" "$outfile"
 
     ## fx variables have no time dimension
     ##ncrename -O -h -d west_east,x -d south_north,y "$infile" "$infile"
@@ -237,6 +235,8 @@ ncatted -h -a units,"${var}",o,c,"${units}" \
            -a long_name,"${var}",o,c,"${ln}" \
            -a coordinates,"${var}",o,c,"${coords}" \
            -a grid_mapping,"${var}",o,c,"crs" \
+	   -a _Fillvalue,"${var}",o,f,1.e20 \
+	   -a missing_value,"${var}",o,f,1.e20 \
 	   $outfile
 	   
 if [[ "$cell" != "None" ]]; then
