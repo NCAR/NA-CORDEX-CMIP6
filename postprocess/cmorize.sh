@@ -81,7 +81,6 @@ readonly tracking_id="hdl:21.14103/$(uuidgen)"
 
 # Coordinate files (created by setup.sh)
 readonly coord_xy_file="${indir}/wrf.xy.coords.nc"
-#readonly coord_xy_stag_file="${indir}/wrf.xy.stagger.coords.nc"
 
 if [ ! -f "$coord_xy_file" ]; then
     echo "Error: coordinate file not found: $coord_xy_file" >&2
@@ -91,20 +90,9 @@ fi
 
 mkdir -p "$(dirname "$outfile")"
 
-# Select coordinate file and sponge-layer trim bounds based on variable
-if [ "$var" = "uas" -o "$var" = "vas" -o "$var" = "sfcWind" ]; then
-    coord_file="$coord_xy_stag_file"
-    x_trim="9,-11"
-    y_trim="9,-11"
-else
-    coord_file="$coord_xy_file"
-    x_trim="10,-11"
-    y_trim="10,-11"
-fi
-
-# Remove cell_methods from lat/lon before appending (NCO carries them over)
-#ncatted -h -a cell_methods,lat,d,, "$coord_file"
-#ncatted -h -a cell_methods,lon,d,, "$coord_file"
+coord_file="$coord_xy_file"
+x_trim="10,-11"
+y_trim="10,-11"
 
 
 if [ "$lev" = "single" ]; then
@@ -118,11 +106,14 @@ if [ "$lev" = "single" ]; then
 
     # Step 1: Start with the time coordinate from extracted data.  cdo
     # will delete it if there's no data variable, so we also create a
-    # dummy variable.
+    # dummy variable.  Adding header padding also reduces the odds of
+    # file rewrites from header overflow later on
 
+    padding="10000"  #10 KB
+    
     tempfile=${outfile}.cmortemp.nc
 
-    ncks -h -A -v time "$infile" "$tempfile"
+    ncks -h -A --hdr_pad $padding -v time "$infile" "$tempfile"
     ncatted -h -a history,global,d,, $tempfile
     ncap2 -h -A -s 'dummy[$time]=0.0f' $tempfile $tempfile
     ncap2 -h -O -s 'time=double(time)' $tempfile $tempfile
@@ -208,41 +199,46 @@ fi
 # Clear existing global and variable-level attributes first
 ncatted -h -a ,"$var",d,, -a ,global,d,, "$outfile"
 
-ncatted -h -a Conventions,global,o,c,"CF-1.11" "$outfile"
-ncatted -h -a activity_id,global,o,c,"${activity_id}" "$outfile"
-ncatted -h -a contact,global,o,c,"${contact}" "$outfile"
-ncatted -h -a creation_date,global,o,c,"${creation_date}" "$outfile"
-ncatted -h -a domain,global,o,c,"${domain}" "$outfile"
-ncatted -h -a domain_id,global,o,c,"${domain_id}" "$outfile"
-ncatted -h -a driving_experiment,global,o,c,"${driving_experiment}" "$outfile"
-ncatted -h -a driving_experiment_id,global,o,c,"${driving_experiment_id}" "$outfile"
-ncatted -h -a driving_institution_id,global,o,c,"${driving_institution_id}" "$outfile"
-ncatted -h -a driving_source_id,global,o,c,"${driving_source_id}" "$outfile"
-ncatted -h -a driving_variant_label,global,o,c,"${driving_variant_label}" "$outfile"
-ncatted -h -a frequency,global,o,c,"${freq}" "$outfile"
-ncatted -h -a grid,global,o,c,"${grid}" "$outfile"
-ncatted -h -a institution,global,o,c,"${institution}" "$outfile"
-ncatted -h -a institution_id,global,o,c,"${institution_id}" "$outfile"
-ncatted -h -a license,global,o,c,"${license}" "$outfile"
-ncatted -h -a mip_era,global,o,c,"${mip_era}" "$outfile"
-ncatted -h -a product,global,o,c,"${product}" "$outfile"
-ncatted -h -a project_id,global,o,c,"${project_id}" "$outfile"
-ncatted -h -a references,global,o,c,"${references}" "$outfile"
-ncatted -h -a source,global,o,c,"${source}" "$outfile"
-ncatted -h -a source_id,global,o,c,"${source_id}" "$outfile"
-ncatted -h -a source_type,global,o,c,"${source_type}" "$outfile"
-ncatted -h -a tracking_id,global,o,c,"${tracking_id}" "$outfile"
-ncatted -h -a variable_id,global,o,c,"${var}" "$outfile"
-ncatted -h -a version_realization,global,o,c,"${version_realization}" "$outfile"
+# Combining these all into a single command reduces load on the lustre
+# metadata server when running the workflow for the entire dataset
 
+ncatted -h -a Conventions,global,o,c,"CF-1.11" \
+           -a activity_id,global,o,c,"${activity_id}" \
+           -a contact,global,o,c,"${contact}" \
+           -a creation_date,global,o,c,"${creation_date}" \
+           -a domain,global,o,c,"${domain}" \
+           -a domain_id,global,o,c,"${domain_id}" \
+           -a driving_experiment,global,o,c,"${driving_experiment}" \
+           -a driving_experiment_id,global,o,c,"${driving_experiment_id}" \
+           -a driving_institution_id,global,o,c,"${driving_institution_id}" \
+           -a driving_source_id,global,o,c,"${driving_source_id}" \
+           -a driving_variant_label,global,o,c,"${driving_variant_label}" \
+           -a frequency,global,o,c,"${freq}" \
+           -a grid,global,o,c,"${grid}" \
+           -a institution,global,o,c,"${institution}" \
+           -a institution_id,global,o,c,"${institution_id}" \
+           -a license,global,o,c,"${license}" \
+           -a mip_era,global,o,c,"${mip_era}" \
+           -a product,global,o,c,"${product}" \
+           -a project_id,global,o,c,"${project_id}" \
+           -a references,global,o,c,"${references}" \
+           -a source,global,o,c,"${source}" \
+           -a source_id,global,o,c,"${source_id}" \
+           -a source_type,global,o,c,"${source_type}" \
+           -a tracking_id,global,o,c,"${tracking_id}" \
+           -a variable_id,global,o,c,"${var}" \
+           -a version_realization,global,o,c,"${version_realization}" \
+           $outfile
+	
 # Variable attributes
 # -------------------
-ncatted -h -a units,"${var}",o,c,"${units}" "$outfile"
-ncatted -h -a standard_name,"${var}",o,c,"${stdn}" "$outfile"
-ncatted -h -a long_name,"${var}",o,c,"${ln}" "$outfile"
-ncatted -h -a coordinates,"${var}",o,c,"${coords}" "$outfile"
-ncatted -h -a grid_mapping,"${var}",o,c,"crs" "$outfile"
-
+ncatted -h -a units,"${var}",o,c,"${units}" \
+           -a standard_name,"${var}",o,c,"${stdn}" \
+           -a long_name,"${var}",o,c,"${ln}" \
+           -a coordinates,"${var}",o,c,"${coords}" \
+           -a grid_mapping,"${var}",o,c,"crs" \
+	   $outfile
+	   
 if [[ "$cell" != "None" ]]; then
     ncatted -h -a cell_methods,"${var}",o,c,"${cell}" "$outfile"
 fi

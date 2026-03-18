@@ -82,6 +82,7 @@ DR_CSV="$INDIR/dreq_default.csv"
 }
 
 mkdir -p "$OUTDIR" "$CMDDIR"
+cp "$DR_CSV" "$OUTDIR"
 
 # Load var_specs to get levels and refh per variable.
 # Python one-liner handles YAML anchors/aliases.
