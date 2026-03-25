@@ -454,6 +454,11 @@ def clean_clt(ds):
 
     clt = (ds['CLDFRAC2D'] * 100)
     clt['time'] = time_dim
+
+    # CLDFRAC2D is all-zero on the step after a restart; replace with NaN
+    zero_timestep = (clt == 0).all(dim=['x','y'])
+    clt = clt.where(~zero_timestep)
+    
     clt = clt.to_dataset(name='clt').drop_attrs()
 
     return [('clt', '1hr', clt)]
