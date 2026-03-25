@@ -485,8 +485,8 @@ def clean_fx():
     seaice = xr.where(seaice!=0, 1, 0)
     sftlf  = (sftlf - seaice) * 100
 
-    sftlf = sftlf.to_dataset(name='sftlf').drop_attrs()
-    orog  = orog.to_dataset(name='orog').drop_attrs()
+    sftlf = sftlf.to_dataset(name='sftlf').drop_attrs().astype(np.float32)
+    orog  = orog.to_dataset(name='orog').drop_attrs().astype(np.float32)
 
     os.makedirs(os.path.join(outdir, 'sftlf'), exist_ok=True)
     os.makedirs(os.path.join(outdir, 'orog'),  exist_ok=True)
