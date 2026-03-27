@@ -415,14 +415,6 @@ def create_coord_file(wrfdir, setupdir, force):
         f'-a standard_name,lat,o,c,latitude '
         f'-a standard_name,lon,o,c,longitude "{outpath}"')
 
-    # Global attributes
-    run(f'ncatted -h '
-        f'-a Conventions,global,o,c,"CF-1.11" '
-        f'-a institution,global,o,c,"National Center for Atmospheric Research: '
-        f'Research Applications Laboratory" '
-        f'-a source,global,o,c,"Weather Research and Forecasting Model Version 4.6.1" '
-        f'"{outpath}"')
-
 
 # ---------------------------------------------------------------------------
 # Step 5: Copy sim_config.yml into setupdir for provenance

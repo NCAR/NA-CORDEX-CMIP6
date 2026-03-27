@@ -49,16 +49,19 @@ set scratch = `realpath ~/glade-scratch/na-cordex/`
 set here = `realpath ~/work/cordex6`
 set post = $here/NA-CORDEX-CMIP6/postprocess
 set topdir = $scratch/era5
-set edir = $topdir/extract
-set outdir1 = $edir/data
-set cmddir1 = $edir/cmd
-set rundir1 = $edir/run
 
-$post/setup.sh $raw/1977_chunk $outdir1
+set sdir = $topdir/setup
+
+python $post/setup.py $raw $sdir
 
 
 ################
 # Step 1: extract
+
+set edir = $topdir/extract
+set outdir1 = $edir/data
+set cmddir1 = $edir/cmd
+set rundir1 = $edir/run
 
 $post/extract.sh $raw $outdir1 1980-2023 $cmddir1
 
