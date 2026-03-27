@@ -92,7 +92,7 @@ set cmddir2 = $fdir/cmd
 set rundir2 = $fdir/run
 
 
-$post/format.sh $indir2 $outdir2 $cmddir2
+$post/format.sh $indir2 $sdir $outdir2 $cmddir2
 
 $post/launch_multi --workflow cordex --run $rundir2 $cmddir2/*cmd
 

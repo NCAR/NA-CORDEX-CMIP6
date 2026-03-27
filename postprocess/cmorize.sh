@@ -19,11 +19,13 @@
 #   5. Trimming the sponge zone and appending the data variable
 #   6. Writing all CF and CORDEX global and variable attributes
 #
-# Usage: cmorize.sh VAR INFILE OUTFILE
+# Usage: cmorize.sh VAR INFILE OUTFILE SETUPDIR
 #
 #   VAR      CMORized variable name (e.g. tas, pr, sftlf)
 #   INFILE   Input file from extract step
 #   OUTFILE  Full path to output file
+#   SETUPDIR Directory containing sim.env, var_table.tsv, wrf.xy.coords.nc
+#            (the SETUPDIR from setup.py)
 
 set -euo pipefail
 
@@ -34,27 +36,27 @@ module load cdo
 # Arguments
 # ---------------------------------------------------------------------------
 
-[[ $# -ne 3 ]] && {
-    echo "Usage: $(basename "$0") VAR INFILE OUTFILE" >&2
+[[ $# -ne 4 ]] && {
+    echo "Usage: $(basename "$0") VAR INFILE OUTFILE SETUPDIR" >&2
     exit 1
 }
 
 var="$1"
 infile="$2"
 outfile="$3"
+setupdir="$4"
 
 # ---------------------------------------------------------------------------
-# Load simulation metadata from sim.env
+# Load simulation metadata from SETUPDIR
 # ---------------------------------------------------------------------------
 
-script_dir="$(dirname "$(realpath "$0")")"
-sim_env="$script_dir/sim.env"
-var_table="$script_dir/var_table.tsv"
-coord_file="$script_dir/wrf.xy.coords.nc"
+sim_env="$setupdir/sim.env"
+var_table="$setupdir/var_table.tsv"
+coord_file="$setupdir/wrf.xy.coords.nc"
 
 [[ ! -f "$sim_env" ]] && {
     echo "Error: sim.env not found: $sim_env" >&2
-    echo "Run setup.py and ensure format.sh copies sim.env to OUTDIR." >&2
+    echo "Run setup.py and pass its output directory as SETUPDIR." >&2
     exit 1
 }
 [[ ! -f "$var_table" ]] && {
@@ -213,8 +215,8 @@ ncap2 -h -A -s 'dummy[$time]=0.0f' "$tempfile" "$tempfile"
 ncap2 -h -O -s 'time=double(time)' "$tempfile" "$tempfile"
 
 # Time attributes must be set before setreftime
-ncatted -h -a long_name,time,o,c,time \
-	-a standard_name,time,o,c,time \
+ncatted -h -a long_name,time,o,c,time "$tempfile" \
+	-a standard_name,time,o,c,time "$tempfile" \
 	-a axis,time,o,c,T "$tempfile"
 # Calendar is inherited from wrfout; needs to be changed to match the
 # driving GCM calendar when processing CMIP6-driven simulations
@@ -251,7 +253,6 @@ fi
 # Step 4: Append spatial coordinates (trimmed to interior domain, excluding
 # the sponge zone).  Variable ordering is also established here.
 # If refh is set, also create the height scalar coordinate.
-
 ncks -h -A -d x,$x_trim -d y,$y_trim "$coord_file" "$outfile"
 
 if [[ -n "$refh" ]]; then

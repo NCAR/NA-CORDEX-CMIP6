@@ -4,11 +4,10 @@
 # to extracted WRF variables.  Designed for use with launch_multi and
 # launch_cf, matching the pattern established by extract.sh.
 #
-# Reads extracted files from INDIR (the OUTDIR from extract.sh / setup.py)
-# and generates cmorize.sh commands, writing output to OUTDIR.
-# One commandfile per variable.
+# Reads extracted files from INDIR (the OUTDIR from extract.sh) and generates
+# cmorize.sh commands, writing output to OUTDIR.  One commandfile per variable.
 #
-# Requires setup.py to have been run first: INDIR must contain
+# Requires setup.py to have been run first: SETUPDIR must contain
 #   wrf.xy.coords.nc   - coordinate reference file
 #   sim.env            - simulation metadata (shell key=value pairs)
 #   var_table.tsv      - per-variable specs (tab-separated)
@@ -17,15 +16,15 @@ set -euo pipefail
 
 usage() {
     cat >&2 <<EOF
-Usage: $(basename "$0") [OPTIONS] INDIR OUTDIR [CMDDIR]
+Usage: $(basename "$0") [OPTIONS] INDIR SETUPDIR OUTDIR [CMDDIR]
 
 Generate commandfiles for formatting (CMORizing) extracted WRF variables.
 
 Arguments:
-  INDIR    Output directory from extract.sh / setup.py (contains variable
-           subdirectories and ancillary files produced by setup.py)
-  OUTDIR   Output directory for formatted files
-  CMDDIR   Directory for commandfiles (default: current directory)
+  INDIR     Output directory from extract.sh (contains variable subdirectories)
+  SETUPDIR  Output directory from setup.py (contains ancillary files)
+  OUTDIR    Output directory for formatted files
+  CMDDIR    Directory for commandfiles (default: current directory)
 
 Options:
   --force         Overwrite existing output files
@@ -49,22 +48,24 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-[[ $# -lt 2 ]] && usage
+[[ $# -lt 3 ]] && usage
 
 INDIR="$(realpath "$1")"
-mkdir -p "$2"
-OUTDIR="$(realpath "$2")"
-CMDDIR="${3:-.}"
+SETUPDIR="$(realpath "$2")"
+mkdir -p "$3"
+OUTDIR="$(realpath "$3")"
+CMDDIR="${4:-.}"
 mkdir -p "$CMDDIR"
 CMDDIR="$(realpath "$CMDDIR")"
 
-[[ ! -d "$INDIR" ]] && { echo "Error: INDIR not found: $INDIR" >&2; exit 1; }
+[[ ! -d "$INDIR" ]]    && { echo "Error: INDIR not found: $INDIR" >&2; exit 1; }
+[[ ! -d "$SETUPDIR" ]] && { echo "Error: SETUPDIR not found: $SETUPDIR" >&2; exit 1; }
 
-# Check that ancillary files from setup.py exist in INDIR
+# Check that ancillary files from setup.py exist in SETUPDIR
 for f in wrf.xy.coords.nc sim.env var_table.tsv; do
-    [[ ! -f "$INDIR/$f" ]] && {
-        echo "Error: Required file not found: $INDIR/$f" >&2
-        echo "Run setup.py with the same OUTDIR as extract.sh." >&2
+    [[ ! -f "$SETUPDIR/$f" ]] && {
+        echo "Error: Required file not found: $SETUPDIR/$f" >&2
+        echo "Run setup.py before format.sh." >&2
         exit 1
     }
 done
@@ -76,18 +77,12 @@ done
 
 mkdir -p "$OUTDIR" "$CMDDIR"
 
-# Copy ancillary files into OUTDIR so cmorize.sh can find them
-# alongside the formatted data (needed by downstream steps)
-for f in sim.env var_table.tsv; do
-    cp "$INDIR/$f" "$OUTDIR/$f"
-done
-
 # Build lookup: varname -> freq (to know which variables are in the data request)
 declare -A VAR_FREQ
 while IFS=$'\t' read -r var freq _rest; do
     [[ "$var" == "var" ]] && continue  # skip header
     VAR_FREQ[$var]="$freq"
-done < "$INDIR/var_table.tsv"
+done < "$SETUPDIR/var_table.tsv"
 
 echo "Scanning input directory: $INDIR"
 
@@ -119,9 +114,9 @@ for vardir in "$INDIR"/*/; do
             continue
         fi
 
-        # cmorize.sh arguments: var infile outfile
-        # All other metadata is read by cmorize.sh from sim.env and var_table.tsv
-        echo "./cmorize.sh $varname $infile $outfile" >> "$cmdfile"
+        # cmorize.sh arguments: var infile outfile setupdir
+        # All metadata is read by cmorize.sh from sim.env and var_table.tsv in setupdir
+        echo "./cmorize.sh $varname $infile $outfile $SETUPDIR" >> "$cmdfile"
         (( ncommands++ )) || true
     done
 
