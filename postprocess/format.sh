@@ -4,11 +4,14 @@
 # to extracted WRF variables.  Designed for use with launch_multi and
 # launch_cf, matching the pattern established by extract.sh.
 #
-# Reads extracted files from INDIR (the OUTDIR from extract.sh) and generates
-# cmorize.sh commands, writing output to OUTDIR.  One commandfile per variable.
+# Reads extracted files from INDIR (the OUTDIR from extract.sh / setup.py)
+# and generates cmorize.sh commands, writing output to OUTDIR.
+# One commandfile per variable.
 #
-# Coordinate reference files must exist in INDIR (created by setup.sh using
-# the same directory as extract.sh OUTDIR).
+# Requires setup.py to have been run first: INDIR must contain
+#   wrf.xy.coords.nc   - coordinate reference file
+#   sim.env            - simulation metadata (shell key=value pairs)
+#   var_table.tsv      - per-variable specs (tab-separated)
 
 set -euo pipefail
 
@@ -19,14 +22,14 @@ Usage: $(basename "$0") [OPTIONS] INDIR OUTDIR [CMDDIR]
 Generate commandfiles for formatting (CMORizing) extracted WRF variables.
 
 Arguments:
-  INDIR    Output directory from extract.sh (contains variable subdirectories
-           and coordinate files produced by setup.sh)
+  INDIR    Output directory from extract.sh / setup.py (contains variable
+           subdirectories and ancillary files produced by setup.py)
   OUTDIR   Output directory for formatted files
   CMDDIR   Directory for commandfiles (default: current directory)
 
 Options:
   --force         Overwrite existing output files
-  --scripts PATH  Directory containing cmorize.sh and var_specs.yml
+  --scripts PATH  Directory containing cmorize.sh
                   (default: directory containing format.sh)
   -h, --help      Show this help message
 EOF
@@ -49,62 +52,42 @@ done
 [[ $# -lt 2 ]] && usage
 
 INDIR="$(realpath "$1")"
-mkdir -p $2
-OUTDIR="$(realpath $2)"
+mkdir -p "$2"
+OUTDIR="$(realpath "$2")"
 CMDDIR="${3:-.}"
-mkdir -p $CMDDIR
-CMDDIR="$(realpath $CMDDIR)"
+mkdir -p "$CMDDIR"
+CMDDIR="$(realpath "$CMDDIR")"
 
 [[ ! -d "$INDIR" ]] && { echo "Error: INDIR not found: $INDIR" >&2; exit 1; }
 
-# Check that coordinate file exists in INDIR (produced by setup.sh)
-for cf in wrf.xy.coords.nc; do
-    [[ ! -f "$INDIR/$cf" ]] && {
-        echo "Error: Coordinate file not found: $INDIR/$cf" >&2
-        echo "Run setup.sh with the same OUTDIR as extract.sh." >&2
+# Check that ancillary files from setup.py exist in INDIR
+for f in wrf.xy.coords.nc sim.env var_table.tsv; do
+    [[ ! -f "$INDIR/$f" ]] && {
+        echo "Error: Required file not found: $INDIR/$f" >&2
+        echo "Run setup.py with the same OUTDIR as extract.sh." >&2
         exit 1
     }
 done
 
-for f in cmorize.sh var_specs.yml; do
-    [[ ! -f "$SCRIPTS_DIR/$f" ]] && {
-        echo "Error: $f not found in $SCRIPTS_DIR" >&2
-        exit 1
-    }
-done
-
-# DR_CSV lives in INDIR alongside extracted data (placed there by setup.sh)
-DR_CSV="$INDIR/dreq_default.csv"
-[[ ! -f "$DR_CSV" ]] && {
-    echo "Error: dreq_default.csv not found in $INDIR" >&2
-    echo "Run setup.sh with the same OUTDIR as extract.sh." >&2
+[[ ! -f "$SCRIPTS_DIR/cmorize.sh" ]] && {
+    echo "Error: cmorize.sh not found in $SCRIPTS_DIR" >&2
     exit 1
 }
 
 mkdir -p "$OUTDIR" "$CMDDIR"
-cp "$DR_CSV" "$OUTDIR"
 
-# Load var_specs to get levels and refh per variable.
-# Python one-liner handles YAML anchors/aliases.
-get_spec() {
-    local var="$1" field="$2"
-    python3 -c "
-import yaml
-s = yaml.safe_load(open('$SCRIPTS_DIR/var_specs.yml'))
-v = s.get('$var', {})
-print(v.get('$field', 'None'))
-"
-}
+# Copy ancillary files into OUTDIR so cmorize.sh can find them
+# alongside the formatted data (needed by downstream steps)
+for f in sim.env var_table.tsv; do
+    cp "$INDIR/$f" "$OUTDIR/$f"
+done
 
-# Build associative arrays of CMOR metadata keyed by variable name
-declare -A VAR_FREQ VAR_UNITS VAR_CELL VAR_STDN VAR_LN
-while IFS=',' read -r out_name frequency units long_name standard_name cell_methods _rest; do
-    VAR_FREQ[$out_name]="$frequency"
-    VAR_UNITS[$out_name]="$units"
-    VAR_CELL[$out_name]="$cell_methods"
-    VAR_STDN[$out_name]="$standard_name"
-    VAR_LN[$out_name]="$long_name"
-done < <(tail -n +2 "$DR_CSV")
+# Build lookup: varname -> freq (to know which variables are in the data request)
+declare -A VAR_FREQ
+while IFS=$'\t' read -r var freq _rest; do
+    [[ "$var" == "var" ]] && continue  # skip header
+    VAR_FREQ[$var]="$freq"
+done < "$INDIR/var_table.tsv"
 
 echo "Scanning input directory: $INDIR"
 
@@ -115,17 +98,8 @@ for vardir in "$INDIR"/*/; do
     files=("$vardir"*.nc)
     [[ ! -f "${files[0]:-}" ]] && continue
 
-    # Get variable metadata
-    freq="${VAR_FREQ[$varname]:-}"
-    units="${VAR_UNITS[$varname]:-}"
-    cell="${VAR_CELL[$varname]:-None}"
-    stdn="${VAR_STDN[$varname]:-}"
-    ln="${VAR_LN[$varname]:-}"
-    levels="$(get_spec "$varname" levels)"
-    refh="$(get_spec "$varname" refh)"
-
-    [[ -z "$freq" ]] && {
-        echo "  $varname: not in data request CSV, skipping" >&2
+    [[ -z "${VAR_FREQ[$varname]:-}" ]] && {
+        echo "  $varname: not in var_table.tsv, skipping" >&2
         continue
     }
 
@@ -145,9 +119,9 @@ for vardir in "$INDIR"/*/; do
             continue
         fi
 
-        # cmorize.sh arguments:
-        # var infile freq units lev refh cell ln stdn outfile indir
-        echo "./cmorize.sh $varname $infile $freq \"$units\" $levels $refh \"$cell\" \"$ln\" \"$stdn\" $outfile $INDIR" >> "$cmdfile"
+        # cmorize.sh arguments: var infile outfile
+        # All other metadata is read by cmorize.sh from sim.env and var_table.tsv
+        echo "./cmorize.sh $varname $infile $outfile" >> "$cmdfile"
         (( ncommands++ )) || true
     done
 
