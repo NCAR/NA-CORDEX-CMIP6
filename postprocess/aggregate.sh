@@ -7,31 +7,27 @@
 # Output is organized in per-variable subdirectories named <var>.<freq>.
 # Use relocate.sh to move the results into a CORDEX DRS output tree.
 #
-# The data request CSV (dreq_default.csv) is expected in INDIR, where it is
-# placed by format.sh.
+# Variable metadata is read from var_table.tsv in SETUPDIR, where it is
+# placed by setup.py.
 
 set -euo pipefail
 
-# URL shown in help if CSV is missing from INDIR
-DR_CSV_URL="https://raw.githubusercontent.com/WCRP-CORDEX/data-request-table/main/data-request/dreq_default.csv"
-
 usage() {
     cat >&2 <<EOF
-Usage: $(basename "$0") [OPTIONS] INDIR OUTDIR [CMDDIR]
+Usage: $(basename "$0") [OPTIONS] INDIR SETUPDIR OUTDIR [CMDDIR]
 
 Generate CDO commandfiles for aggregating CORDEX data to requested frequencies,
 and cp commandfiles for placing hourly and fx files into the output tree.
 
 Arguments:
   INDIR    Input directory containing <var>.<freq> subdirectories with yearly
-           NetCDF files; must also contain dreq_default.csv (placed here
-           by format.sh)
+           NetCDF files
+  SETUPDIR Output directory from setup.py (contains var_table.tsv)
   OUTDIR   Output directory root (subdirs named <var>.<freq> created here)
   CMDDIR   Directory for commandfiles (default: current directory)
 
 Options:
   --force     Overwrite existing output files
-  --csv PATH  Path to dreq_default.csv (overrides INDIR lookup)
   -h, --help  Show this help message
 
 The script generates separate commandfiles per variable and frequency
@@ -42,62 +38,51 @@ EOF
 
 # Parse arguments
 FORCE=0
-CSV_OVERRIDE=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --force) FORCE=1; shift ;;
-        --csv) CSV_OVERRIDE="$2"; shift 2 ;;
         -h|--help) usage ;;
         -*) echo "Error: Unknown option $1" >&2; usage ;;
         *) break ;;
     esac
 done
 
-[[ $# -lt 2 ]] && usage
+[[ $# -lt 3 ]] && usage
 
 INDIR="$(realpath "$1")"
-mkdir -p "$2"
-OUTDIR="$(realpath "$2")"
-CMDDIR="${3:-.}"
+SETUPDIR="$(realpath "$2")"
+mkdir -p "$3"
+OUTDIR="$(realpath "$3")"
+CMDDIR="${4:-.}"
 mkdir -p "$CMDDIR"
 CMDDIR="$(realpath "$CMDDIR")"
 
-# Resolve CSV path: explicit override, or look in INDIR (placed there by format.sh)
-if [[ -n "$CSV_OVERRIDE" ]]; then
-    DR_CSV="$CSV_OVERRIDE"
-else
-    DR_CSV="$INDIR/dreq_default.csv"
-fi
-
 # Validate inputs
-[[ ! -d "$INDIR" ]] && { echo "Error: Input directory not found: $INDIR" >&2; exit 1; }
-[[ ! -f "$DR_CSV" ]] && {
+[[ ! -d "$INDIR" ]]    && { echo "Error: Input directory not found: $INDIR" >&2; exit 1; }
+[[ ! -d "$SETUPDIR" ]] && { echo "Error: SETUPDIR not found: $SETUPDIR" >&2; exit 1; }
+
+VAR_TABLE="$SETUPDIR/var_table.tsv"
+[[ ! -f "$VAR_TABLE" ]] && {
     cat >&2 <<EOF
-Error: Data request CSV not found: $DR_CSV
+Error: var_table.tsv not found: $VAR_TABLE
 
-Re-run format.sh with the same OUTDIR, or download manually:
-  curl -L -o "$DR_CSV" "$DR_CSV_URL"
+Run setup.py before aggregate.sh.
 EOF
-    exit 1
-}
-
-# Validate CSV layout (columns must match exactly; update if dreq format changes)
-expected_header="out_name,frequency,units,long_name,standard_name,cell_methods,priority,comment"
-[[ "$(head -1 "$DR_CSV")" != "$expected_header" ]] && {
-    echo "Error: Unexpected CSV header in $DR_CSV" >&2
-    echo "  Expected: $expected_header" >&2
     exit 1
 }
 
 mkdir -p "$OUTDIR" "$CMDDIR"
 
-# Aggregatable variables (non-fx): used to skip irrelevant input directories
-AGGVARS=$(tail -n +2 "$DR_CSV" | grep -v ',fx,' | cut -f1 -d, | sort -u)
+# Non-fx variables: used to skip irrelevant input directories.
+# var_table.tsv columns: var, freq, units, cell_methods, positive,
+#                        levels, refh, quant, standard_name, long_name
+AGGVARS=$(awk -F'\t' 'NR>1 && $2 != "fx" {print $1}' "$VAR_TABLE" | sort -u)
 
-# Hourly instantaneous variables: need time/time_bnds fixup after daily aggregation.
-# time units are assumed to be 'days since ...' throughout (guaranteed by cmorize.sh).
-POINTVARS=$(awk -F',' 'NR>1 && $2 ~ /hr/ && $6 ~ /time: point/ {print $1}' "$DR_CSV")
+# Hourly instantaneous variables: need time/time_bnds fixup after daily
+# aggregation.  Time units are assumed to be 'days since ...' throughout
+# (guaranteed by cmorize.sh).
+POINTVARS=$(awk -F'\t' 'NR>1 && $2 ~ /hr/ && $4 ~ /time: point/ {print $1}' "$VAR_TABLE")
 
 # Function to extract year from CORDEX filename timespan field
 # (YYYYMMDDhhmm-YYYYMMDDhhmm or YYYYMMDD-YYYYMMDD or YYYYMM-YYYYMM)
@@ -209,7 +194,7 @@ for vardir in "$INDIR"/*/; do
 
     # Check if variable is in data request
     echo "$AGGVARS" | grep -qw "$varname" || {
-        echo "$varname is not a variable in data request, skipping" >&2
+        echo "$varname is not a variable in var_table.tsv, skipping" >&2
         continue
     }
 
@@ -233,7 +218,7 @@ for vardir in "$INDIR"/*/; do
     done
 
     [[ $minyear -eq 9999 ]] && {
-        echo "Warning: Could not determine year range for $dirname" >&2
+        echo "Warning: Could not determine year range for $varname" >&2
         continue
     }
 
@@ -383,5 +368,5 @@ echo ""
 echo "Commandfile generation complete!"
 echo "Commandfiles written to: $CMDDIR"
 echo ""
-echo "To run with launch_cf:"
-echo "  launch_cf <varname>.<freq>.cmd"
+echo "To run with launch_multi:"
+echo "  launch_multi --workflow cordex --run RUNDIR $cmddir/*.cmd"

@@ -118,13 +118,13 @@ set rundir3a = $adir/run1
 set rundir3b = $adir/run2
 
 
-$post/aggregate.sh $indir3 $outdir3 $cmddir3a
+$post/aggregate.sh $indir3 $sdir $outdir3 $cmddir3a
 
 $post/launch_multi --workflow cordex --run $rundir3a $cmddir3a/*cmd
 
 # then do it again for monthly files
 
-$post/aggregate.sh $indir3 $outdir3 $cmddir3b
+$post/aggregate.sh $indir3 $sdir $outdir3 $cmddir3b
 
 $post/launch_multi --workflow cordex --run $rundir3b $cmddir3b/*cmd
 
