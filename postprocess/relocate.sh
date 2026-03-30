@@ -12,7 +12,11 @@
 # After the tree is populated, use Globus to transfer from OUTDIR to
 # campaign storage.
 #
-# Usage: relocate.sh [OPTIONS] INDIR OUTDIR VERSION
+# The dataset version string is derived from creation_date in sim.env
+# (set by setup.py) and converted to vYYYYMMDD format.  Use --version
+# to override if needed.
+#
+# Usage: relocate.sh [OPTIONS] INDIR SETUPDIR OUTDIR
 
 set -euo pipefail
 
@@ -22,31 +26,35 @@ ACTIVITY_ID="DD"
 
 usage() {
     cat >&2 <<EOF
-Usage: $(basename "$0") [OPTIONS] INDIR OUTDIR VERSION
+Usage: $(basename "$0") [OPTIONS] INDIR SETUPDIR OUTDIR
 
 Populate a CORDEX DRS output tree by hard-linking aggregated files.
 
 Arguments:
   INDIR    Input directory containing <var>.<freq> subdirectories
            (the OUTDIR from aggregate.sh)
+  SETUPDIR Output directory from setup.py (contains sim.env)
   OUTDIR   DRS output tree root
-  VERSION  Dataset version string (e.g. v20250101)
 
 Options:
-  --force     Overwrite existing output files
-  --dry-run   Print what would be done without executing
-  -h, --help  Show this help message
+  --version VERSION  Override dataset version string (default: derived from
+                     creation_date in sim.env, format vYYYYMMDD)
+  --force            Overwrite existing output files
+  --dry-run          Print what would be done without executing
+  -h, --help         Show this help message
 EOF
     exit 1
 }
 
 FORCE=0
 DRY=0
+VERSION_OVERRIDE=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --force)   FORCE=1; shift ;;
         --dry-run) DRY=1; shift ;;
+        --version) VERSION_OVERRIDE="$2"; shift 2 ;;
         -h|--help) usage ;;
         -*) echo "Error: Unknown option $1" >&2; usage ;;
         *) break ;;
@@ -56,16 +64,36 @@ done
 [[ $# -lt 3 ]] && usage
 
 INDIR="$(realpath "$1")"
-OUTDIR="$(realpath "$2")"
-VERSION="$3"
+SETUPDIR="$(realpath "$2")"
+OUTDIR="$(realpath "$3")"
+
+[[ ! -d "$INDIR" ]]    && { echo "Error: Input directory not found: $INDIR" >&2; exit 1; }
+[[ ! -d "$SETUPDIR" ]] && { echo "Error: SETUPDIR not found: $SETUPDIR" >&2; exit 1; }
+
+# Resolve version string
+if [[ -n "$VERSION_OVERRIDE" ]]; then
+    VERSION="$VERSION_OVERRIDE"
+else
+    SIM_ENV="$SETUPDIR/sim.env"
+    [[ ! -f "$SIM_ENV" ]] && {
+        echo "Error: sim.env not found: $SIM_ENV" >&2
+        echo "Run setup.py before relocate.sh, or use --version to override." >&2
+        exit 1
+    }
+    # Extract creation_date and convert YYYY-MM-DD -> vYYYYMMDD
+    creation_date="$(grep '^creation_date=' "$SIM_ENV" | cut -d= -f2 | tr -d '"')"
+    [[ -z "$creation_date" ]] && {
+        echo "Error: creation_date not found in $SIM_ENV" >&2
+        exit 1
+    }
+    VERSION="v${creation_date//-/}"
+fi
 
 # Validate version string
 if ! [[ "$VERSION" =~ ^v[0-9]{8}$ ]]; then
     echo "Error: VERSION must match vYYYYMMDD (e.g. v20250101), got: $VERSION" >&2
     exit 1
 fi
-
-[[ ! -d "$INDIR" ]] && { echo "Error: Input directory not found: $INDIR" >&2; exit 1; }
 
 do_cmd() {
     if [[ $DRY -eq 1 ]]; then
@@ -80,6 +108,7 @@ nskipped=0
 nfailed=0
 
 echo "Scanning input directory: $INDIR"
+echo "Version: $VERSION"
 [[ $DRY -eq 1 ]] && echo "(dry run)"
 
 for vardir in "$INDIR"/*/; do

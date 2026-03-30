@@ -195,14 +195,12 @@ echo "scp -r casper.hpc.ucar.edu:$outdir5 cordex-plots"
 ################
 # Step 6: relocate into DRS tree
 
-set version = v`find $raw/*chunk -type f -name wrfout\* -printf "%T+\n" | cut -f 1 -d + | tr -d - | sort | tail -n 1`
-
 set indir6 = $outdir4
 set outdir6 = .
 
-$post/relocate.sh --dry-run $indir6 $outdir6 $version | tail
+$post/relocate.sh --dry-run $indir6 $sdir $outdir6 | tail
 
-$post/relocate.sh $indir6 $outdir6 $version
+$post/relocate.sh $indir6 $sdir $outdir6
 
 
 ################
