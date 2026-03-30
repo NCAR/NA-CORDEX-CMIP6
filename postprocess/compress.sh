@@ -8,75 +8,75 @@
 # ncks --ppc commands, writing compressed output to OUTDIR.  One commandfile
 # per variable.
 #
-# Compression precision per variable is specified in var_specs.yml.
-# Variables with no qnt entry receive lossless deflate compression only
-# (-7 -L1), as required by the CORDEX spec.
+# Compression precision per variable is read from var_table.tsv in SETUPDIR
+# (placed there by setup.py).  Variables with no quant entry receive lossless
+# deflate compression only (-7 -L1), as required by the CORDEX spec.
 
 set -euo pipefail
 
 usage() {
     cat >&2 <<EOF
-Usage: $(basename "$0") [OPTIONS] INDIR OUTDIR [CMDDIR]
+Usage: $(basename "$0") [OPTIONS] INDIR SETUPDIR OUTDIR [CMDDIR]
 
 Generate commandfiles for compressing formatted CORDEX-CMIP6 NetCDF files.
 
 Arguments:
   INDIR    Output directory from format.sh (contains variable subdirectories)
+  SETUPDIR Output directory from setup.py (contains var_table.tsv)
   OUTDIR   Output directory for compressed files
   CMDDIR   Directory for commandfiles (default: current directory)
 
 Options:
   --force       Overwrite existing output files
-  --scripts PATH  Directory containing var_specs.yml
-                  (default: directory containing compress.sh)
   -h, --help    Show this help message
 EOF
     exit 1
 }
 
 FORCE=0
-SCRIPTS_DIR="$(dirname "$(realpath "$0")")"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --force)   FORCE=1; shift ;;
-        --scripts) SCRIPTS_DIR="$(realpath "$2")"; shift 2 ;;
         -h|--help) usage ;;
         -*) echo "Error: Unknown option $1" >&2; usage ;;
         *) break ;;
     esac
 done
 
-[[ $# -lt 2 ]] && usage
+[[ $# -lt 3 ]] && usage
 
 INDIR="$(realpath "$1")"
-mkdir -p $2
-OUTDIR="$(realpath "$2")"
-CMDDIR="${3:-.}"
-mkdir -p $CMDDIR
+SETUPDIR="$(realpath "$2")"
+mkdir -p "$3"
+OUTDIR="$(realpath "$3")"
+CMDDIR="${4:-.}"
+mkdir -p "$CMDDIR"
 CMDDIR="$(realpath "$CMDDIR")"
 
-[[ ! -d "$INDIR" ]] && { echo "Error: INDIR not found: $INDIR" >&2; exit 1; }
+[[ ! -d "$INDIR" ]]    && { echo "Error: INDIR not found: $INDIR" >&2; exit 1; }
+[[ ! -d "$SETUPDIR" ]] && { echo "Error: SETUPDIR not found: $SETUPDIR" >&2; exit 1; }
 
-[[ ! -f "$SCRIPTS_DIR/var_specs.yml" ]] && {
-    echo "Error: var_specs.yml not found in $SCRIPTS_DIR" >&2
+VAR_TABLE="$SETUPDIR/var_table.tsv"
+[[ ! -f "$VAR_TABLE" ]] && {
+    echo "Error: var_table.tsv not found: $VAR_TABLE" >&2
+    echo "Run setup.py before compress.sh." >&2
     exit 1
 }
 
 mkdir -p "$OUTDIR" "$CMDDIR"
 
-# Helper: look up a field in var_specs.yml for a given variable.
-# Returns empty string if not found.
-get_spec() {
-    local var="$1" field="$2"
-    python3 -c "
-import yaml
-s = yaml.safe_load(open('$SCRIPTS_DIR/var_specs.yml'))
-v = s.get('$var', {})
-val = v.get('$field')
-print('' if val is None else val)
-"
-}
+# Build lookup: varname -> quant from var_table.tsv
+# var_table.tsv columns: var, freq, units, cell_methods, positive,
+#                        levels, refh, quant, standard_name, long_name
+declare -A VAR_QUANT
+while IFS=$'\t' read -r var freq units cell_methods positive levels refh quant _rest; do
+    [[ "$var" == "var" ]] && continue  # skip header
+    VAR_QUANT[$var]="$quant"
+    echo "$var ${VAR_QUANT[$var]}"
+done < "$VAR_TABLE"
+
+
 
 echo "Scanning input directory: $INDIR"
 
@@ -88,8 +88,7 @@ for dir in "$INDIR"/*/; do
     files=("$dir"*.nc)
     [[ ! -f "${files[0]:-}" ]] && continue
 
-    # Look up quantization level for this variable
-    qnt="$(get_spec "$varname" qnt)"
+    quant="${VAR_QUANT[$varname]:-}"
 
     cmdfile="$CMDDIR/${dirname}.cmd"
     > "$cmdfile"
@@ -111,9 +110,9 @@ for dir in "$INDIR"/*/; do
 
         mkdir -p "$outdir_var"
 
-        if [[ -n "$qnt" ]]; then
+        if [[ -n "$quant" && "$quant" != "--" ]]; then
             # Lossy compression: --ppc at specified precision, plus deflate
-            echo "ncks -h -O -7 -L1 --ppc ${varname}=${qnt} --chunk_cache 4000000000 --chunk_map rd1 $infile $outfile" >> "$cmdfile"
+            echo "ncks -h -O -7 -L1 --ppc ${varname}=${quant} --chunk_cache 4000000000 --chunk_map rd1 $infile $outfile" >> "$cmdfile"
         else
             # Lossless deflate only (required by CORDEX spec for fx variables)
             echo "ncks -h -O -7 -L1 --chunk_cache 4000000000 --chunk_map rd1 $infile $outfile" >> "$cmdfile"
@@ -122,7 +121,7 @@ for dir in "$INDIR"/*/; do
     done
 
     ngenerated=$(( ncommands - nskipped ))
-    echo "  $dirname: $ngenerated commands (qnt=${qnt:-lossless}), skipped $nskipped/$ncommands existing"
+    echo "  $dirname: $ngenerated commands (quant=${quant:--}), skipped $nskipped/$ncommands existing"
 
     [[ ! -s "$cmdfile" ]] && rm "$cmdfile"
 done

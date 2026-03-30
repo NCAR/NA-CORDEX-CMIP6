@@ -167,7 +167,7 @@ write_attributes() {
         "$outfile"
 
     # Optional attributes: only written when present
-    [[ -n "$positive" ]] && \
+    [[ -n "$positive" && "$positive" != "--" ]] && \
         ncatted -h -a positive,"${var}",o,c,"${positive}" "$outfile"
 
     [[ "$cell_methods" != "None" && -n "$cell_methods" ]] && \
@@ -257,7 +257,7 @@ fi
 # If refh is set, also create the height scalar coordinate.
 ncks -h -A -d x,$x_trim -d y,$y_trim "$coord_file" "$outfile"
 
-if [[ -n "$refh" ]]; then
+if [[ -n "$refh" && "$refh" != "--" ]]; then
     ncap2 -h -A -s "height=double(${refh})" "$outfile"
     ncatted -h \
         -a units,height,o,c,m \

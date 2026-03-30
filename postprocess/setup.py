@@ -199,7 +199,7 @@ def build_var_table(var_specs_path, dreq_path, setupdir, freqs):
 
         # --- From CMOR JSON tables (authoritative for positive, may supplement) ---
         cmor_entry = cmor.get(varname, {})
-        row["positive"] = cmor_entry.get("positive", "")
+        row["positive"] = cmor_entry.get("positive", "") or "--"
 
         # Override standard_name / long_name from CMOR if dreq is empty
         if not row["standard_name"]:
@@ -209,8 +209,8 @@ def build_var_table(var_specs_path, dreq_path, setupdir, freqs):
 
         # --- From var_specs.yml ---
         row["levels"] = specs.get("levels", "single")
-        row["refh"]   = str(specs["refh"])  if "refh"  in specs else ""
-        row["quant"]  = str(specs["quant"]) if "quant" in specs else ""
+        row["refh"]   = str(specs["refh"])  if "refh"  in specs else "--"
+        row["quant"]  = str(specs["quant"]) if "quant" in specs else "--"
 
         rows.append(row)
 
@@ -222,7 +222,7 @@ def write_var_table(rows, outpath):
     with open(outpath, "w", newline="") as f:
         f.write("\t".join(VAR_TABLE_COLS) + "\n")
         for row in rows:
-            f.write("\t".join(row.get(c, "") for c in VAR_TABLE_COLS) + "\n")
+            f.write("\t".join(row.get(c, "--") for c in VAR_TABLE_COLS) + "\n")
     for row in rows:
         vprint(f"  {row['var']:12s}  freq={row['freq']:4s}  levels={row['levels']:6s}"
                f"  refh={row['refh']:3s}  quant={row['quant']}")

@@ -122,7 +122,7 @@ $post/aggregate.sh $indir3 $sdir $outdir3 $cmddir3a
 
 $post/launch_multi --workflow cordex --run $rundir3a $cmddir3a/*cmd
 
-# then do it again for monthly files
+# then do it again to generate monthly files
 
 $post/aggregate.sh $indir3 $sdir $outdir3 $cmddir3b
 
@@ -151,7 +151,7 @@ set cmddir4 = $cdir/cmd
 set rundir4 = $cdir/run
 
 
-$post/compress.sh $indir4 $outdir4 $cmddir4
+$post/compress.sh $indir4 $sdir $outdir4 $cmddir4
 
 $post/launch_multi --workflow cordex --run $rundir4 $cmddir4/*cmd
 
