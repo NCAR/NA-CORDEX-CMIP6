@@ -215,9 +215,11 @@ ncap2 -h -A -s 'dummy[$time]=0.0f' "$tempfile" "$tempfile"
 ncap2 -h -O -s 'time=double(time)' "$tempfile" "$tempfile"
 
 # Time attributes must be set before setreftime
-ncatted -h -a long_name,time,o,c,time "$tempfile" \
-	-a standard_name,time,o,c,time "$tempfile" \
-	-a axis,time,o,c,T "$tempfile"
+ncatted -h \
+	-a long_name,time,o,c,time \
+	-a standard_name,time,o,c,time \
+	-a axis,time,o,c,T \
+	"$tempfile"
 # Calendar is inherited from wrfout; needs to be changed to match the
 # driving GCM calendar when processing CMIP6-driven simulations
 
