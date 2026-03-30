@@ -25,8 +25,8 @@ domain: "North America"
 domain_id: "NAM-12"
 
 # Date the simulation finished running (YYYY-MM-DD).
-# setup.py will attempt to derive this automatically; verify the value
-# it reports before proceeding.
+# If this is not manually defined here, setup.py will attempt to
+# derive this automatically; verify its value before proceeding.
 creation_date: "YYYY-MM-DD"
 
 
