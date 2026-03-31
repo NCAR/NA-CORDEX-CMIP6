@@ -73,7 +73,6 @@ declare -A VAR_QUANT
 while IFS=$'\t' read -r var freq units cell_methods positive levels refh quant _rest; do
     [[ "$var" == "var" ]] && continue  # skip header
     VAR_QUANT[$var]="$quant"
-    echo "$var ${VAR_QUANT[$var]}"
 done < "$VAR_TABLE"
 
 
