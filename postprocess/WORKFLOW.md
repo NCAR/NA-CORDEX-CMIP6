@@ -132,11 +132,11 @@ $post/launch_multi --workflow cordex --run $rundir3b $cmddir3b/*cmd
 ################
 ## wait until it finishes, check everything ran correctly
 cd $rundir3a
-wc */stdout*/*
-tail -q -n 1 */*.o* | cut -f 1 -d : | uniq -c
+wc */stdout*/* | tail -1
+tail -q -n 1 */*.o* | cut -f 1 -d : | sort | uniq -c
 cd $rundir3b
-wc */stdout*/*
-tail -q -n 1 */*.o* | cut -f 1 -d : | uniq -c
+wc */stdout*/* | tail -1
+tail -q -n 1 */*.o* | cut -f 1 -d : | sort | uniq -c
 cd $topdir
 
 

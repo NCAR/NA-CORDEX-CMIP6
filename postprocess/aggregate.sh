@@ -91,6 +91,14 @@ extract_year() {
     echo "${timespan:0:4}"
 }
 
+# Extract end year from CORDEX filename timespan field
+# (YYYYMMDDhhmm-YYYYMMDDhhmm or YYYYMMDD-YYYYMMDD or YYYYMM-YYYYMM)
+extract_end_year() {
+    local timespan="$1"
+    local endpart="${timespan##*-}"
+    echo "${endpart:0:4}"
+}
+
 # Function to generate output filename
 gen_outfile() {
     local var="$1" domain="$2" drvsrc="$3" drvexp="$4" drvvar="$5" inst="$6"
@@ -107,47 +115,67 @@ gen_outfile() {
     echo "${var}_${domain}_${drvsrc}_${drvexp}_${drvvar}_${inst}_${src}_${verreal}_${freq}_${startdate}-${enddate}.nc"
 }
 
-# Function to compute year ranges for output files
+# Compute year ranges for output files according to CORDEX-CMIP6 chunking rules.
+#
+# Monthly: 10-year chunks starting at years ending in 1 (or minyear for the
+#   leading partial), ending at years ending in 0 (or maxyear).
+# Daily: 5-year chunks starting at years ending in 1 or 6 (or minyear for the
+#   leading partial), ending at years ending in 0 or 5 (or maxyear).
+# Hourly: 1-year chunks.
 compute_ranges() {
     local freq="$1" minyear="$2" maxyear="$3"
     local -a ranges
+    local chunksize boundary start end
 
     case "$freq" in
-        mon)
-            # 10-year chunks: start at year ending in 1 (or minyear),
-            # end at year ending in 0 (or maxyear)
-            local start=$(( (minyear/10)*10 + 1 ))
-            [[ $start -gt $minyear ]] && start=$minyear
-
-            while [[ $start -le $maxyear ]]; do
-                local end=$(( (start/10)*10 + 10 ))
-                [[ $end -gt $maxyear ]] && end=$maxyear
-                ranges+=("$start-$end")
-                start=$((end + 1))
-            done
-            ;;
-        day)
-            # 5-year chunks: start at year ending in 1 or 6 (or minyear),
-            # end at year ending in 5 or 0 (or maxyear)
-            local start=$(( (minyear/5)*5 + 1 ))
-            [[ $start -gt $minyear ]] && start=$minyear
-
-            while [[ $start -le $maxyear ]]; do
-                local end=$((start + 4))
-                [[ $end -gt $maxyear ]] && end=$maxyear
-                ranges+=("$start-$end")
-                start=$((end + 1))
-            done
-            ;;
+        mon) chunksize=10 ;;
+        day) chunksize=5 ;;
         *hr)
-            # 1-year chunks
             for ((year=minyear; year<=maxyear; year++)); do
                 ranges+=("$year-$year")
             done
+            printf "%s\n" "${ranges[@]}"
+            return
             ;;
     esac
 
+    # Find chunk end-years: years in [minyear,maxyear] that are 0 mod chunksize
+    local -a endyears=()
+    local first_end=$(( ((minyear + chunksize - 1) / chunksize) * chunksize ))
+    for ((y=first_end; y<=maxyear; y+=chunksize)); do
+        endyears+=("$y")
+    done
+
+    local n=${#endyears[@]}
+    if [[ $n -eq 0 ]]; then
+        ranges+=("$minyear-$maxyear")
+    else
+        ranges+=("$minyear-${endyears[0]}")
+        for ((i=1; i<n; i++)); do
+            ranges+=("$(( endyears[i-1] + 1 ))-${endyears[$i]}")
+        done
+        if [[ ${endyears[$((n-1))]} -lt $maxyear ]]; then
+            ranges+=("$(( endyears[n-1] + 1 ))-$maxyear")
+        fi
+    fi
+    
     printf "%s\n" "${ranges[@]}"
+}
+
+# Select files whose year span overlaps a target range.
+# Args: startyear endyear file_entry [file_entry ...]
+# Each file_entry is "startyear:endyear:filepath".
+# Prints matching filepaths, one per line.
+select_overlapping_files() {
+    local range_start="$1" range_end="$2"
+    shift 2
+    local entry fstart fend fpath
+    for entry in "$@"; do
+        IFS=':' read -r fstart fend fpath <<< "$entry"
+        if [[ $fstart -le $range_end && $fend -ge $range_start ]]; then
+            echo "$fpath"
+        fi
+    done
 }
 
 echo "Scanning input directory: $INDIR"
@@ -200,7 +228,7 @@ for vardir in "$INDIR"/*/; do
 
     echo "Processing: $varname ($infreq)"
 
-    # Determine years available
+    # Determine years available from yearly input files
     declare -A yearfiles
     minyear=9999
     maxyear=0
@@ -251,15 +279,18 @@ for vardir in "$INDIR"/*/; do
         cmdfile="$CMDDIR/${varname}.${freq}.cmd"
         > "$cmdfile"
 
-        # Determine input files for this frequency
-        declare -A freq_yearfiles=()
+        # Collect input files for this frequency as "startyear:endyear:filepath"
+        # entries. Daily uses the per-year input files directly; monthly reads
+        # from multi-year daily output files, parsing both start and end years
+        # from each filename.
+        file_entries=()
         freq_minyear=9999
         freq_maxyear=0
 
         if [[ "$freq" == "day" ]]; then
             if [[ "$infreq" == "day" || "$infreq" =~ hr$ ]]; then
                 for year in "${!yearfiles[@]}"; do
-                    freq_yearfiles[$year]="${yearfiles[$year]}"
+                    file_entries+=("$year:$year:${yearfiles[$year]}")
                     [[ $year -lt $freq_minyear ]] && freq_minyear=$year
                     [[ $year -gt $freq_maxyear ]] && freq_maxyear=$year
                 done
@@ -269,13 +300,15 @@ for vardir in "$INDIR"/*/; do
             fi
         elif [[ "$freq" == "mon" ]]; then
             if [[ "$infreq" == "day" ]]; then
+                # Input is already daily single-year files
                 for year in "${!yearfiles[@]}"; do
-                    freq_yearfiles[$year]="${yearfiles[$year]}"
+                    file_entries+=("$year:$year:${yearfiles[$year]}")
                     [[ $year -lt $freq_minyear ]] && freq_minyear=$year
                     [[ $year -gt $freq_maxyear ]] && freq_maxyear=$year
                 done
             else
-                # Look for daily output files from previous aggregation
+                # Read from daily output files (multi-year); parse both start
+                # and end years from each filename's timespan field.
                 daily_dir="$OUTDIR/${varname}.day"
                 daily_pattern="${varname}_${domain}_${drvsrc}_${drvexp}_${drvvar}_${inst}_${src}_${verreal}_day_*.nc"
 
@@ -285,16 +318,17 @@ for vardir in "$INDIR"/*/; do
                     base="${f%.nc}"
                     timespan="${base##*_}"
                     [[ -z "$timespan" ]] && continue
-                    year=$(extract_year "$timespan")
-                    freq_yearfiles[$year]="$f"
-                    [[ $year -lt $freq_minyear ]] && freq_minyear=$year
-                    [[ $year -gt $freq_maxyear ]] && freq_maxyear=$year
+                    fstart=$(extract_year "$timespan")
+                    fend=$(extract_end_year "$timespan")
+                    file_entries+=("$fstart:$fend:$f")
+                    [[ $fstart -lt $freq_minyear ]] && freq_minyear=$fstart
+                    [[ $fend -gt $freq_maxyear ]] && freq_maxyear=$fend
                 done
                 shopt -u nullglob
             fi
         fi
 
-        if [[ "${#freq_yearfiles[@]}" -eq 0 ]]; then
+        if [[ "${#file_entries[@]}" -eq 0 ]]; then
             rm "$cmdfile"
             continue
         fi
@@ -310,10 +344,8 @@ for vardir in "$INDIR"/*/; do
         for range in "${ranges[@]}"; do
             IFS='-' read -r startyear endyear <<< "$range"
 
-            infiles=()
-            for ((year=startyear; year<=endyear; year++)); do
-                [[ -n "${freq_yearfiles[$year]:-}" ]] && infiles+=("${freq_yearfiles[$year]}")
-            done
+            # Select input files overlapping this output range
+            mapfile -t infiles < <(select_overlapping_files "$startyear" "$endyear" "${file_entries[@]}" | sort)
 
             [[ ${#infiles[@]} -eq 0 ]] && continue
 
@@ -369,4 +401,4 @@ echo "Commandfile generation complete!"
 echo "Commandfiles written to: $CMDDIR"
 echo ""
 echo "To run with launch_multi:"
-echo "  launch_multi --workflow cordex --run RUNDIR $cmddir/*.cmd"
+echo "  launch_multi --workflow cordex --run RUNDIR $CMDDIR/*.cmd"
