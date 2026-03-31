@@ -208,21 +208,49 @@ $post/relocate.sh $indir6 $sdir $outdir6
 
 # See below for instructions on installing esgf-qa
 
-cd $topdir
+set qdir = $topdir/qa
 
-execcasper
-conda activate esgf-qa
+set indir7  = `find $topdir/CORDEX-CMIP6 -type d -name v1-r1`
+set outdir7 = $qdir/qa
+set cmddir7 = $qdir/cmd
+set rundir7 = $qdir/run
 
-mkdir qa
-esgqa -o qa -t wcrp_cordex_cmip6:latest -t cf:1.9 CORDEX-CMIP6
-# Note: output directory must be empty
+mkdir -p $outdir7 $cmddir7 $rundir7
 
-exit
+set cmdfile = $cmddir7/qa.cmd
+rm -f $cmdfile; touch $cmdfile
+
+set tests = " -t wcrp_cordex_cmip6:latest -t cf:1.9"
+
+# Note: output dirctories must be empty
 
 
-echo "scp -r casper.hpc.ucar.edu:$topdir/qa cordex-qa"
+foreach freq  (fx mon)
+  rm -rf $outdir7/$freq
+  mkdir -p $outdir7/$freq
+  echo esgqa -o $outdir7/$freq $tests $indir7/$freq >> $cmdfile
+end
 
-# download results, then upload the cluster.json file to:
+foreach freq  (day 1hr)
+  foreach var (`/bin/ls -1 $indir7/$freq`)
+    rm -rf $outdir7/$freq/$var
+    mkdir -p $outdir7/$freq/$var
+    echo esgqa -o $outdir7/$freq/$var $tests $indir7/$freq/$var >> $cmdfile
+  end
+end
+
+
+cd $rundir7
+cp $cmdfile .
+echo module restore default > config_env.sh
+echo conda activate esgf-qa >> config_env.sh
+
+launch_cf -A $PROJECT -l walltime=00:05:00 -q casper -j oe -N esgf_qa $cmdfile
+
+echo "scp -r casper.hpc.ucar.edu:$qdir/qa cordex-qa"
+
+
+# download results, then check the cluster.json files at:
 https://cmiphub.dkrz.de/info/display_qc_results.html
 
 
