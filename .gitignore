@@ -1,4 +1,8 @@
 # Ignore datafiles produced by postproc
+postprocess/mrros
+postprocess/mrso
+postprocess/snd
+postprocess/snw
 postprocess/pr
 postprocess/tas
 postprocess/tasmax

@@ -67,6 +67,10 @@ rsds:
 rlds:
   <<: *defaults
 
+snw:
+  <<: *defaults
+
+
 # --- Time-invariant variables (no compression) ---
 sftlf:
   levels: fixed
