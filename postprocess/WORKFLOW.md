@@ -247,10 +247,20 @@ echo conda activate esgf-qa >> config_env.sh
 
 launch_cf -A $PROJECT -l walltime=00:05:00 -q casper -j oe -N esgf_qa $cmdfile
 
-echo "scp -r casper.hpc.ucar.edu:$qdir/qa cordex-qa"
+
+## wait until it finishes, check everything ran correctly
+cd $rundir7
+wc stdout*/*
+tail -q -n 1 *.o* | cut -f 1 -d : | uniq -c
+cd $topdir
+
+# merge cluser.json files so you only need to upload one
+set simname = `basename $topdir`
+python $post/merge-qa.py $qdir/$simname.qa.merged.json --find $qdir/qa
+echo "scp casper.hpc.ucar.edu:$qdir/$simname.qa.merged.json ."
 
 
-# download results, then check the cluster.json files at:
+# download results, then check the cluster.json file at:
 https://cmiphub.dkrz.de/info/display_qc_results.html
 
 
@@ -265,7 +275,7 @@ https://cmiphub.dkrz.de/info/display_qc_results.html
 https://github.com/ESGF/esgf-qa
 
 
-# First, create a bare conda environment:
+# First, create a bare conda environment (mamba is faster):
 
 mamba create -n esgf-qa python=3.10
 
@@ -278,6 +288,7 @@ setenv PYTHONIOENCODING utf-8
 conda activate esgf-qa
 pip install esgf-qa
 pip install esgvoc
+rehash
 esgvoc config set universe:branch=esgvoc_dev
 esgvoc config add cordex-cmip6
 esgvoc install
