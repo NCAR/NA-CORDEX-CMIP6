@@ -13,11 +13,6 @@ cdo remapbic,r2880x1440 -sellonlatbox,175,350,5,80 $infile $outfile
 TODO items:
 
 
-# change all-zero days from restart for clt to missing
-#	fixed - check on full re-run for refactoring
-	fixed but value is not 1e20
-
-
 add GIS climate indicator calculation step
 
 regridding to lat-lon?
