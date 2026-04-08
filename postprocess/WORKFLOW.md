@@ -38,6 +38,8 @@ The workflow steps are:
 ___
 
 ```
+tcsh
+
 ################
 # Step 0: setup
 
@@ -122,7 +124,7 @@ $post/aggregate.sh $indir3 $sdir $outdir3 $cmddir3a
 
 $post/launch_multi --workflow cordex --run $rundir3a $cmddir3a/*cmd
 
-# then do it again to generate monthly files
+# wait 'til it finishes, then do it again to generate monthly files
 
 $post/aggregate.sh $indir3 $sdir $outdir3 $cmddir3b
 
@@ -266,6 +268,41 @@ https://cmiphub.dkrz.de/info/display_qc_results.html
 
 ################
 # Step 8: use globus to move final results from scratch to campaign
+
+# login to globus & transfer files using the web interface
+
+chmod -R ug+rwX o+rX 
+
+
+################
+# Step 9: generate climate indexes for GIS
+
+set idir = $topdir/index
+
+set indir9  = $outdir4
+set outdir9 = $idir/data
+set cmddir9 = $idir/cmd
+set rundir9 = $idir/run
+
+$post/index.sh $indir9 $outdir9 $cmddir9
+
+$post/launch_multi --run $rundir9/ $cmddir9/prereqs.cmd
+
+# wait 'til it finishes, then run the indexes
+
+$post/launch_multi --run $rundir9 $cmddir9/indices.cmd
+
+
+## wait until it finishes, check everything ran correctly
+cd $rundir9/prereqs
+wc stdout*/* | tail -1
+tail -q -n 1 *.o* | cut -f 1 -d : | sort | uniq -c
+cd $rundir9/indices
+wc stdout*/* | tail -1
+tail -q -n 1 *.o* | cut -f 1 -d : | sort | uniq -c
+cd $topdir
+
+
 
 ```
 

@@ -1,315 +1,495 @@
 #!/bin/bash
-#
-# gen_climate_index_cmds.sh - Generate CDO commandfiles for climate indices
-#
-# Usage: gen_climate_index_cmds.sh INDIR OUTDIR CMDDIR
-#
-#   INDIR   Parent directory containing per-variable subdirectories
-#           (e.g., core/day/ containing pr/, tas/, tasmax/, tasmin/, etc.)
-#   OUTDIR  Output directory (subdirs created per index)
-#   CMDDIR  Directory where commandfiles are written
-#
-# Input data is assumed to be CORDEX-compliant:
-#   - One variable per file, one variable per directory
-#   - Directory names match variable names
-#   - Precipitation in kg m-2 s-1 (converted to mm/day)
-#   - Temperature in Kelvin
-#
-# Indices are calculated on an annual basis, one output file per input file.
 
-set -e
+# index.sh - Generate commandfiles for computing climate indices from
+# compressed CORDEX-CMIP6 daily data.
+#
+# Operates on the output of compress.sh (Step 4), where data are organized
+# into <var>.<freq> subdirectories (e.g., pr.day, tasmax.day).  Produces
+# one NetCDF file per index covering all available years, written flat into
+# OUTDIR (no per-variable subdirectories, since these files go to GIS).
+#
+# Index definitions are read from a TSV file (default: climate_indices.tsv
+# in the same directory as this script).  The TSV drives command construction;
+# modifying the TSV is the intended way to add, remove, or change indices.
+#
+# Generates five commandfiles that must be run in order:
+#
+#   minmax.cmd   - ydrunmin/ydrunmax/timmin/timmax over baseline period.
+#                  Required by pctile.cmd and indices.cmd.
+#
+#   pctile.cmd   - ydrunpctl/ydrunmean/timpctl reference files from minmax.
+#                  Required by annual.cmd.
+#
+#   indices.cmd  - Indices whose operators natively output annual time steps.
+#                  Includes a CDO_PCTL_NBINS export before bootstrapped cmds.
+#
+#   annual.cmd   - One command per year for operators that summarise over the
+#                  entire input period.  Writes per-year files to OUTDIR/annual/.
+#
+#   merge.cmd    - One mergetime per annual-loop index, assembling per-year
+#                  files into OUTDIR.
+#
+# Per-year temporary files in OUTDIR/annual/ can be removed after merge.cmd
+# completes.
+#
+# --- TSV columns ---
+#
+#   index          Output filename stem (e.g. TG10p)
+#   cdo_operator   CDO operator or pipe fragment (e.g. eca_tg10p,
+#                  yearsum -setrtomiss,0,1).  Used verbatim in the command.
+#   input_vars     Input variable name(s).  Use + to separate multiple vars
+#                  (e.g. tasmax+tasmin).  Special token "sftlf" causes that
+#                  input to be resolved from <var>.fx rather than <var>.day.
+#   units          Expected units of the input.  Drives inline unit conversion:
+#                    mm/day  -> -mulc,86400  (pr arrives as kg m-2 s-1)
+#                    octas   -> -mulc,0.08   (clt arrives as 0-100%)
+#                    C       -> -subc,277.15 (tas arrives in K)
+#                    other   -> no conversion
+#   long_name      Human-readable description (not used by script)
+#   output_frequency
+#                  annual      : operator natively outputs annual steps
+#                  annual_loop : operator summarises entire input; needs
+#                                selyear loop + mergetime
+#   prereq_type    Prerequisite descriptor (drives minmax/pctile generation):
+#                    none
+#                    bootstrap:ydrunmin+ydrunmax,W
+#                                     etccdi bootstrapped; generates
+#                                     ydrunmin and ydrunmax with window W
+#                                     in minmax.cmd; appends
+#                                     ,BSTART,BEND to operator and passes
+#                                     minmax files as infile2/infile3
+#                    ydrunmean,W      generates ydrunmean with window W
+#                                     in pctile.cmd; passed as infile2
+#                    ydrunpctl,P,W    generates ydrunmin+ydrunmax in
+#                                     minmax.cmd, ydrunpctl,P,W in
+#                                     pctile.cmd; passed as infile2
+#                    timpctl,P        generates timmin+timmax in minmax.cmd
+#                                     (wet-day masked for pr), timpctl,P
+#                                     in pctile.cmd; passed as infile2
+#   description    Human-readable description (not used by script)
+#   notes          Freeform notes (not used by script)
+#
+# --- Unit conversion notes ---
+#
+# Unit conversions are applied as a CDO operator prepended to the input pipe.
+# The conversion for a given units value is defined in the unit_conv() function
+# below; that function is the single authority for conversion rules.
+#
+# GD4 uses units "C" which triggers -subc,277.15, converting K to C while
+# also shifting the 4-degree threshold (the operator itself adds a gtc,0 mask
+# via the cdo_operator field).
+#
+# --- Usage ---
+#
+# Usage: index.sh [OPTIONS] INDIR OUTDIR [CMDDIR]
+#
+#   INDIR    Output from compress.sh (contains <var>.<freq> subdirs)
+#   OUTDIR   Output directory for index NetCDF files
+#   CMDDIR   Directory for commandfiles (default: current directory)
+#
+# Options:
+#   --tsv FILE                    Index definitions TSV (default: see above)
+#   --baseline STARTYEAR-ENDYEAR  Reference period (default: 1991-2020)
+#   --force                       Overwrite existing output files
+#   -h, --help                    Show this help message
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TSV="${SCRIPT_DIR}/climate_indices.tsv"
+BASELINE_START=1991
+BASELINE_END=2020
+FORCE=0
 
 usage() {
-    echo "Usage: $(basename "$0") INDIR OUTDIR CMDDIR"
-    echo ""
-    echo "  INDIR   Parent directory containing per-variable subdirectories"
-    echo "  OUTDIR  Output directory (subdirs created per index)"
-    echo "  CMDDIR  Directory where commandfiles are written"
+    sed -n '/^# Usage:/,/^[^#]/{ /^[^#]/d; s/^# \{0,3\}//; p }' "$0" >&2
     exit 1
 }
 
-[[ $# -ne 3 ]] && usage
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --tsv)      TSV="$2"; shift 2 ;;
+        --baseline)
+            if [[ "$2" =~ ^([0-9]{4})-([0-9]{4})$ ]]; then
+                BASELINE_START="${BASH_REMATCH[1]}"
+                BASELINE_END="${BASH_REMATCH[2]}"
+            else
+                echo "Error: --baseline must be STARTYEAR-ENDYEAR, got: $2" >&2; exit 1
+            fi
+            shift 2 ;;
+        --force)    FORCE=1; shift ;;
+        -h|--help)  usage ;;
+        -*)         echo "Error: Unknown option $1" >&2; usage ;;
+        *)          break ;;
+    esac
+done
 
-INDIR="$1"
-OUTDIR="$2"
-CMDDIR="$3"
+[[ $# -lt 2 ]] && usage
 
-[[ -d "$INDIR" ]] || { echo "Error: INDIR not found: $INDIR"; exit 1; }
-
-# Create cmddir if needed
+INDIR="$(realpath "$1")"
+mkdir -p "$2"
+OUTDIR="$(realpath "$2")"
+CMDDIR="${3:-.}"
 mkdir -p "$CMDDIR"
+CMDDIR="$(realpath "$CMDDIR")"
 
-# Helper: get files for a variable (empty if variable dir doesn't exist)
-get_varfiles() {
-    local var="$1"
-    local vardir="$INDIR/$var"
-    if [[ -d "$vardir" ]]; then
-        find "$vardir" -maxdepth 1 -name "${var}_*.nc" -type f | sort
+[[ ! -d "$INDIR" ]] && { echo "Error: INDIR not found: $INDIR" >&2; exit 1; }
+[[ ! -f "$TSV"   ]] && { echo "Error: TSV not found: $TSV" >&2; exit 1; }
+
+PCTLDIR="$OUTDIR/pctl"
+ANNDIR="$OUTDIR/annual"
+mkdir -p "$PCTLDIR" "$ANNDIR"
+
+MINMAX_CMD="$CMDDIR/minmax.cmd"
+PCTILE_CMD="$CMDDIR/pctile.cmd"
+INDEX_CMD="$CMDDIR/indices.cmd"
+ANNUAL_CMD="$CMDDIR/annual.cmd"
+MERGE_CMD="$CMDDIR/merge.cmd"
+> "$MINMAX_CMD"; > "$PCTILE_CMD"; > "$INDEX_CMD"; > "$ANNUAL_CMD"; > "$MERGE_CMD"
+
+# CDO_PCTL_NBINS for etccdi bootstrapping: window=5, double/int ratio=2
+PCTL_WINDOW=5
+BASELINE_YEARS=$(( BASELINE_END - BASELINE_START + 1 ))
+CDO_PCTL_NBINS=$(( PCTL_WINDOW * BASELINE_YEARS * 2 + 2 ))
+
+echo "Baseline period: ${BASELINE_START}-${BASELINE_END}"
+echo "CDO_PCTL_NBINS:  ${CDO_PCTL_NBINS}"
+
+# ---------------------------------------------------------------------------
+# Extract shared DRS components and simulation timespan from input files
+# ---------------------------------------------------------------------------
+
+all_files=$(find "$INDIR" -maxdepth 2 -name "*.nc" -path "*/*.day/*" | sort)
+[[ -z "$all_files" ]] && {
+    echo "Error: No *.nc files found under $INDIR/*/*.day/" >&2; exit 1
+}
+
+first_base="$(basename "$(echo "$all_files" | head -1)" .nc)"
+last_base="$(basename "$(echo "$all_files" | tail -1)" .nc)"
+middle="$(echo "$first_base" | cut -d_ -f2-8)"
+first_ts="${first_base##*_}"; last_ts="${last_base##*_}"
+timespan="${first_ts%%-*}-${last_ts##*-}"
+SIM_START="${first_ts:0:4}"
+SIM_END="${last_ts##*-}"; SIM_END="${SIM_END:0:4}"
+
+echo "  DRS middle: $middle"
+echo "  Timespan:   $timespan  (${SIM_START}-${SIM_END})"
+
+# ---------------------------------------------------------------------------
+# Helper functions
+# ---------------------------------------------------------------------------
+
+# Space-separated sorted list of all files for a <var>.day variable
+day_inputs() {
+    find "$INDIR/${1}.day" -maxdepth 1 -name "${1}_*.nc" -type f | sort | tr '\n' ' ' | sed 's/ $//'
+}
+
+# Files for a variable whose timespan overlaps the baseline period
+baseline_inputs() {
+    local vardir="$INDIR/${1}.day"
+    [[ -d "$vardir" ]] || return 0
+    local f base ts sy ey
+    while IFS= read -r f; do
+        base="$(basename "$f" .nc)"; ts="${base##*_}"
+        sy="${ts:0:4}"; ey="${ts##*-}"; ey="${ey:0:4}"
+        [[ $sy -le $BASELINE_END && $ey -ge $BASELINE_START ]] && echo "$f" || true
+    done < <(find "$vardir" -maxdepth 1 -name "${1}_*.nc" -type f | sort)
+}
+
+# Append a line to a commandfile; skip if outfile already exists (unless --force)
+emit() {
+    local cmdfile="$1" outfile="$2"; shift 2
+    [[ -f "$outfile" && $FORCE -eq 0 ]] && return 0
+    echo "$*" >> "$cmdfile"
+}
+
+# Return CDO inline unit-conversion operator for a given units string, or empty.
+# This function is the single authority for unit conversion rules.
+unit_conv() {
+    case "$1" in
+        mm/day) echo "-mulc,86400"  ;;
+        octas)  echo "-mulc,0.08"   ;;
+        C)      echo "-subc,277.15" ;;
+        *)      echo ""             ;;
+    esac
+}
+
+# Build a CDO input pipe for a single variable: "[conv] -mergetime file1 ..."
+# Usage: var_pipe VAR UNITS
+var_pipe() {
+    local var="$1" units="$2"
+    local inputs conv
+    inputs="$(day_inputs "$var")"
+    [[ -z "$inputs" ]] && { echo ""; return; }
+    conv="$(unit_conv "$units")"
+    if [[ -n "$conv" ]]; then
+        echo "${conv} -mergetime ${inputs}"
+    else
+        echo "-mergetime ${inputs}"
     fi
 }
 
-# Helper: transform input filename to output filename
-# e.g., pr_EUR-11_... -> cdd_EUR-11_...
-make_outfile() {
-    local infile="$1"
-    local oldvar="$2"
-    local newindex="$3"
-    local outdir="$4"
-    local base
-    base="$(basename "$infile")"
-    echo "${outdir}/${base/${oldvar}_/${newindex}_}"
+# Canonicalise a prereq filename: <var>_<stat>_<middle>_<timespan>.nc in PCTLDIR
+pctl_file() { echo "$PCTLDIR/${1}_${2}_${middle}_${timespan}.nc"; }
+
+# Tracking sets to avoid duplicate minmax/pctile commands across TSV rows
+declare -A minmax_emitted=()
+declare -A pctile_emitted=()
+
+# Emit ydrunmin + ydrunmax for a variable into minmax.cmd (once per var+window)
+ensure_ydrunminmax() {
+    local var="$1" bl_inputs="$2"
+    local key="${var}_ydrun${PCTL_WINDOW}"
+    [[ -n "${minmax_emitted[$key]:-}" ]] && return 0
+    local f_min f_max
+    f_min="$(pctl_file "$var" "ydrunmin${PCTL_WINDOW}")"
+    f_max="$(pctl_file "$var" "ydrunmax${PCTL_WINDOW}")"
+    emit "$MINMAX_CMD" "$f_min" \
+        "cdo -s ydrunmin,${PCTL_WINDOW} -mergetime ${bl_inputs} ${f_min}"
+    emit "$MINMAX_CMD" "$f_max" \
+        "cdo -s ydrunmax,${PCTL_WINDOW} -mergetime ${bl_inputs} ${f_max}"
+    minmax_emitted[$key]=1
+    (( nminmax += 2 )) || true
 }
 
-# Helper: append a command to the appropriate commandfile
-# Commands are grouped by index
-emit() {
-    local index="$1"
-    local cmd="$2"
-    echo "$cmd" >> "$CMDDIR/${index}.cmd"
+# Emit timmin + timmax for a variable into minmax.cmd (once per var+mask combo).
+# wet_mask=1 applies setrtomiss,0,1 + unit conversion before computing min/max.
+ensure_timminmax() {
+    local var="$1" bl_inputs="$2" units="$3" wet_mask="${4:-0}"
+    local key="${var}_tim_wet${wet_mask}"
+    [[ -n "${minmax_emitted[$key]:-}" ]] && return 0
+    local conv pipe f_min f_max stem
+    conv="$(unit_conv "$units")"
+    if [[ $wet_mask -eq 1 ]]; then
+        pipe="-setrtomiss,0,1 ${conv} -mergetime ${bl_inputs}"
+        stem="${var}_wetday"
+    else
+        pipe="${conv:+${conv} }-mergetime ${bl_inputs}"
+        stem="$var"
+    fi
+    f_min="$(pctl_file "$stem" "timmin")"
+    f_max="$(pctl_file "$stem" "timmax")"
+    emit "$MINMAX_CMD" "$f_min" "cdo -s timmin ${pipe} ${f_min}"
+    emit "$MINMAX_CMD" "$f_max" "cdo -s timmax ${pipe} ${f_max}"
+    minmax_emitted[$key]=1
+    (( nminmax += 2 )) || true
 }
 
-# Clear any existing commandfiles
-rm -f "$CMDDIR"/*.cmd
+nminmax=0; npctile=0; nindex=0; nannual=0; nmerge=0
+nbins_emitted=0
 
-#=============================================================================
-# PRECIPITATION INDICES (pr)
-#=============================================================================
-# pr is in kg m-2 s-1, need mm/day: multiply by 86400
+# ---------------------------------------------------------------------------
+# Main loop: read TSV and emit commands
+# ---------------------------------------------------------------------------
 
-pr_files=$(get_varfiles pr)
+while IFS=$'\t' read -r idx op input_vars units long_name freq prereq desc notes; do
+    # Skip header and blank lines
+    [[ "$idx" == "index" || -z "$idx" ]] && continue
 
-if [[ -n "$pr_files" ]]; then
-    for f in $pr_files; do
-        # CDD - Consecutive dry days (etccdi version)
-        out=$(make_outfile "$f" pr cdd "$OUTDIR/cdd")
-        emit cdd "cdo -s etccdi_cdd -mulc,86400 $f $out"
+    # Split input_vars on '+' into an array
+    IFS='+' read -ra vars <<< "$input_vars"
+    primary_var="${vars[0]}"
 
-        # CWD - Consecutive wet days (etccdi version)
-        out=$(make_outfile "$f" pr cwd "$OUTDIR/cwd")
-        emit cwd "cdo -s etccdi_cwd -mulc,86400 $f $out"
-
-        # RR1 / R1mm - Wet days (etccdi version)
-        out=$(make_outfile "$f" pr r1mm "$OUTDIR/r1mm")
-        emit r1mm "cdo -s etccdi_r1mm -mulc,86400 $f $out"
-
-        # R10mm - Heavy precipitation days
-        out=$(make_outfile "$f" pr r10mm "$OUTDIR/r10mm")
-        emit r10mm "cdo -s eca_r10mm -mulc,86400 $f $out"
-
-        # R20mm - Very heavy precipitation days
-        out=$(make_outfile "$f" pr r20mm "$OUTDIR/r20mm")
-        emit r20mm "cdo -s eca_r20mm -mulc,86400 $f $out"
-
-        # RX1day - Max 1-day precipitation (etccdi version)
-        out=$(make_outfile "$f" pr rx1day "$OUTDIR/rx1day")
-        emit rx1day "cdo -s etccdi_rx1day -mulc,86400 $f $out"
-
-        # RX5day - Max 5-day precipitation (etccdi version)
-        out=$(make_outfile "$f" pr rx5day "$OUTDIR/rx5day")
-        emit rx5day "cdo -s etccdi_rx5day -mulc,86400 $f $out"
-
-        # SDII - Simple daily intensity index
-        out=$(make_outfile "$f" pr sdii "$OUTDIR/sdii")
-        emit sdii "cdo -s eca_sdii -mulc,86400 $f $out"
-
-        # PRCPTOT - Annual total precipitation
-        out=$(make_outfile "$f" pr prcptot "$OUTDIR/prcptot")
-        emit prcptot "cdo -s yearsum -mulc,86400 $f $out"
-    done
-fi
-
-#=============================================================================
-# TASMIN INDICES (daily minimum temperature)
-#=============================================================================
-
-tasmin_files=$(get_varfiles tasmin)
-
-if [[ -n "$tasmin_files" ]]; then
-    for f in $tasmin_files; do
-        # FD - Frost days (etccdi version)
-        out=$(make_outfile "$f" tasmin fd "$OUTDIR/fd")
-        emit fd "cdo -s etccdi_fd $f $out"
-
-        # TR - Tropical nights (etccdi version)
-        out=$(make_outfile "$f" tasmin tr "$OUTDIR/tr")
-        emit tr "cdo -s etccdi_tr $f $out"
-
-        # CFD - Consecutive frost days
-        out=$(make_outfile "$f" tasmin cfd "$OUTDIR/cfd")
-        emit cfd "cdo -s eca_cfd $f $out"
-
-        # TNn - Min of daily min temperature
-        out=$(make_outfile "$f" tasmin tnn "$OUTDIR/tnn")
-        emit tnn "cdo -s yearmin $f $out"
-
-        # TNx - Max of daily min temperature
-        out=$(make_outfile "$f" tasmin tnx "$OUTDIR/tnx")
-        emit tnx "cdo -s yearmax $f $out"
-    done
-fi
-
-#=============================================================================
-# TASMAX INDICES (daily maximum temperature)
-#=============================================================================
-
-tasmax_files=$(get_varfiles tasmax)
-
-if [[ -n "$tasmax_files" ]]; then
-    for f in $tasmax_files; do
-        # SU - Summer days (etccdi version)
-        out=$(make_outfile "$f" tasmax su "$OUTDIR/su")
-        emit su "cdo -s etccdi_su $f $out"
-
-        # ID - Ice days (etccdi version)
-        out=$(make_outfile "$f" tasmax id "$OUTDIR/id")
-        emit id "cdo -s etccdi_id $f $out"
-
-        # CSU - Consecutive summer days
-        out=$(make_outfile "$f" tasmax csu "$OUTDIR/csu")
-        emit csu "cdo -s eca_csu $f $out"
-
-        # TXx - Max of daily max temperature
-        out=$(make_outfile "$f" tasmax txx "$OUTDIR/txx")
-        emit txx "cdo -s yearmax $f $out"
-
-        # TXn - Min of daily max temperature
-        out=$(make_outfile "$f" tasmax txn "$OUTDIR/txn")
-        emit txn "cdo -s yearmin $f $out"
-    done
-fi
-
-#=============================================================================
-# TAS INDICES (daily mean temperature)
-#=============================================================================
-
-tas_files=$(get_varfiles tas)
-
-if [[ -n "$tas_files" ]]; then
-    for f in $tas_files; do
-        # HD - Heating degree days
-        out=$(make_outfile "$f" tas hd "$OUTDIR/hd")
-        emit hd "cdo -s eca_hd $f $out"
-
-        # Annual mean temperature
-        out=$(make_outfile "$f" tas tas_yearmean "$OUTDIR/tas_yearmean")
-        emit tas_yearmean "cdo -s yearmean $f $out"
-    done
-fi
-
-#=============================================================================
-# MULTI-VARIABLE INDICES (tasmax + tasmin)
-#=============================================================================
-
-# For these, we need matching files from both variables
-# Assuming filenames have identical structure except for variable name
-
-if [[ -n "$tasmax_files" && -n "$tasmin_files" ]]; then
-    for txf in $tasmax_files; do
-        # Derive corresponding tasmin file
-        txbase=$(basename "$txf")
-        tnbase="${txbase/tasmax/tasmin}"
-        tnf="$INDIR/tasmin/$tnbase"
-        
-        if [[ -f "$tnf" ]]; then
-            # ETR - Extreme temperature range
-            out=$(make_outfile "$txf" tasmax etr "$OUTDIR/etr")
-            emit etr "cdo -s eca_etr $txf $tnf $out"
-
-            # DTR - Mean diurnal temperature range
-            out=$(make_outfile "$txf" tasmax dtr "$OUTDIR/dtr")
-            emit dtr "cdo -s yearmean -sub $txf $tnf $out"
+    # Check required input directories/files exist; silently skip if absent
+    skip=0
+    for v in "${vars[@]}"; do
+        if [[ "$v" == "sftlf" ]]; then
+            if ! find "$INDIR/sftlf.fx" -maxdepth 1 -name "sftlf_*.nc" \
+                    -type f 2>/dev/null | grep -q .; then
+                echo "    WARNING: sftlf.fx not found; skipping ${idx}" >&2
+                skip=1; break
+            fi
+        elif [[ ! -d "$INDIR/${v}.day" ]]; then
+            skip=1; break
         fi
     done
-fi
+    [[ $skip -eq 1 ]] && continue
 
-#=============================================================================
-# WIND INDICES (sfcWind)
-#=============================================================================
+    # Build baseline file list for primary variable
+    bl_inputs="$(baseline_inputs "$primary_var" | tr '\n' ' ' | sed 's/ $//')"
 
-sfcwind_files=$(get_varfiles sfcWind)
+    # Warn and skip if prereq needs baseline but none found
+    if [[ "$prereq" != "none" && -z "$bl_inputs" ]]; then
+        echo "    WARNING: no ${primary_var} files overlap baseline" \
+             "${BASELINE_START}-${BASELINE_END}; skipping ${idx}" >&2
+        continue
+    fi
 
-if [[ -n "$sfcwind_files" ]]; then
-    for f in $sfcwind_files; do
-        # FG - Mean wind speed
-        out=$(make_outfile "$f" sfcWind fg "$OUTDIR/fg")
-        emit fg "cdo -s yearmean $f $out"
+    # Build the main input pipe for the primary variable
+    main_pipe="$(var_pipe "$primary_var" "$units")"
+    [[ -z "$main_pipe" ]] && continue
 
-        # FGcalm - Calm days (wind <= 2 m/s)
-        out=$(make_outfile "$f" sfcWind fgcalm "$OUTDIR/fgcalm")
-        emit fgcalm "cdo -s yearsum -lec,2 $f $out"
-
-        # FG6Bft - Days with wind >= 10.8 m/s (6 Beaufort)
-        out=$(make_outfile "$f" sfcWind fg6bft "$OUTDIR/fg6bft")
-        emit fg6bft "cdo -s yearsum -gec,10.8 $f $out"
+    # Build secondary input expressions (no unit conversion on secondary vars)
+    extra_inputs=""
+    for (( i=1; i<${#vars[@]}; i++ )); do
+        v="${vars[$i]}"
+        if [[ "$v" == "sftlf" ]]; then
+            sf="$(find "$INDIR/sftlf.fx" -maxdepth 1 -name "sftlf_*.nc" \
+                      -type f | head -1)"
+            extra_inputs="${extra_inputs} ${sf}"
+        else
+            extra_inputs="${extra_inputs} -mergetime $(day_inputs "$v")"
+        fi
     done
-fi
 
-#=============================================================================
-# HUMIDITY INDICES (hurs)
-#=============================================================================
+    final_out="$OUTDIR/${idx}_${middle}_${timespan}.nc"
 
-hurs_files=$(get_varfiles hurs)
+    # ------------------------------------------------------------------
+    # Parse prereq_type: emit minmax/pctile commands; build extra op args
+    # ------------------------------------------------------------------
+    op_args=""        # appended to operator (e.g. ,1991,2020 for bootstrap)
+    prereq_infiles="" # extra infiles after main input (bootstrap minmax pair)
+    prereq_infile2="" # single prereq file (pctile/mean) for annual_loop
 
-if [[ -n "$hurs_files" ]]; then
-    for f in $hurs_files; do
-        # RH - Mean relative humidity
-        out=$(make_outfile "$f" hurs rh "$OUTDIR/rh")
-        emit rh "cdo -s yearmean $f $out"
-    done
-fi
+    case "$prereq" in
+        none)
+            ;;
 
-#=============================================================================
-# PRESSURE INDICES (psl)
-#=============================================================================
+        bootstrap:ydrunmin+ydrunmax,*)
+            ensure_ydrunminmax "$primary_var" "$bl_inputs"
+            f_min="$(pctl_file "$primary_var" "ydrunmin${PCTL_WINDOW}")"
+            f_max="$(pctl_file "$primary_var" "ydrunmax${PCTL_WINDOW}")"
+            op_args=",${BASELINE_START},${BASELINE_END}"
+            prereq_infiles="${f_min} ${f_max}"
+            if [[ $nbins_emitted -eq 0 ]]; then
+                echo "export CDO_PCTL_NBINS=${CDO_PCTL_NBINS}" >> "$INDEX_CMD"
+                nbins_emitted=1
+            fi
+            ;;
 
-psl_files=$(get_varfiles psl)
+        ydrunmean,*)
+            window="${prereq##*,}"
+            f_mean="$(pctl_file "$primary_var" "ydrunmean${window}")"
+            key="${primary_var}_ydrunmean${window}"
+            if [[ -z "${pctile_emitted[$key]:-}" ]]; then
+                emit "$PCTILE_CMD" "$f_mean" \
+                    "cdo -s ydrunmean,${window} -mergetime ${bl_inputs} ${f_mean}"
+                pctile_emitted[$key]=1
+                (( npctile++ )) || true
+            fi
+            prereq_infile2="$f_mean"
+            ;;
 
-if [[ -n "$psl_files" ]]; then
-    for f in $psl_files; do
-        # PP - Mean sea level pressure
-        out=$(make_outfile "$f" psl pp "$OUTDIR/pp")
-        emit pp "cdo -s yearmean $f $out"
-    done
-fi
+        ydrunpctl,*,*)
+            pctl="${prereq#ydrunpctl,}"; pctl="${pctl%,*}"
+            window="${prereq##*,}"
+            ensure_ydrunminmax "$primary_var" "$bl_inputs"
+            f_min="$(pctl_file "$primary_var" "ydrunmin${window}")"
+            f_max="$(pctl_file "$primary_var" "ydrunmax${window}")"
+            f_pctl="$(pctl_file "$primary_var" "p${pctl}")"
+            key="${primary_var}_ydrunpctl${pctl}_${window}"
+            if [[ -z "${pctile_emitted[$key]:-}" ]]; then
+                emit "$PCTILE_CMD" "$f_pctl" \
+                    "cdo -s ydrunpctl,${pctl},${window} -mergetime ${bl_inputs} \
+${f_min} ${f_max} ${f_pctl}"
+                pctile_emitted[$key]=1
+                (( npctile++ )) || true
+            fi
+            prereq_infile2="$f_pctl"
+            ;;
 
-#=============================================================================
-# RADIATION INDICES (rsds)
-#=============================================================================
+        timpctl,*)
+            pctl="${prereq##*,}"
+            wet_mask=0; [[ "$primary_var" == "pr" ]] && wet_mask=1
+            ensure_timminmax "$primary_var" "$bl_inputs" "$units" "$wet_mask"
+            local_stem="${primary_var}$( [[ $wet_mask -eq 1 ]] && echo "_wetday" || echo "" )"
+            f_min="$(pctl_file "$local_stem" "timmin")"
+            f_max="$(pctl_file "$local_stem" "timmax")"
+            f_pctl="$(pctl_file "$local_stem" "p${pctl}")"
+            key="${primary_var}_timpctl${pctl}_wet${wet_mask}"
+            if [[ -z "${pctile_emitted[$key]:-}" ]]; then
+                conv="$(unit_conv "$units")"
+                if [[ $wet_mask -eq 1 ]]; then
+                    bl_pipe="-setrtomiss,0,1 ${conv} -mergetime ${bl_inputs}"
+                else
+                    bl_pipe="${conv:+${conv} }-mergetime ${bl_inputs}"
+                fi
+                emit "$PCTILE_CMD" "$f_pctl" \
+                    "cdo -s timpctl,${pctl} ${bl_pipe} ${f_min} ${f_max} ${f_pctl}"
+                pctile_emitted[$key]=1
+                (( npctile++ )) || true
+            fi
+            prereq_infile2="$f_pctl"
+            ;;
 
-rsds_files=$(get_varfiles rsds)
+        *)
+            echo "    WARNING: unknown prereq_type '${prereq}' for ${idx}; skipping" >&2
+            continue
+            ;;
+    esac
 
-if [[ -n "$rsds_files" ]]; then
-    for f in $rsds_files; do
-        # Mean downwelling shortwave
-        out=$(make_outfile "$f" rsds rsds_yearmean "$OUTDIR/rsds_yearmean")
-        emit rsds_yearmean "cdo -s yearmean $f $out"
-    done
-fi
+    # ------------------------------------------------------------------
+    # Emit index commands based on output_frequency
+    # ------------------------------------------------------------------
+    case "$freq" in
 
-#=============================================================================
-# CREATE OUTPUT DIRECTORIES
-#=============================================================================
+        annual)
+            emit "$INDEX_CMD" "$final_out" \
+                "cdo -s ${op}${op_args} ${main_pipe}${extra_inputs} \
+${prereq_infiles} ${final_out}"
+            (( nindex++ )) || true
+            ;;
 
-for cmd in "$CMDDIR"/*.cmd; do
-    [[ -f "$cmd" ]] || continue
-    idx=$(basename "$cmd" .cmd)
-    mkdir -p "$OUTDIR/$idx"
+        annual_loop)
+            yr_outs=""
+            for yr in $(seq "$SIM_START" "$SIM_END"); do
+                yr_out="$ANNDIR/${idx}_${middle}_${yr}.nc"
+                if [[ ${#vars[@]} -eq 1 ]]; then
+                    conv="$(unit_conv "$units")"
+                    yr_pipe="${conv:+${conv} }-selyear,${yr} -mergetime $(day_inputs "$primary_var")"
+                    emit "$ANNUAL_CMD" "$yr_out" \
+                        "cdo -s ${op} ${yr_pipe} ${prereq_infile2} ${yr_out}"
+                else
+                    yr_inputs=""
+                    for (( i=0; i<${#vars[@]}; i++ )); do
+                        v="${vars[$i]}"
+                        if [[ "$v" == "sftlf" ]]; then
+                            sf="$(find "$INDIR/sftlf.fx" -maxdepth 1 \
+                                      -name "sftlf_*.nc" -type f | head -1)"
+                            yr_inputs="${yr_inputs} ${sf}"
+                        else
+                            yr_inputs="${yr_inputs} -selyear,${yr} -mergetime $(day_inputs "$v")"
+                        fi
+                    done
+                    emit "$ANNUAL_CMD" "$yr_out" \
+                        "cdo -s ${op}${yr_inputs} ${prereq_infile2} ${yr_out}"
+                fi
+                yr_outs="${yr_outs} ${yr_out}"
+                (( nannual++ )) || true
+            done
+            emit "$MERGE_CMD" "$final_out" \
+                "cdo -s mergetime${yr_outs} ${final_out}"
+            (( nmerge++ )) || true
+            ;;
+
+        *)
+            echo "    WARNING: unknown output_frequency '${freq}' for ${idx}; skipping" >&2
+            ;;
+    esac
+
+done < <(grep -v '^#' "$TSV")
+
+# ---------------------------------------------------------------------------
+# Remove empty commandfiles
+# ---------------------------------------------------------------------------
+
+for f in "$MINMAX_CMD" "$PCTILE_CMD" "$INDEX_CMD" "$ANNUAL_CMD" "$MERGE_CMD"; do
+    [[ -f "$f" && ! -s "$f" ]] && rm "$f" || true
 done
 
-#=============================================================================
-# SUMMARY
-#=============================================================================
-
-echo "Commandfiles written to: $CMDDIR"
-echo "Output directories created in: $OUTDIR"
 echo ""
-echo "Indices generated:"
+echo "Commandfile generation complete."
+echo "  TSV:                     $TSV"
+echo "  Commandfiles:            $CMDDIR"
+echo "  Reference files:         $PCTLDIR"
+echo "  Per-year temp files:     $ANNDIR"
+echo "  Final index files:       $OUTDIR"
+printf "  Minmax: %d  Pctile: %d  Indices: %d  Annual: %d  Merge: %d\n" \
+    $nminmax $npctile $nindex $nannual $nmerge
 echo ""
-
-# Count commands per index
-for cmd in "$CMDDIR"/*.cmd; do
-    [[ -f "$cmd" ]] || continue
-    idx=$(basename "$cmd" .cmd)
-    n=$(wc -l < "$cmd")
-    echo "  $idx: $n commands"
-done
+echo "Run in order:"
+[[ -f "$MINMAX_CMD" ]] && echo "  launch_multi --run RUNDIR/minmax  $MINMAX_CMD"
+[[ -f "$PCTILE_CMD" ]] && echo "  launch_multi --run RUNDIR/pctile  $PCTILE_CMD"
+[[ -f "$INDEX_CMD"  ]] && echo "  launch_multi --run RUNDIR/indices $INDEX_CMD"
+[[ -f "$ANNUAL_CMD" ]] && echo "  launch_multi --run RUNDIR/annual  $ANNUAL_CMD"
+[[ -f "$MERGE_CMD"  ]] && echo "  launch_multi --run RUNDIR/merge   $MERGE_CMD"
