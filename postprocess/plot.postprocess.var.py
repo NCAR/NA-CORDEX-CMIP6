@@ -101,13 +101,12 @@ rw = rolling_windows.get(freq, 5)
 # -------------------------
 # Time slices: first, middle, last
 # -------------------------
-tidx = [0, nt // 2, nt - 1]
+tidx   = [0, nt // 2, nt - 1]
+slices = [da.isel(time=t) for t in tidx]
 
-# Shared color scale across all three slices (exclude fill values)
-slices = [da.isel(time=t).values for t in tidx]
-valid  = [np.where(s >= 1e19, np.nan, s) for s in slices]
-vmin   = min(np.nanmin(s) for s in valid)
-vmax   = max(np.nanmax(s) for s in valid)
+# Shared color scale across all three slices; masked values skipped automatically
+subset = da.isel(time=tidx)
+vmin, vmax = subset.min().item(), subset.max().item()
 
 x = ds['x'].values
 y = ds['y'].values
@@ -133,7 +132,7 @@ def format_map(ax):
     ax.add_feature(cfeature.STATES,  linewidth=0.2, alpha=0.5)
     ax.add_feature(cfeature.BORDERS, linewidth=0.2, alpha=0.5)
 
-for k, (ax, t, data) in enumerate(zip(map_axes, tidx, valid)):
+for k, (ax, t, data) in enumerate(zip(map_axes, tidx, slices)):
     cf = ax.pcolormesh(x, y, data,
                        vmin=vmin, vmax=vmax,
                        cmap='nipy_spectral',
