@@ -1,6 +1,8 @@
 # Local variable specifications for NA-CORDEX-CMIP6 postprocessing.
 # Units, standard_name, long_name, cell_methods, and frequency are pulled
-# from the authoritative WCRP-CORDEX CMOR tables at runtime.
+# from the authoritative WCRP-CORDEX CMOR tables at runtime, with local
+# NCAR-CORDEX-CMIP6_*.json tables providing supplemental entries for
+# variables not in the upstream data request.
 #
 # Fields:
 #   levels: vertical level type (single, fixed, pressure, soil)
@@ -67,9 +69,37 @@ rsds:
 rlds:
   <<: *defaults
 
-snw:
+# --- AFWA diagnostic variables (supplemental, local CMOR table) ---
+cape:
+  <<: *defaults
+  quant: 3
+
+cin:
+  <<: *defaults
+  quant: 3
+
+prw:
+  <<: *defaults
+  quant: 3
+
+fzra:
   <<: *defaults
 
+wchill:
+  <<: *defaults
+  refh: 2
+  quant: 3
+
+heatidx:
+  <<: *defaults
+  refh: 2
+  quant: 3
+
+# --- Derived thermal comfort variable (supplemental, local CMOR table) ---
+wbgt:
+  <<: *defaults
+  refh: 2
+  quant: 3
 
 # --- Time-invariant variables (no compression) ---
 sftlf:

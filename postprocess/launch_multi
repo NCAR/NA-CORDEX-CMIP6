@@ -28,7 +28,8 @@
 # Workflows (--workflow NAME):
 #   cordex    Sets --wall 1:00:00, --mem 50GB, --config ~/config_env.npl.sh,
 #             and copies any scripts or files that might be needed
-#             (e.g., postprocess.core.variables.py, var_specs.yml)
+#             (e.g., postprocess.core.variables.py,
+#             postprocess.hyd-atm.variables.py, var_specs.yml)
 #             from SCRIPTS_DIR.
 #             All of these can be overridden by flags that follow --workflow.
 #
@@ -88,6 +89,7 @@ apply_workflow() {
             config_specified=1
             copyfiles+=(
                 "$scripts_dir/postprocess.core.variables.py"
+                "$scripts_dir/postprocess.hyd-atm.variables.py"
                 "$scripts_dir/cmorize.sh"
                 "$scripts_dir/var_specs.yml"
 		"$scripts_dir/plot.postprocess.var.py"

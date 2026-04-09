@@ -6,11 +6,31 @@
 #
 # Requires setup.sh to have been run first (OUTDIR must contain cached CMOR
 # JSON tables).
+#
+# Variables are routed to one of two worker scripts:
+#   postprocess.core.variables.py    - standard CORDEX core variables
+#   postprocess.hyd-atm.variables.py - supplemental hydro/atmo variables
+#                                      (AFWA diagnostics, etc.)
 
 set -euo pipefail
 
 # Default variable list for NA-CORDEX-CMIP6 postprocessing
-DEFAULT_VARS="fx,clt,evspsbl,hurs,huss,pr,ps,psl,rlds,rsds,sfcWind,tas,tasmax,tasmin,uas,vas"
+DEFAULT_CORE_VARS="fx,clt,evspsbl,hurs,huss,pr,ps,psl,rlds,rsds,sfcWind,tas,tasmax,tasmin,uas,vas"
+DEFAULT_HYDATM_VARS="cape,cin,prw,fzra,wchill,heatidx,wbgt"
+DEFAULT_VARS="${DEFAULT_CORE_VARS},${DEFAULT_HYDATM_VARS}"
+
+# Space-separated list of variables handled by postprocess.hyd-atm.variables.py.
+# All other variables are routed to postprocess.core.variables.py.
+HYDATM_VARS="cape cin prw fzra wchill heatidx wbgt"
+
+script_for_var() {
+    local v="$1"
+    local hv
+    for hv in $HYDATM_VARS; do
+        [[ "$v" == "$hv" ]] && { echo "postprocess.hyd-atm.variables.py"; return; }
+    done
+    echo "postprocess.core.variables.py"
+}
 
 usage() {
     cat >&2 <<EOF
@@ -27,7 +47,7 @@ Arguments:
 Options:
   --vars VAR[,VAR,...]  Comma-separated list of variables to process
                         (default: all supported variables)
-  --scripts PATH        Directory containing postprocess.core.variables.py
+  --scripts PATH        Directory containing the postprocess scripts
                         (default: directory containing extract.sh)
   -h, --help            Show this help message
 EOF
@@ -89,10 +109,12 @@ fi
 # Validate inputs
 [[ ! -d "$WRFDIR" ]] && { echo "Error: WRFDIR not found: $WRFDIR" >&2; exit 1; }
 
-[[ ! -f "$SCRIPTS_DIR/postprocess.core.variables.py" ]] && {
-    echo "Error: postprocess.core.variables.py not found in $SCRIPTS_DIR" >&2
-    exit 1
-}
+for s in postprocess.core.variables.py postprocess.hyd-atm.variables.py; do
+    [[ ! -f "$SCRIPTS_DIR/$s" ]] && {
+        echo "Error: $s not found in $SCRIPTS_DIR" >&2
+        exit 1
+    }
+done
 
 
 # Verify that each year's chunk directory exists and contains expected files
@@ -124,14 +146,16 @@ for var in "${VARLIST[@]}"; do
     cmdfile="$CMDDIR/${var}.cmd"
     > "$cmdfile"
 
+    script="$(script_for_var "$var")"
+
     if [[ "$var" == "fx" ]]; then
         # fx variables are time-invariant; generate a single command using
-        # the first year's chunk directory
+        # the first year's chunk directory.  fx is always handled by core.
         echo "python ./postprocess.core.variables.py $FIRST_CHUNK $START_YEAR fx $OUTDIR" >> "$cmdfile"
     else
         for (( year = START_YEAR; year <= END_YEAR; year++ )); do
             chunk="$WRFDIR/$(chunk_dir_for_year "$year")"
-            echo "python ./postprocess.core.variables.py $chunk $year $var $OUTDIR" >> "$cmdfile"
+            echo "python ./$script $chunk $year $var $OUTDIR" >> "$cmdfile"
         done
     fi
 

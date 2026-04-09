@@ -18,7 +18,9 @@ Usage:
   SETUPDIR    Output directory (created if needed); use the same directory
               for extract.sh OUTDIR so coordinate files are found alongside data
   SIM_CONFIG  Path to sim_config.yml (default: SCRIPTS_DIR/sim_config.yml)
-  --scripts   Directory containing var_specs.yml (default: directory of this script)
+  --scripts   Directory containing var_specs.yml and any local
+              NCAR-CORDEX-CMIP6_*.json supplementary CMOR tables
+              (default: directory of this script)
   --force     Recreate outputs even if they already exist
   -v/--verbose  Print detailed output (file contents, NCO/CDO commands)
 """
@@ -51,7 +53,8 @@ def parse_args():
     p.add_argument("sim_config", metavar="SIM_CONFIG", nargs="?",
                    help="Path to sim_config.yml (default: SCRIPTS_DIR/sim_config.yml)")
     p.add_argument("--scripts",  metavar="PATH",
-                   help="Directory containing var_specs.yml (default: script directory)")
+                   help="Directory containing var_specs.yml and local CMOR tables "
+                        "(default: script directory)")
     p.add_argument("--force",    action="store_true",
                    help="Recreate outputs even if they already exist")
     p.add_argument("-v", "--verbose", action="store_true",
@@ -151,10 +154,21 @@ def load_dreq(dreq_path):
     return dreq
 
 
-def load_cmor_tables(setupdir, freqs):
-    """Return dict of {varname: {field: value}} from cached CMOR JSON tables."""
+def load_cmor_tables(setupdir, freqs, scripts_dir):
+    """Return (cmor, local_vars) where:
+      - cmor is a dict of {varname: {field: value}} from CMOR JSON tables
+      - local_vars is the set of varnames that came from local supplementary
+        tables (NCAR-CORDEX-CMIP6_*.json in scripts_dir).
+
+    Upstream WCRP tables are loaded first, then any local supplementary tables
+    are merged on top (local entries fully override upstream).  Local tables
+    are also copied into setupdir for provenance.
+    """
     print(f"  loading CMOR tables")
     cmor = {}
+    local_vars = set()
+
+    # Upstream WCRP tables (cached in setupdir by fetch_upstream)
     for freq in freqs:
         fname = os.path.join(setupdir, f"CORDEX-CMIP6_{freq}.json")
         if not os.path.exists(fname):
@@ -162,16 +176,33 @@ def load_cmor_tables(setupdir, freqs):
         with open(fname) as f:
             table = json.load(f)
         for varname, spec in table.get("variable_entry", {}).items():
-            # Later tables (day) override earlier (1hr) if a var appears in both;
-            # in practice each var appears in only one table.
             cmor[varname] = spec
-    return cmor
+
+    # Local supplementary tables (override upstream)
+    local_tables = sorted(
+        glob.glob(os.path.join(scripts_dir, "NCAR-CORDEX-CMIP6_*.json")))
+    for fname in local_tables:
+        print(f"  merging local table: {os.path.basename(fname)}")
+        with open(fname) as f:
+            table = json.load(f)
+        for varname, spec in table.get("variable_entry", {}).items():
+            cmor[varname] = spec
+            local_vars.add(varname)
+        # Copy into setupdir for provenance
+        shutil.copy(fname, os.path.join(setupdir, os.path.basename(fname)))
+
+    return cmor, local_vars
 
 
-def build_var_table(var_specs_path, dreq_path, setupdir, freqs):
+def build_var_table(var_specs_path, dreq_path, setupdir, freqs, scripts_dir):
     """
     Merge var_specs.yml + dreq_default.csv + CMOR JSON tables into a resolved
     per-variable table.  Returns list of row dicts.
+
+    Precedence for freq/units/cell_methods/standard_name/long_name:
+      - For variables defined in a local CMOR table: local CMOR wins outright.
+      - For all other variables: dreq_default.csv wins, with upstream CMOR as
+        fallback for any empty fields.
     """
     print(f"\n=== Generating variable table ===")
     print(f"  loading variable specs")
@@ -179,7 +210,7 @@ def build_var_table(var_specs_path, dreq_path, setupdir, freqs):
         var_specs = yaml.safe_load(f)
 
     dreq = load_dreq(dreq_path)
-    cmor = load_cmor_tables(setupdir, freqs)
+    cmor, local_vars = load_cmor_tables(setupdir, freqs, scripts_dir)
 
     # Remove YAML anchor/alias helper keys (start with _)
     var_specs = {k: v for k, v in var_specs.items() if not k.startswith("_")}
@@ -189,28 +220,37 @@ def build_var_table(var_specs_path, dreq_path, setupdir, freqs):
     for varname, specs in var_specs.items():
         row = {"var": varname}
 
-        # --- From dreq_default.csv ---
-        dreq_row = dreq.get(varname, {})
-        row["freq"]          = dreq_row.get("frequency", "")
-        row["units"]         = dreq_row.get("units", "")
-        row["cell_methods"]  = dreq_row.get("cell_methods", "None")
-        row["long_name"]     = dreq_row.get("long_name", "")
-        row["standard_name"] = dreq_row.get("standard_name", "")
-
-        # --- From CMOR JSON tables (authoritative for positive, may supplement) ---
+        dreq_row   = dreq.get(varname, {})
         cmor_entry = cmor.get(varname, {})
-        row["positive"] = cmor_entry.get("positive", "") or "--"
+        is_local   = varname in local_vars
 
-        # Override standard_name / long_name from CMOR if dreq is empty
-        if not row["standard_name"]:
+        # --- Fields with local-CMOR-wins override logic ---
+        # For locally-defined variables, the local CMOR entry is authoritative.
+        # For upstream variables, dreq wins with upstream CMOR as fallback.
+        if is_local:
+            row["freq"]          = cmor_entry.get("frequency", "")
+            row["units"]         = cmor_entry.get("units", "")
+            row["cell_methods"]  = cmor_entry.get("cell_methods", "") or "None"
             row["standard_name"] = cmor_entry.get("standard_name", "")
-        if not row["long_name"]:
-            row["long_name"] = cmor_entry.get("long_name", "")
+            row["long_name"]     = cmor_entry.get("long_name", "")
+        else:
+            row["freq"]          = dreq_row.get("frequency", "")    or cmor_entry.get("frequency", "")
+            row["units"]         = dreq_row.get("units", "")        or cmor_entry.get("units", "")
+            row["cell_methods"]  = dreq_row.get("cell_methods", "") or cmor_entry.get("cell_methods", "") or "None"
+            row["standard_name"] = dreq_row.get("standard_name", "") or cmor_entry.get("standard_name", "")
+            row["long_name"]     = dreq_row.get("long_name", "")     or cmor_entry.get("long_name", "")
+
+        # --- From CMOR JSON tables (authoritative for positive) ---
+        row["positive"] = cmor_entry.get("positive", "") or "--"
 
         # --- From var_specs.yml ---
         row["levels"] = specs.get("levels", "single")
         row["refh"]   = str(specs["refh"])  if "refh"  in specs else "--"
         row["quant"]  = str(specs["quant"]) if "quant" in specs else "--"
+
+        # Warn about variables with no metadata source
+        if not row["freq"]:
+            print(f"  WARNING: {varname} has no frequency from dreq or CMOR tables")
 
         rows.append(row)
 
@@ -465,7 +505,7 @@ def main():
     dreq_path = fetch_upstream(cfg, setupdir, force)
 
     var_rows = build_var_table(
-        var_specs_path, dreq_path, setupdir, cfg["cmor_table_freqs"])
+        var_specs_path, dreq_path, setupdir, cfg["cmor_table_freqs"], scripts_dir)
     write_var_table(var_rows, os.path.join(setupdir, "var_table.tsv"))
 
     write_sim_env(cfg, wrfdir, os.path.join(setupdir, "sim.env"))
