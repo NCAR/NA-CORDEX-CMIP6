@@ -8,76 +8,78 @@
 # one NetCDF file per index covering all available years, written flat into
 # OUTDIR (no per-variable subdirectories, since these files go to GIS).
 #
-# Index definitions are read from a TSV file (default: climate_indices.tsv
-# in the same directory as this script).  The TSV drives command construction;
+# Index definitions are read from a TSV file (default: gis_indexes.tsv in
+# the same directory as this script).  The TSV drives command construction;
 # modifying the TSV is the intended way to add, remove, or change indices.
 #
 # Generates five commandfiles that must be run in order:
 #
-#   minmax.cmd   - ydrunmin/ydrunmax/timmin/timmax over baseline period.
-#                  Required by pctile.cmd and indices.cmd.
+#   minmax.cmd   - ydrunmin/ydrunmax/timmin/timmax over the baseline period.
+#                  Computed in native input units (no conversion).
+#                  Required by pctile.cmd and (for bootstrap) indices.cmd.
 #
-#   pctile.cmd   - ydrunpctl/ydrunmean/timpctl reference files from minmax.
-#                  Required by annual.cmd.
+#   pctile.cmd   - ydrunpctl/ydrunmean/timpctl reference files, also in
+#                  native units.  Required by annual.cmd.
 #
-#   indices.cmd  - Indices whose operators natively output annual time steps.
-#                  Includes a CDO_PCTL_NBINS export before bootstrapped cmds.
+#   indices.cmd  - Indices whose CDO operators natively output annual time
+#                  steps.  Unit conversion applied here, not in prereqs.
+#                  Includes CDO_PCTL_NBINS export before bootstrapped cmds.
 #
-#   annual.cmd   - One command per year for operators that summarise over the
-#                  entire input period.  Writes per-year files to OUTDIR/annual/.
+#   annual.cmd   - One command per year for operators that summarise over
+#                  their entire input.  Each command operates on the single
+#                  input file for that year (no mergetime needed since year
+#                  boundaries align with file boundaries).  Per-year output
+#                  goes to OUTDIR/annual/.
 #
 #   merge.cmd    - One mergetime per annual-loop index, assembling per-year
-#                  files into OUTDIR.
+#                  files from OUTDIR/annual/ into OUTDIR.
 #
-# Per-year temporary files in OUTDIR/annual/ can be removed after merge.cmd
-# completes.
+# Per-year temporary files in OUTDIR/annual/ can be removed after merge.cmd.
 #
 # --- TSV columns ---
 #
 #   index          Output filename stem (e.g. TG10p)
-#   cdo_operator   CDO operator or pipe fragment (e.g. eca_tg10p,
-#                  yearsum -setrtomiss,0,1).  Used verbatim in the command.
+#   cdo_operator   CDO operator or pipe fragment used verbatim in the command
+#                  (e.g. eca_tg10p, yearsum -setrtomiss,,0)
 #   input_vars     Input variable name(s).  Use + to separate multiple vars
-#                  (e.g. tasmax+tasmin).  Special token "sftlf" causes that
-#                  input to be resolved from <var>.fx rather than <var>.day.
-#   units          Expected units of the input.  Drives inline unit conversion:
+#                  (e.g. tasmax+tasmin).  Special token "sftlf" resolves from
+#                  <var>.fx rather than <var>.day.
+#   units          Expected input units.  Drives inline unit conversion applied
+#                  in index commands (not in prereq commands):
 #                    mm/day  -> -mulc,86400  (pr arrives as kg m-2 s-1)
 #                    octas   -> -mulc,0.08   (clt arrives as 0-100%)
 #                    C       -> -subc,277.15 (tas arrives in K)
 #                    other   -> no conversion
-#   long_name      Human-readable description (not used by script)
+#   long_name      Human-readable name (informational only)
 #   output_frequency
 #                  annual      : operator natively outputs annual steps
 #                  annual_loop : operator summarises entire input; needs
-#                                selyear loop + mergetime
-#   prereq_type    Prerequisite descriptor (drives minmax/pctile generation):
+#                                per-year commands + mergetime
+#   prereq_type    Prerequisite descriptor:
 #                    none
 #                    bootstrap:ydrunmin+ydrunmax,W
-#                                     etccdi bootstrapped; generates
-#                                     ydrunmin and ydrunmax with window W
-#                                     in minmax.cmd; appends
-#                                     ,BSTART,BEND to operator and passes
-#                                     minmax files as infile2/infile3
-#                    ydrunmean,W      generates ydrunmean with window W
-#                                     in pctile.cmd; passed as infile2
-#                    ydrunpctl,P,W    generates ydrunmin+ydrunmax in
-#                                     minmax.cmd, ydrunpctl,P,W in
-#                                     pctile.cmd; passed as infile2
-#                    timpctl,P        generates timmin+timmax in minmax.cmd
-#                                     (wet-day masked for pr), timpctl,P
-#                                     in pctile.cmd; passed as infile2
-#   description    Human-readable description (not used by script)
-#   notes          Freeform notes (not used by script)
+#                                     etccdi bootstrapped operator; generates
+#                                     ydrunmin,W and ydrunmax,W in minmax.cmd;
+#                                     appends ,BSTART,BEND to operator name;
+#                                     passes minmax files as infile2/infile3
+#                    ydrunmean,W      generates ydrunmean,W in pctile.cmd;
+#                                     passed as infile2
+#                    ydrunpctl,P,W    generates ydrunmin,W + ydrunmax,W in
+#                                     minmax.cmd, ydrunpctl,P,W in pctile.cmd;
+#                                     passed as infile2
+#                    timpctl,P        generates timmin + timmax in minmax.cmd,
+#                                     timpctl,P in pctile.cmd; passed as infile2
+#                  All prereq files are computed in native input units.
+#   description    Human-readable description (informational only)
+#   notes          Freeform notes (informational only)
 #
-# --- Unit conversion notes ---
+# --- Unit conversion ---
 #
-# Unit conversions are applied as a CDO operator prepended to the input pipe.
-# The conversion for a given units value is defined in the unit_conv() function
-# below; that function is the single authority for conversion rules.
-#
-# GD4 uses units "C" which triggers -subc,277.15, converting K to C while
-# also shifting the 4-degree threshold (the operator itself adds a gtc,0 mask
-# via the cdo_operator field).
+# The unit_conv() function is the single authority for conversion rules.
+# Conversions are applied only in index commands, never in prereq commands.
+# Prereq operators (min, max, mean, pctl) are all order-preserving or
+# unit-consistent, so prereq files remain in native units and the index
+# commands convert both the input data and interpret prereq files consistently.
 #
 # --- Usage ---
 #
@@ -88,7 +90,8 @@
 #   CMDDIR   Directory for commandfiles (default: current directory)
 #
 # Options:
-#   --tsv FILE                    Index definitions TSV (default: see above)
+#   --tsv FILE                    Index definitions TSV
+#                                 (default: gis_indexes.tsv beside this script)
 #   --baseline STARTYEAR-ENDYEAR  Reference period (default: 1991-2020)
 #   --force                       Overwrite existing output files
 #   -h, --help                    Show this help message
@@ -96,7 +99,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TSV="${SCRIPT_DIR}/climate_indices.tsv"
+TSV="${SCRIPT_DIR}/gis_indexes.tsv"
 BASELINE_START=1991
 BASELINE_END=2020
 FORCE=0
@@ -147,7 +150,7 @@ ANNUAL_CMD="$CMDDIR/annual.cmd"
 MERGE_CMD="$CMDDIR/merge.cmd"
 > "$MINMAX_CMD"; > "$PCTILE_CMD"; > "$INDEX_CMD"; > "$ANNUAL_CMD"; > "$MERGE_CMD"
 
-# CDO_PCTL_NBINS for etccdi bootstrapping: window=5, double/int ratio=2
+# CDO_PCTL_NBINS for etccdi bootstrapping: window * baseline_years * 2 + 2
 PCTL_WINDOW=5
 BASELINE_YEARS=$(( BASELINE_END - BASELINE_START + 1 ))
 CDO_PCTL_NBINS=$(( PCTL_WINDOW * BASELINE_YEARS * 2 + 2 ))
@@ -156,7 +159,7 @@ echo "Baseline period: ${BASELINE_START}-${BASELINE_END}"
 echo "CDO_PCTL_NBINS:  ${CDO_PCTL_NBINS}"
 
 # ---------------------------------------------------------------------------
-# Extract shared DRS components and simulation timespan from input files
+# Extract shared DRS middle components and simulation timespan
 # ---------------------------------------------------------------------------
 
 all_files=$(find "$INDIR" -maxdepth 2 -name "*.nc" -path "*/*.day/*" | sort)
@@ -179,9 +182,22 @@ echo "  Timespan:   $timespan  (${SIM_START}-${SIM_END})"
 # Helper functions
 # ---------------------------------------------------------------------------
 
-# Space-separated sorted list of all files for a <var>.day variable
+# Sorted list of all .nc files for a <var>.day variable, space-separated
 day_inputs() {
     find "$INDIR/${1}.day" -maxdepth 1 -name "${1}_*.nc" -type f | sort | tr '\n' ' ' | sed 's/ $//'
+}
+
+# The single input file for a given variable and year (year must be contained
+# within exactly one file; prints nothing if not found)
+year_file() {
+    local var="$1" yr="$2"
+    local f base ts sy ey
+    while IFS= read -r f; do
+        base="$(basename "$f" .nc)"; ts="${base##*_}"
+        sy="${ts:0:4}"; ey="${ts##*-}"; ey="${ey:0:4}"
+        [[ $sy -le $yr && $ey -ge $yr ]] && { echo "$f"; return; }
+    done < <(find "$INDIR/${var}.day" -maxdepth 1 -name "${var}_*.nc" \
+                  -type f | sort)
 }
 
 # Files for a variable whose timespan overlaps the baseline period
@@ -193,7 +209,7 @@ baseline_inputs() {
         base="$(basename "$f" .nc)"; ts="${base##*_}"
         sy="${ts:0:4}"; ey="${ts##*-}"; ey="${ey:0:4}"
         [[ $sy -le $BASELINE_END && $ey -ge $BASELINE_START ]] && echo "$f" || true
-    done < <(find "$vardir" -maxdepth 1 -name "${1}_*.nc" -type f | sort)
+    done < <(find "$vardir" -maxdepth 1 -name "${var}_*.nc" -type f | sort)
 }
 
 # Append a line to a commandfile; skip if outfile already exists (unless --force)
@@ -203,8 +219,9 @@ emit() {
     echo "$*" >> "$cmdfile"
 }
 
-# Return CDO inline unit-conversion operator for a given units string, or empty.
+# Return the CDO operator string for unit conversion, or empty string.
 # This function is the single authority for unit conversion rules.
+# Conversions are applied in index commands only, never in prereq commands.
 unit_conv() {
     case "$1" in
         mm/day) echo "-mulc,86400"  ;;
@@ -214,63 +231,67 @@ unit_conv() {
     esac
 }
 
-# Build a CDO input pipe for a single variable: "[conv] -mergetime file1 ..."
-# Usage: var_pipe VAR UNITS
-var_pipe() {
+# Build the full CDO input pipe for a variable over all years:
+# "[conv] -mergetime file1 file2 ..."
+# Unit conversion is included; used for native-annual index commands.
+full_pipe() {
     local var="$1" units="$2"
     local inputs conv
     inputs="$(day_inputs "$var")"
     [[ -z "$inputs" ]] && { echo ""; return; }
     conv="$(unit_conv "$units")"
-    if [[ -n "$conv" ]]; then
-        echo "${conv} -mergetime ${inputs}"
-    else
-        echo "-mergetime ${inputs}"
-    fi
+    [[ -n "$conv" ]] && echo "${conv} -mergetime ${inputs}" \
+                     || echo "-mergetime ${inputs}"
 }
 
-# Canonicalise a prereq filename: <var>_<stat>_<middle>_<timespan>.nc in PCTLDIR
-pctl_file() { echo "$PCTLDIR/${1}_${2}_${middle}_${timespan}.nc"; }
+# Build a baseline pipe for prereq commands: no unit conversion, selyear-bounded
+# so the output time axis reflects exactly the baseline period.
+baseline_pipe() {
+    local var="$1" bl_inputs="$2"
+    echo "-selyear,${BASELINE_START}/${BASELINE_END} -mergetime ${bl_inputs}"
+}
 
-# Tracking sets to avoid duplicate minmax/pctile commands across TSV rows
+# Canonical prereq filename: PCTLDIR/<var>_<stat>_<middle>_<bl_timespan>.nc
+# Using the baseline timespan in the filename so it accurately reflects the
+# period over which the prereq was computed.
+BL_TIMESPAN="${BASELINE_START}0101-${BASELINE_END}1231"
+pctl_file() { echo "$PCTLDIR/${1}_${2}_${middle}_${BL_TIMESPAN}.nc"; }
+
+# Tracking sets to avoid emitting duplicate minmax/pctile commands
 declare -A minmax_emitted=()
 declare -A pctile_emitted=()
 
-# Emit ydrunmin + ydrunmax for a variable into minmax.cmd (once per var+window)
+# Emit ydrunmin + ydrunmax for a variable into minmax.cmd (once per var)
+# No unit conversion; all prereqs are computed in native units.
 ensure_ydrunminmax() {
     local var="$1" bl_inputs="$2"
     local key="${var}_ydrun${PCTL_WINDOW}"
     [[ -n "${minmax_emitted[$key]:-}" ]] && return 0
-    local f_min f_max
+    local f_min f_max bl_pipe
     f_min="$(pctl_file "$var" "ydrunmin${PCTL_WINDOW}")"
     f_max="$(pctl_file "$var" "ydrunmax${PCTL_WINDOW}")"
+    bl_pipe="$(baseline_pipe "$var" "$bl_inputs")"
     emit "$MINMAX_CMD" "$f_min" \
-        "cdo -s ydrunmin,${PCTL_WINDOW} -mergetime ${bl_inputs} ${f_min}"
+        "cdo -s ydrunmin,${PCTL_WINDOW} ${bl_pipe} ${f_min}"
     emit "$MINMAX_CMD" "$f_max" \
-        "cdo -s ydrunmax,${PCTL_WINDOW} -mergetime ${bl_inputs} ${f_max}"
+        "cdo -s ydrunmax,${PCTL_WINDOW} ${bl_pipe} ${f_max}"
     minmax_emitted[$key]=1
     (( nminmax += 2 )) || true
 }
 
-# Emit timmin + timmax for a variable into minmax.cmd (once per var+mask combo).
-# wet_mask=1 applies setrtomiss,0,1 + unit conversion before computing min/max.
+# Emit timmin + timmax for a variable into minmax.cmd (once per var).
+# No unit conversion, no wet-day masking: min/max are order-preserving so
+# masking and conversion can be deferred to the pctile step.
 ensure_timminmax() {
-    local var="$1" bl_inputs="$2" units="$3" wet_mask="${4:-0}"
-    local key="${var}_tim_wet${wet_mask}"
+    local var="$1" bl_inputs="$2"
+    local key="${var}_tim"
     [[ -n "${minmax_emitted[$key]:-}" ]] && return 0
-    local conv pipe f_min f_max stem
-    conv="$(unit_conv "$units")"
-    if [[ $wet_mask -eq 1 ]]; then
-        pipe="-setrtomiss,0,1 ${conv} -mergetime ${bl_inputs}"
-        stem="${var}_wetday"
-    else
-        pipe="${conv:+${conv} }-mergetime ${bl_inputs}"
-        stem="$var"
-    fi
-    f_min="$(pctl_file "$stem" "timmin")"
-    f_max="$(pctl_file "$stem" "timmax")"
-    emit "$MINMAX_CMD" "$f_min" "cdo -s timmin ${pipe} ${f_min}"
-    emit "$MINMAX_CMD" "$f_max" "cdo -s timmax ${pipe} ${f_max}"
+    local f_min f_max bl_pipe
+    f_min="$(pctl_file "$var" "timmin")"
+    f_max="$(pctl_file "$var" "timmax")"
+    bl_pipe="$(baseline_pipe "$var" "$bl_inputs")"
+    emit "$MINMAX_CMD" "$f_min" "cdo -s timmin ${bl_pipe} ${f_min}"
+    emit "$MINMAX_CMD" "$f_max" "cdo -s timmax ${bl_pipe} ${f_max}"
     minmax_emitted[$key]=1
     (( nminmax += 2 )) || true
 }
@@ -283,14 +304,13 @@ nbins_emitted=0
 # ---------------------------------------------------------------------------
 
 while IFS=$'\t' read -r idx op input_vars units long_name freq prereq desc notes; do
-    # Skip header and blank lines
     [[ "$idx" == "index" || -z "$idx" ]] && continue
 
     # Split input_vars on '+' into an array
     IFS='+' read -ra vars <<< "$input_vars"
     primary_var="${vars[0]}"
 
-    # Check required input directories/files exist; silently skip if absent
+    # Check required inputs exist; silently skip if absent, warn for sftlf
     skip=0
     for v in "${vars[@]}"; do
         if [[ "$v" == "sftlf" ]]; then
@@ -305,41 +325,23 @@ while IFS=$'\t' read -r idx op input_vars units long_name freq prereq desc notes
     done
     [[ $skip -eq 1 ]] && continue
 
-    # Build baseline file list for primary variable
+    # Baseline file list for primary variable
     bl_inputs="$(baseline_inputs "$primary_var" | tr '\n' ' ' | sed 's/ $//')"
-
-    # Warn and skip if prereq needs baseline but none found
     if [[ "$prereq" != "none" && -z "$bl_inputs" ]]; then
         echo "    WARNING: no ${primary_var} files overlap baseline" \
              "${BASELINE_START}-${BASELINE_END}; skipping ${idx}" >&2
         continue
     fi
 
-    # Build the main input pipe for the primary variable
-    main_pipe="$(var_pipe "$primary_var" "$units")"
-    [[ -z "$main_pipe" ]] && continue
-
-    # Build secondary input expressions (no unit conversion on secondary vars)
-    extra_inputs=""
-    for (( i=1; i<${#vars[@]}; i++ )); do
-        v="${vars[$i]}"
-        if [[ "$v" == "sftlf" ]]; then
-            sf="$(find "$INDIR/sftlf.fx" -maxdepth 1 -name "sftlf_*.nc" \
-                      -type f | head -1)"
-            extra_inputs="${extra_inputs} ${sf}"
-        else
-            extra_inputs="${extra_inputs} -mergetime $(day_inputs "$v")"
-        fi
-    done
-
     final_out="$OUTDIR/${idx}_${middle}_${timespan}.nc"
 
     # ------------------------------------------------------------------
-    # Parse prereq_type: emit minmax/pctile commands; build extra op args
+    # Parse prereq_type; emit minmax/pctile commands; set op_args and
+    # prereq_infiles / prereq_infile2 for use in index commands below
     # ------------------------------------------------------------------
-    op_args=""        # appended to operator (e.g. ,1991,2020 for bootstrap)
-    prereq_infiles="" # extra infiles after main input (bootstrap minmax pair)
-    prereq_infile2="" # single prereq file (pctile/mean) for annual_loop
+    op_args=""         # appended to operator name (bootstrap only)
+    prereq_infiles=""  # infile2+infile3 for bootstrap (minmax pair)
+    prereq_infile2=""  # infile2 for annual_loop (pctile/mean file)
 
     case "$prereq" in
         none)
@@ -362,8 +364,9 @@ while IFS=$'\t' read -r idx op input_vars units long_name freq prereq desc notes
             f_mean="$(pctl_file "$primary_var" "ydrunmean${window}")"
             key="${primary_var}_ydrunmean${window}"
             if [[ -z "${pctile_emitted[$key]:-}" ]]; then
+                bl_pipe="$(baseline_pipe "$primary_var" "$bl_inputs")"
                 emit "$PCTILE_CMD" "$f_mean" \
-                    "cdo -s ydrunmean,${window} -mergetime ${bl_inputs} ${f_mean}"
+                    "cdo -s ydrunmean,${window} ${bl_pipe} ${f_mean}"
                 pctile_emitted[$key]=1
                 (( npctile++ )) || true
             fi
@@ -379,9 +382,9 @@ while IFS=$'\t' read -r idx op input_vars units long_name freq prereq desc notes
             f_pctl="$(pctl_file "$primary_var" "p${pctl}")"
             key="${primary_var}_ydrunpctl${pctl}_${window}"
             if [[ -z "${pctile_emitted[$key]:-}" ]]; then
+                bl_pipe="$(baseline_pipe "$primary_var" "$bl_inputs")"
                 emit "$PCTILE_CMD" "$f_pctl" \
-                    "cdo -s ydrunpctl,${pctl},${window} -mergetime ${bl_inputs} \
-${f_min} ${f_max} ${f_pctl}"
+                    "cdo -s ydrunpctl,${pctl},${window} ${bl_pipe} ${f_min} ${f_max} ${f_pctl}"
                 pctile_emitted[$key]=1
                 (( npctile++ )) || true
             fi
@@ -390,19 +393,20 @@ ${f_min} ${f_max} ${f_pctl}"
 
         timpctl,*)
             pctl="${prereq##*,}"
-            wet_mask=0; [[ "$primary_var" == "pr" ]] && wet_mask=1
-            ensure_timminmax "$primary_var" "$bl_inputs" "$units" "$wet_mask"
-            local_stem="${primary_var}$( [[ $wet_mask -eq 1 ]] && echo "_wetday" || echo "" )"
-            f_min="$(pctl_file "$local_stem" "timmin")"
-            f_max="$(pctl_file "$local_stem" "timmax")"
-            f_pctl="$(pctl_file "$local_stem" "p${pctl}")"
-            key="${primary_var}_timpctl${pctl}_wet${wet_mask}"
+            # timmin/timmax are computed in native units; no masking needed.
+            # Wet-day masking (setrtomiss,,1) is applied in the timpctl step
+            # so the percentile is over wet days only.
+            ensure_timminmax "$primary_var" "$bl_inputs"
+            f_min="$(pctl_file "$primary_var" "timmin")"
+            f_max="$(pctl_file "$primary_var" "timmax")"
+            f_pctl="$(pctl_file "$primary_var" "p${pctl}")"
+            key="${primary_var}_timpctl${pctl}"
             if [[ -z "${pctile_emitted[$key]:-}" ]]; then
-                conv="$(unit_conv "$units")"
-                if [[ $wet_mask -eq 1 ]]; then
-                    bl_pipe="-setrtomiss,0,1 ${conv} -mergetime ${bl_inputs}"
-                else
-                    bl_pipe="${conv:+${conv} }-mergetime ${bl_inputs}"
+                bl_pipe="$(baseline_pipe "$primary_var" "$bl_inputs")"
+                # Apply wet-day mask in the baseline pipe for pr so the
+                # percentile is computed over wet days only
+                if [[ "$primary_var" == "pr" ]]; then
+                    bl_pipe="-setrtomiss,,1 ${bl_pipe}"
                 fi
                 emit "$PCTILE_CMD" "$f_pctl" \
                     "cdo -s timpctl,${pctl} ${bl_pipe} ${f_min} ${f_max} ${f_pctl}"
@@ -419,27 +423,52 @@ ${f_min} ${f_max} ${f_pctl}"
     esac
 
     # ------------------------------------------------------------------
-    # Emit index commands based on output_frequency
+    # Emit index commands
     # ------------------------------------------------------------------
     case "$freq" in
 
         annual)
+            # Build full multi-year input pipe with unit conversion
+            main_pipe="$(full_pipe "$primary_var" "$units")"
+            [[ -z "$main_pipe" ]] && continue
+
+            # Secondary inputs (no unit conversion on secondary vars)
+            extra_inputs=""
+            for (( i=1; i<${#vars[@]}; i++ )); do
+                v="${vars[$i]}"
+                if [[ "$v" == "sftlf" ]]; then
+                    sf="$(find "$INDIR/sftlf.fx" -maxdepth 1 \
+                              -name "sftlf_*.nc" -type f | head -1)"
+                    extra_inputs="${extra_inputs} ${sf}"
+                else
+                    extra_inputs="${extra_inputs} -mergetime $(day_inputs "$v")"
+                fi
+            done
+
             emit "$INDEX_CMD" "$final_out" \
-                "cdo -s ${op}${op_args} ${main_pipe}${extra_inputs} \
-${prereq_infiles} ${final_out}"
+                "cdo -s ${op}${op_args} ${main_pipe}${extra_inputs} ${prereq_infiles} ${final_out}"
             (( nindex++ )) || true
             ;;
 
         annual_loop)
             yr_outs=""
+            conv="$(unit_conv "$units")"
+
             for yr in $(seq "$SIM_START" "$SIM_END"); do
                 yr_out="$ANNDIR/${idx}_${middle}_${yr}.nc"
+
                 if [[ ${#vars[@]} -eq 1 ]]; then
-                    conv="$(unit_conv "$units")"
-                    yr_pipe="${conv:+${conv} }-selyear,${yr} -mergetime $(day_inputs "$primary_var")"
+                    # Single-variable: use the one file that contains this year
+                    yr_file="$(year_file "$primary_var" "$yr")"
+                    if [[ -z "$yr_file" ]]; then
+                        echo "    WARNING: no file found for ${primary_var} year ${yr}; skipping" >&2
+                        continue
+                    fi
+                    yr_pipe="${conv:+${conv} }${yr_file}"
                     emit "$ANNUAL_CMD" "$yr_out" \
                         "cdo -s ${op} ${yr_pipe} ${prereq_infile2} ${yr_out}"
                 else
+                    # Multi-variable: build per-variable single-file inputs
                     yr_inputs=""
                     for (( i=0; i<${#vars[@]}; i++ )); do
                         v="${vars[$i]}"
@@ -448,15 +477,23 @@ ${prereq_infiles} ${final_out}"
                                       -name "sftlf_*.nc" -type f | head -1)"
                             yr_inputs="${yr_inputs} ${sf}"
                         else
-                            yr_inputs="${yr_inputs} -selyear,${yr} -mergetime $(day_inputs "$v")"
+                            vf="$(year_file "$v" "$yr")"
+                            if [[ -z "$vf" ]]; then
+                                echo "    WARNING: no file found for ${v} year ${yr}; skipping ${idx} ${yr}" >&2
+                                vf="MISSING"
+                            fi
+                            yr_inputs="${yr_inputs} ${vf}"
                         fi
                     done
                     emit "$ANNUAL_CMD" "$yr_out" \
                         "cdo -s ${op}${yr_inputs} ${prereq_infile2} ${yr_out}"
                 fi
+
                 yr_outs="${yr_outs} ${yr_out}"
                 (( nannual++ )) || true
             done
+
+            [[ -z "$yr_outs" ]] && continue
             emit "$MERGE_CMD" "$final_out" \
                 "cdo -s mergetime${yr_outs} ${final_out}"
             (( nmerge++ )) || true

@@ -8,7 +8,7 @@ R10mm	eca_r10mm	pr	mm/day	Heavy precipitation days	annual	none	Count of days wit
 R20mm	eca_r20mm	pr	mm/day	Very heavy precipitation days	annual	none	Count of days with RR >= 20 mm	
 SDII	eca_sdii	pr	mm/day	Simple daily intensity index	annual	none	Mean precipitation on wet days (RR >= 1 mm)	
 RR	yearsum	pr	mm/day	Precipitation sum	annual	none	Total annual precipitation sum (all days)	
-PRCPTOT	yearsum -setrtomiss,0,1	pr	mm/day	Annual total wet-day precipitation	annual	none	Annual sum of precipitation on wet days (RR >= 1 mm); dry days excluded inline	
+PRCPTOT	yearsum -setrtomiss,,1	pr	mm/day	Annual total wet-day precipitation	annual	none	Annual sum of precipitation on wet days (RR >= 1 mm); dry days excluded inline	
 R75p	eca_r75p	pr	mm/day	Moderate wet days wrt 75th percentile	annual_loop	timpctl,75	Percent of days with RR > 75th percentile of wet-day reference precipitation	Prereq computed on wet-day-masked baseline pr (setrtomiss,0,1 applied before timmin/timmax/timpctl)
 R75pTOT	eca_r75ptot	pr	mm/day	Precipitation fraction from moderate wet days	annual_loop	timpctl,75	Percent of total precipitation from days with RR > 75th percentile	
 R90p	eca_r90p	pr	mm/day	Wet days wrt 90th percentile	annual_loop	timpctl,90	Percent of days with RR > 90th percentile of wet-day reference precipitation	
@@ -40,7 +40,7 @@ HWDI	eca_hwdi	tasmax	K	Heat wave duration index	annual_loop	ydrunmean,5	Count of
 DTR	yearmean -sub	tasmax+tasmin	K	Mean diurnal temperature range	annual	none	Annual mean of daily (TX - TN)	Two-variable operator: yearmean of (tasmax - tasmin)
 ETR	eca_etr	tasmax+tasmin	K	Extreme temperature range	annual_loop	none	Max of TX minus min of TN over the period	
 TG	yearmean	tas	K	Mean temperature	annual	none	Annual mean of daily mean near-surface air temperature	ECA&D index TG
-GD4	yearsum -setrtomiss,-1e9,0 -subc,277.15	tas	C	Growing degree days	annual	none	Sum of (TG - 4°C) for days with TG > 4°C	subc,277.15 is the K-to-C unit conversion plus the 4°C threshold shift
+GD4	yearsum -setrtomiss,,0 -subc,277.15	tas	C	Growing degree days	annual	none	Sum of (TG - 4°C) for days with TG > 4°C	subc,277.15 is the K-to-C unit conversion plus the 4°C threshold shift
 TG10p	eca_tg10p	tas	K	Cold days wrt 10th percentile	annual_loop	ydrunpctl,10,5	Percent of days with TG < 10th percentile of baseline daily mean temperature	
 TG90p	eca_tg90p	tas	K	Warm days wrt 90th percentile	annual_loop	ydrunpctl,90,5	Percent of days with TG > 90th percentile of baseline daily mean temperature	
 HD17	eca_hd	tas	K	Heating degree days	annual_loop	none	Sum of (17°C - TG) for days with TG < 17°C	ECA&D index HD17; eca_hd uses 17°C threshold by default
