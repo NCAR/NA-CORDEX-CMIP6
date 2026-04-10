@@ -1,56 +1,56 @@
-index	cdo_operator	input_vars	units	long_name	output_frequency	prereq_type	description	notes
-CDD	etccdi_cdd	pr	mm/day	Consecutive dry days	annual	none	Longest run of consecutive days with RR < 1 mm	
-CWD	etccdi_cwd	pr	mm/day	Consecutive wet days	annual	none	Longest run of consecutive days with RR >= 1 mm	
-R1mm	etccdi_r1mm	pr	mm/day	Precipitation days	annual	none	Count of days with RR >= 1 mm	
-Rx1day	etccdi_rx1day	pr	mm/day	Max 1-day precipitation	annual	none	Highest single-day precipitation total in year	
-Rx5day	etccdi_rx5day	pr	mm/day	Max 5-day precipitation	annual	none	Highest 5-day consecutive precipitation total in year	
-R10mm	eca_r10mm	pr	mm/day	Heavy precipitation days	annual	none	Count of days with RR >= 10 mm	
-R20mm	eca_r20mm	pr	mm/day	Very heavy precipitation days	annual	none	Count of days with RR >= 20 mm	
-SDII	eca_sdii	pr	mm/day	Simple daily intensity index	annual	none	Mean precipitation on wet days (RR >= 1 mm)	
-RR	yearsum	pr	mm/day	Precipitation sum	annual	none	Total annual precipitation sum (all days)	
-PRCPTOT	yearsum -setrtomiss,,1	pr	mm/day	Annual total wet-day precipitation	annual	none	Annual sum of precipitation on wet days (RR >= 1 mm); dry days excluded inline	
-R75p	eca_r75p	pr	mm/day	Moderate wet days wrt 75th percentile	annual_loop	timpctl,75	Percent of days with RR > 75th percentile of wet-day reference precipitation	Prereq computed on wet-day-masked baseline pr (setrtomiss,0,1 applied before timmin/timmax/timpctl)
-R75pTOT	eca_r75ptot	pr	mm/day	Precipitation fraction from moderate wet days	annual_loop	timpctl,75	Percent of total precipitation from days with RR > 75th percentile	
-R90p	eca_r90p	pr	mm/day	Wet days wrt 90th percentile	annual_loop	timpctl,90	Percent of days with RR > 90th percentile of wet-day reference precipitation	
-R90pTOT	eca_r90ptot	pr	mm/day	Precipitation fraction from wet days wrt 90th percentile	annual_loop	timpctl,90	Percent of total precipitation from days with RR > 90th percentile	
-R95p	eca_r95p	pr	mm/day	Very wet days wrt 95th percentile	annual_loop	timpctl,95	Percent of days with RR > 95th percentile of wet-day reference precipitation	etccdi_r95p is a different bootstrapped operator; not used here
-R95pTOT	eca_r95ptot	pr	mm/day	Precipitation fraction from very wet days	annual_loop	timpctl,95	Percent of total precipitation from days with RR > 95th percentile	
-R99p	eca_r99p	pr	mm/day	Extremely wet days wrt 99th percentile	annual_loop	timpctl,99	Percent of days with RR > 99th percentile of wet-day reference precipitation	etccdi_r99p is a different bootstrapped operator; not used here
-R99pTOT	eca_r99ptot	pr	mm/day	Precipitation fraction from extremely wet days	annual_loop	timpctl,99	Percent of total precipitation from days with RR > 99th percentile	
-FD	etccdi_fd	tasmin	K	Frost days	annual	none	Count of days with TN < 0°C	
-TR	etccdi_tr	tasmin	K	Tropical nights	annual	none	Count of nights with TN > 20°C	
-CFD	eca_cfd	tasmin	K	Consecutive frost days	annual_loop	none	Longest run of consecutive days with TN < 0°C	
-TNn	yearmin	tasmin	K	Annual minimum of daily minimum temperature	annual	none	Coldest nightly minimum temperature of the year	
-TNx	yearmax	tasmin	K	Annual maximum of daily minimum temperature	annual	none	Warmest nightly minimum temperature of the year	
-TN	yearmean	tasmin	K	Mean daily minimum temperature	annual	none	Annual mean of daily minimum near-surface air temperature	ECA&D index TN
-TN10p	etccdi_tn10p	tasmin	K	Cold nights	annual	bootstrap:ydrunmin+ydrunmax,5	Percent of days with TN < 10th percentile of baseline TN (bootstrapped)	CDO_PCTL_NBINS must be set; infile2/infile3 are ydrunmin/ydrunmax of baseline
-TN90p	etccdi_tn90p	tasmin	K	Warm nights	annual	bootstrap:ydrunmin+ydrunmax,5	Percent of days with TN > 90th percentile of baseline TN (bootstrapped)	CDO_PCTL_NBINS must be set
-CSDI	etccdi_csdi	tasmin	K	Cold spell duration index	annual	bootstrap:ydrunmin+ydrunmax,5	Count of days in spells of >= 6 consecutive days with TN < 10th percentile (bootstrapped)	CDO_PCTL_NBINS must be set
-CWDI	eca_cwdi	tasmin	K	Cold wave duration index	annual_loop	ydrunmean,5	Count of days in cold waves: >= 6 consecutive days with TN < TNnorm - 5°C	
-ID	etccdi_id	tasmax	K	Ice days	annual	none	Count of days with TX < 0°C	
-SU	etccdi_su	tasmax	K	Summer days	annual	none	Count of days with TX > 25°C	
-CSU	eca_csu	tasmax	K	Consecutive summer days	annual_loop	none	Longest run of consecutive days with TX > 25°C	
-TXn	yearmin	tasmax	K	Annual minimum of daily maximum temperature	annual	none	Coldest daytime maximum temperature of the year	
-TXx	yearmax	tasmax	K	Annual maximum of daily maximum temperature	annual	none	Hottest daytime maximum temperature of the year	
-TX	yearmean	tasmax	K	Mean daily maximum temperature	annual	none	Annual mean of daily maximum near-surface air temperature	ECA&D index TX
-TX10p	etccdi_tx10p	tasmax	K	Very cold days	annual	bootstrap:ydrunmin+ydrunmax,5	Percent of days with TX < 10th percentile of baseline TX (bootstrapped)	CDO_PCTL_NBINS must be set
-TX90p	etccdi_tx90p	tasmax	K	Very warm days	annual	bootstrap:ydrunmin+ydrunmax,5	Percent of days with TX > 90th percentile of baseline TX (bootstrapped)	CDO_PCTL_NBINS must be set
-WSDI	etccdi_wsdi	tasmax	K	Warm spell duration index	annual	bootstrap:ydrunmin+ydrunmax,5	Count of days in spells of >= 6 consecutive days with TX > 90th percentile (bootstrapped)	CDO_PCTL_NBINS must be set
-HWDI	eca_hwdi	tasmax	K	Heat wave duration index	annual_loop	ydrunmean,5	Count of days in heat waves: >= 6 consecutive days with TX > TXnorm + 5°C	
-DTR	yearmean -sub	tasmax+tasmin	K	Mean diurnal temperature range	annual	none	Annual mean of daily (TX - TN)	Two-variable operator: yearmean of (tasmax - tasmin)
-ETR	eca_etr	tasmax+tasmin	K	Extreme temperature range	annual_loop	none	Max of TX minus min of TN over the period	
-TG	yearmean	tas	K	Mean temperature	annual	none	Annual mean of daily mean near-surface air temperature	ECA&D index TG
-GD4	yearsum -setrtomiss,,0 -subc,277.15	tas	C	Growing degree days	annual	none	Sum of (TG - 4°C) for days with TG > 4°C	subc,277.15 is the K-to-C unit conversion plus the 4°C threshold shift
-TG10p	eca_tg10p	tas	K	Cold days wrt 10th percentile	annual_loop	ydrunpctl,10,5	Percent of days with TG < 10th percentile of baseline daily mean temperature	
-TG90p	eca_tg90p	tas	K	Warm days wrt 90th percentile	annual_loop	ydrunpctl,90,5	Percent of days with TG > 90th percentile of baseline daily mean temperature	
-HD17	eca_hd	tas	K	Heating degree days	annual_loop	none	Sum of (17°C - TG) for days with TG < 17°C	ECA&D index HD17; eca_hd uses 17°C threshold by default
-GSL	eca_gsl	tas+sftlf	K	Growing season length	annual_loop	none	Days between first 6-day spell with TG > 5°C and first post-July 6-day spell with TG < 5°C	Requires sftlf.fx; verify eca_gsl behaviour with merged sftlf in CDO 2.4.4
-FG	yearmean	sfcWind	m/s	Mean wind speed	annual	none	Annual mean of daily mean near-surface wind speed	ECA&D index FG
-FGcalm	yearsum -lec,2	sfcWind	m/s	Calm days	annual	none	Count of days with mean wind speed <= 2 m/s	ECA&D index FGcalm
-FG6Bft	yearsum -gec,10.8	sfcWind	m/s	Strong wind days (>= Beaufort 6)	annual	none	Count of days with mean wind speed >= 10.8 m/s	ECA&D index FG6Bft
-RH	yearmean	hurs	%	Mean relative humidity	annual	none	Annual mean of daily mean near-surface relative humidity	ECA&D index RH
-PP	yearmean	psl	Pa	Mean sea level pressure	annual	none	Annual mean of daily mean sea level pressure	ECA&D index PP
-RSDSann	yearmean	rsds	W/m²	Annual mean surface downwelling shortwave radiation	annual	none	Annual mean of daily mean surface downwelling shortwave radiation	Using RSDSann to match CORDEX variable name; ECA&D equivalent is QQ
-CC	yearmean	clt	octas	Mean cloud cover	annual	none	Annual mean of daily mean cloud cover	ECA&D index CC; clt (0-100%) converted to continuous oktas via mulc,0.08
-CC2	yearsum -lec,2	clt	octas	Mostly sunny days	annual	none	Count of days with cloud cover <= 2 oktas	ECA&D index CC2
-CC6	yearsum -gec,6	clt	octas	Mostly cloudy days	annual	none	Count of days with cloud cover >= 6 oktas	ECA&D index CC6
+index	cdo_operator	input_vars	units	long_name	output_frequency	prereq_type	bootstrapped	description	notes
+CDD	etccdi_cdd	pr	mm/day	Consecutive dry days	annual	none	0	Longest run of consecutive days with RR < 1 mm	
+CWD	etccdi_cwd	pr	mm/day	Consecutive wet days	annual	none	0	Longest run of consecutive days with RR >= 1 mm	
+R1mm	etccdi_r1mm	pr	mm/day	Precipitation days	annual	none	0	Count of days with RR >= 1 mm	
+Rx1day	etccdi_rx1day	pr	mm/day	Max 1-day precipitation	annual	none	0	Highest single-day precipitation total in year	
+Rx5day	etccdi_rx5day	pr	mm/day	Max 5-day precipitation	annual	none	0	Highest 5-day consecutive precipitation total in year	
+R10mm	eca_r10mm	pr	mm/day	Heavy precipitation days	annual	none	0	Count of days with RR >= 10 mm	
+R20mm	eca_r20mm	pr	mm/day	Very heavy precipitation days	annual	none	0	Count of days with RR >= 20 mm	
+SDII	eca_sdii	pr	mm/day	Simple daily intensity index	annual	none	0	Mean precipitation on wet days (RR >= 1 mm)	
+RR	yearsum	pr	mm/day	Precipitation sum	annual	none	0	Total annual precipitation sum (all days)	
+PRCPTOT	yearsum -setrtomiss,,1	pr	mm/day	Annual total wet-day precipitation	annual	none	0	Annual sum of precipitation on wet days (RR >= 1 mm); dry days excluded inline	
+R75p	eca_r75p	pr	mm/day	Moderate wet days wrt 75th percentile	annual_loop	timpctl,75	0	Percent of days with RR > 75th percentile of wet-day reference precipitation	Prereq computed on wet-day-masked baseline pr (setrtomiss,0,1 applied before timmin/timmax/timpctl)
+R75pTOT	eca_r75ptot	pr	mm/day	Precipitation fraction from moderate wet days	annual_loop	timpctl,75	0	Percent of total precipitation from days with RR > 75th percentile	
+R90p	eca_r90p	pr	mm/day	Wet days wrt 90th percentile	annual_loop	timpctl,90	0	Percent of days with RR > 90th percentile of wet-day reference precipitation	
+R90pTOT	eca_r90ptot	pr	mm/day	Precipitation fraction from wet days wrt 90th percentile	annual_loop	timpctl,90	0	Percent of total precipitation from days with RR > 90th percentile	
+R95p	eca_r95p	pr	mm/day	Very wet days wrt 95th percentile	annual_loop	timpctl,95	0	Percent of days with RR > 95th percentile of wet-day reference precipitation	etccdi_r95p is a different bootstrapped operator; not used here
+R95pTOT	eca_r95ptot	pr	mm/day	Precipitation fraction from very wet days	annual_loop	timpctl,95	0	Percent of total precipitation from days with RR > 95th percentile	
+R99p	eca_r99p	pr	mm/day	Extremely wet days wrt 99th percentile	annual_loop	timpctl,99	0	Percent of days with RR > 99th percentile of wet-day reference precipitation	etccdi_r99p is a different bootstrapped operator; not used here
+R99pTOT	eca_r99ptot	pr	mm/day	Precipitation fraction from extremely wet days	annual_loop	timpctl,99	0	Percent of total precipitation from days with RR > 99th percentile	
+FD	etccdi_fd	tasmin	K	Frost days	annual	none	0	Count of days with TN < 0°C	
+TR	etccdi_tr	tasmin	K	Tropical nights	annual	none	0	Count of nights with TN > 20°C	
+CFD	eca_cfd	tasmin	K	Consecutive frost days	annual_loop	none	0	Longest run of consecutive days with TN < 0°C	
+TNn	yearmin	tasmin	K	Annual minimum of daily minimum temperature	annual	none	0	Coldest nightly minimum temperature of the year	
+TNx	yearmax	tasmin	K	Annual maximum of daily minimum temperature	annual	none	0	Warmest nightly minimum temperature of the year	
+TN	yearmean	tasmin	K	Mean daily minimum temperature	annual	none	0	Annual mean of daily minimum near-surface air temperature	ECA&D index TN
+TN10p	etccdi_tn10p	tasmin	K	Cold nights	annual	ydrunmin,5+ydrunmax,5	1	Percent of days with TN < 10th percentile of baseline TN (bootstrapped)	CDO_PCTL_NBINS must be set; infile2/infile3 are ydrunmin/ydrunmax of baseline
+TN90p	etccdi_tn90p	tasmin	K	Warm nights	annual	ydrunmin,5+ydrunmax,5	1	Percent of days with TN > 90th percentile of baseline TN (bootstrapped)	CDO_PCTL_NBINS must be set
+CSDI	etccdi_csdi	tasmin	K	Cold spell duration index	annual	ydrunmin,5+ydrunmax,5	1	Count of days in spells of >= 6 consecutive days with TN < 10th percentile (bootstrapped)	CDO_PCTL_NBINS must be set
+CWDI	eca_cwdi	tasmin	K	Cold wave duration index	annual_loop	ydrunmean,5	0	Count of days in cold waves: >= 6 consecutive days with TN < TNnorm - 5°C	
+ID	etccdi_id	tasmax	K	Ice days	annual	none	0	Count of days with TX < 0°C	
+SU	etccdi_su	tasmax	K	Summer days	annual	none	0	Count of days with TX > 25°C	
+CSU	eca_csu	tasmax	K	Consecutive summer days	annual_loop	none	0	Longest run of consecutive days with TX > 25°C	
+TXn	yearmin	tasmax	K	Annual minimum of daily maximum temperature	annual	none	0	Coldest daytime maximum temperature of the year	
+TXx	yearmax	tasmax	K	Annual maximum of daily maximum temperature	annual	none	0	Hottest daytime maximum temperature of the year	
+TX	yearmean	tasmax	K	Mean daily maximum temperature	annual	none	0	Annual mean of daily maximum near-surface air temperature	ECA&D index TX
+TX10p	etccdi_tx10p	tasmax	K	Very cold days	annual	ydrunmin,5+ydrunmax,5	1	Percent of days with TX < 10th percentile of baseline TX (bootstrapped)	CDO_PCTL_NBINS must be set
+TX90p	etccdi_tx90p	tasmax	K	Very warm days	annual	ydrunmin,5+ydrunmax,5	1	Percent of days with TX > 90th percentile of baseline TX (bootstrapped)	CDO_PCTL_NBINS must be set
+WSDI	etccdi_wsdi	tasmax	K	Warm spell duration index	annual	ydrunmin,5+ydrunmax,5	1	Count of days in spells of >= 6 consecutive days with TX > 90th percentile (bootstrapped)	CDO_PCTL_NBINS must be set
+HWDI	eca_hwdi	tasmax	K	Heat wave duration index	annual_loop	ydrunmean,5	0	Count of days in heat waves: >= 6 consecutive days with TX > TXnorm + 5°C	
+DTR	yearmean -sub	tasmax+tasmin	K	Mean diurnal temperature range	annual	none	0	Annual mean of daily (TX - TN)	Two-variable operator: yearmean of (tasmax - tasmin)
+ETR	eca_etr	tasmax+tasmin	K	Extreme temperature range	annual_loop	none	0	Max of TX minus min of TN over the period	
+TG	yearmean	tas	K	Mean temperature	annual	none	0	Annual mean of daily mean near-surface air temperature	ECA&D index TG
+GD4	yearsum -setrtomiss,,0 -subc,277.15	tas	C	Growing degree days	annual	none	0	Sum of (TG - 4°C) for days with TG > 4°C	subc,277.15 is the K-to-C unit conversion plus the 4°C threshold shift
+TG10p	eca_tg10p	tas	K	Cold days wrt 10th percentile	annual_loop	ydrunpctl,10,5	0	Percent of days with TG < 10th percentile of baseline daily mean temperature	
+TG90p	eca_tg90p	tas	K	Warm days wrt 90th percentile	annual_loop	ydrunpctl,90,5	0	Percent of days with TG > 90th percentile of baseline daily mean temperature	
+HD17	eca_hd	tas	K	Heating degree days	annual_loop	none	0	Sum of (17°C - TG) for days with TG < 17°C	ECA&D index HD17; eca_hd uses 17°C threshold by default
+GSL	eca_gsl	tas+sftlf	K	Growing season length	annual_loop	none	0	Days between first 6-day spell with TG > 5°C and first post-July 6-day spell with TG < 5°C	Requires sftlf.fx; verify eca_gsl behaviour with merged sftlf in CDO 2.4.4
+FG	yearmean	sfcWind	m/s	Mean wind speed	annual	none	0	Annual mean of daily mean near-surface wind speed	ECA&D index FG
+FGcalm	yearsum -lec,2	sfcWind	m/s	Calm days	annual	none	0	Count of days with mean wind speed <= 2 m/s	ECA&D index FGcalm
+FG6Bft	yearsum -gec,10.8	sfcWind	m/s	Strong wind days (>= Beaufort 6)	annual	none	0	Count of days with mean wind speed >= 10.8 m/s	ECA&D index FG6Bft
+RH	yearmean	hurs	%	Mean relative humidity	annual	none	0	Annual mean of daily mean near-surface relative humidity	ECA&D index RH
+PP	yearmean	psl	Pa	Mean sea level pressure	annual	none	0	Annual mean of daily mean sea level pressure	ECA&D index PP
+RSDSann	yearmean	rsds	W/m²	Annual mean surface downwelling shortwave radiation	annual	none	0	Annual mean of daily mean surface downwelling shortwave radiation	Using RSDSann to match CORDEX variable name; ECA&D equivalent is QQ
+CC	yearmean	clt	octas	Mean cloud cover	annual	none	0	Annual mean of daily mean cloud cover	ECA&D index CC; clt (0-100%) converted to continuous oktas via mulc,0.08
+CC2	yearsum -lec,2	clt	octas	Mostly sunny days	annual	none	0	Count of days with cloud cover <= 2 oktas	ECA&D index CC2
+CC6	yearsum -gec,6	clt	octas	Mostly cloudy days	annual	none	0	Count of days with cloud cover >= 6 oktas	ECA&D index CC6
