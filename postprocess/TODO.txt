@@ -12,9 +12,6 @@ cdo remapbic,r2880x1440 -sellonlatbox,175,350,5,80 $infile $outfile
 ===========
 TODO items:
 
-
-add GIS climate indicator calculation step
-
 regridding to lat-lon?
 	for the GIS climate indexes
 	subset of CORE vars (maybe just T & P)
@@ -44,8 +41,6 @@ allow for different set of variables to process
       extract.sh has hard-coded list of defaults
       move to config file,
       have setup autogenerate defaults from postprocess.py?
-
-split postprocess into the doing part and the function definitions
 
 
 config files for different simulations
