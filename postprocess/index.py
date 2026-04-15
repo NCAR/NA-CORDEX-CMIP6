@@ -12,7 +12,11 @@ Index definitions are read from a TSV file (default: gis_indexes.tsv in
 the same directory as this script).  The TSV drives command construction;
 modifying the TSV is the intended way to add, remove, or change indices.
 
-Generates five commandfiles that must be run in order:
+Generates six commandfiles that must be run in order:
+
+  concat.cmd   - Concatenates per-variable decadal input files into a
+                 single file per variable using ncrcat.  Must be run
+                 first; all subsequent steps depend on its output.
 
   minmax.cmd   - ydrunmin/ydrunmax/timmin/timmax over the baseline period.
                  Computed in native input units (no conversion).
@@ -38,7 +42,6 @@ See gis_indexes.tsv for TSV column documentation.
 
 import argparse
 import csv
-import os
 import re
 import sys
 from pathlib import Path
@@ -56,6 +59,21 @@ UNIT_CONV = {
 PCTL_WINDOW  = 5   # running-window width for ydrun* operators
 PCTL_NBINS_K = 2   # sizeof(double)/sizeof(int) factor for CDO_PCTL_NBINS
 
+# Commandfile each prereq operator writes to.  Also the single source of
+# truth for prereq operator names; used with CMDFILES to define all six
+# commandfiles in their required run order.
+PREREQ_CMD = {
+    "ydrunmin":  "minmax",
+    "ydrunmax":  "minmax",
+    "ydrunmean": "minmax",
+    "timmin":    "minmax",
+    "timmax":    "minmax",
+    "ydrunpctl": "pctile",
+    "timpctl":   "pctile",
+}
+
+CMDFILES = ["concat", "minmax", "pctile", "indices", "annual", "merge"]
+
 # Dependency tree for prerequisite operators.  Each operator lists the
 # operators whose output files it requires as additional inputs.
 PREREQ_DEPS = {
@@ -68,24 +86,29 @@ PREREQ_DEPS = {
     "timpctl":   ["timmin", "timmax"],
 }
 
+# Set after argument parsing; effectively read-only thereafter.
+FORCE      = False
+MIDDLE     = ""
+BL_TIMESPAN = ""
+
 
 # ---------------------------------------------------------------------------
 # File discovery helpers
 # ---------------------------------------------------------------------------
 
-def day_files(indir: Path, var: str) -> list[Path]:
+def day_files(indir, var):
     """Sorted list of all .nc files for <var>.day."""
     d = indir / f"{var}.day"
     return sorted(d.glob(f"{var}_*.nc")) if d.is_dir() else []
 
 
-def file_years(path: Path) -> tuple[int, int]:
+def file_years(path):
     """Extract (start_year, end_year) from a CORDEX filename timespan."""
     ts = path.stem.split("_")[-1]
     return int(ts[:4]), int(ts[9:13])
 
 
-def year_file(indir: Path, var: str, yr: int) -> Path | None:
+def year_file(indir, var, yr):
     """The single file for <var> that contains the given year."""
     for f in day_files(indir, var):
         sy, ey = file_years(f)
@@ -94,13 +117,7 @@ def year_file(indir: Path, var: str, yr: int) -> Path | None:
     return None
 
 
-def baseline_files(indir: Path, var: str, bstart: int, bend: int) -> list[Path]:
-    """Files for <var> whose timespan overlaps the baseline period."""
-    return [f for f in day_files(indir, var)
-            if file_years(f)[0] <= bend and file_years(f)[1] >= bstart]
-
-
-def sftlf_file(indir: Path) -> Path | None:
+def sftlf_file(indir):
     """First sftlf file found in sftlf.fx/."""
     d = indir / "sftlf.fx"
     files = sorted(d.glob("sftlf_*.nc")) if d.is_dir() else []
@@ -108,51 +125,14 @@ def sftlf_file(indir: Path) -> Path | None:
 
 
 # ---------------------------------------------------------------------------
-# CDO command construction helpers
-# ---------------------------------------------------------------------------
-
-def conv(units: str) -> str:
-    """CDO unit-conversion operator string, or empty string."""
-    return UNIT_CONV.get(units, "")
-
-
-def full_pipe(indir: Path, var: str, units: str) -> str:
-    """Full input pipe with unit conversion: '[conv] -mergetime f1 f2 ...'"""
-    files = day_files(indir, var)
-    if not files:
-        return ""
-    parts = " ".join(f'"{f}"' for f in files)
-    pipe = f"-mergetime {parts}"
-    c = conv(units)
-    return f"{c} {pipe}" if c else pipe
-
-
-def baseline_pipe(indir: Path, var: str, bstart: int, bend: int) -> str:
-    """Baseline input pipe: no unit conversion, selyear-bounded."""
-    files = baseline_files(indir, var, bstart, bend)
-    if not files:
-        return ""
-    parts = " ".join(f'"{f}"' for f in files)
-    return f"-selyear,{bstart}/{bend} -mergetime {parts}"
-
-
-def pctl_path(pctldir: Path, var: str, stat: str,
-              middle: str, bl_timespan: str) -> Path:
-    """Canonical prereq file: PCTLDIR/<var>_<stat>_<middle>_<bl_ts>.nc"""
-    return pctldir / f"{var}_{stat}_{middle}_{bl_timespan}.nc"
-
-
-# ---------------------------------------------------------------------------
 # Emit helper
 # ---------------------------------------------------------------------------
 
-def make_emit(force: bool):
-    """Return an emit(cmdfile, outfile, cmd) function respecting --force."""
-    def emit(cmdfile, outfile: Path, cmd: str):
-        if not force and outfile.exists():
-            return
-        cmdfile.write(cmd + "\n")
-    return emit
+def emit(cmdfile, outfile, cmd):
+    """Write cmd to cmdfile unless --force is unset and outfile already exists."""
+    if not FORCE and outfile.exists():
+        return
+    cmdfile.write(cmd + "\n")
 
 
 # ---------------------------------------------------------------------------
@@ -160,7 +140,9 @@ def make_emit(force: bool):
 # ---------------------------------------------------------------------------
 
 def main():
-    script_dir = Path(__file__).parent
+    global FORCE, MIDDLE, BL_TIMESPAN
+
+    script_dir  = Path(__file__).parent
     default_tsv = script_dir / "gis_indexes.tsv"
 
     ap = argparse.ArgumentParser(
@@ -199,116 +181,118 @@ def main():
     cmddir.mkdir(parents=True, exist_ok=True)
     cmddir = cmddir.resolve()
 
-    pctldir = outdir / "pctl"
-    anndir  = outdir / "annual"
+    concatdir = outdir / "concat"
+    pctldir   = outdir / "pctl"
+    anndir    = outdir / "annual"
+    concatdir.mkdir(exist_ok=True)
     pctldir.mkdir(exist_ok=True)
     anndir.mkdir(exist_ok=True)
 
-    baseline_years = bend - bstart + 1
-    pctl_nbins = PCTL_WINDOW * baseline_years * PCTL_NBINS_K + 2
-    bl_timespan = f"{bstart}0101-{bend}1231"
+    pctl_nbins = PCTL_WINDOW * (bend - bstart + 1) * PCTL_NBINS_K + 2
 
     all_nc = sorted(indir.glob("*.day/*.nc"))
     if not all_nc:
         sys.exit(f"Error: No *.nc files found under {indir}/*.day/")
-    middle    = "_".join(all_nc[0].stem.split("_")[1:8])
     sim_start = file_years(all_nc[0])[0]
     sim_end   = file_years(all_nc[-1])[1]
-    first_ts  = all_nc[0].stem.split("_")[-1]
-    last_ts   = all_nc[-1].stem.split("_")[-1]
-    timespan  = f"{first_ts[:4]}-{last_ts[9:13]}"
+    timespan  = (f"{all_nc[0].stem.split('_')[-1][:4]}-"
+                 f"{all_nc[-1].stem.split('_')[-1][9:13]}")
+
+    FORCE       = args.force
+    MIDDLE      = "_".join(all_nc[0].stem.split("_")[1:8])
+    BL_TIMESPAN = f"{bstart}0101-{bend}1231"
 
     print(f"Baseline period: {bstart}-{bend}")
     print(f"CDO_PCTL_NBINS:  {pctl_nbins}")
-    print(f"  DRS middle: {middle}")
+    print(f"  DRS middle: {MIDDLE}")
     print(f"  Timespan:   {timespan}  ({sim_start}-{sim_end})")
 
-    cmd_paths = {
-        "minmax":  cmddir / "minmax.cmd",
-        "pctile":  cmddir / "pctile.cmd",
-        "indices": cmddir / "indices.cmd",
-        "annual":  cmddir / "annual.cmd",
-        "merge":   cmddir / "merge.cmd",
-    }
+    cmd_paths = {name: cmddir / f"{name}.cmd" for name in CMDFILES}
     cmd_files = {k: open(v, "w") for k, v in cmd_paths.items()}
-    emit = make_emit(args.force)
 
-    # prereq_done is keyed on (spec, var) to avoid cross-variable collisions
+    # ------------------------------------------------------------------
+    # Pass 1: collect all unique non-sftlf variables referenced in TSV,
+    # emit concat.cmd, and record which vars are available.
+    # ------------------------------------------------------------------
+    seen_vars = set()
+    all_vars  = []
+    with open(tsv, newline="") as fh:
+        for row in csv.DictReader(fh, delimiter="\t"):
+            for v in row["input_vars"].strip().split("+"):
+                if v != "sftlf" and v not in seen_vars:
+                    all_vars.append(v)
+                    seen_vars.add(v)
+
+    concat_ok = set()   # vars successfully scheduled for concatenation
+
+    for var in all_vars:
+        files = day_files(indir, var)
+        if not files:
+            print(f"    WARNING: {var}.day not found or empty; "
+                  f"dependent indices will be skipped", file=sys.stderr)
+            continue
+        out       = concatdir / f"{var}_{MIDDLE}_{timespan}.nc"
+        filenames = " ".join(f.name for f in files)
+        emit(cmd_files["concat"], out,
+             f"ncrcat -p {indir / f'{var}.day'} -o {out} {filenames}")
+        concat_ok.add(var)
+
+    # ------------------------------------------------------------------
+    # ensure(spec, var, bl_pipe) - closure over prereq_done and cmd_files.
+    # Recursively schedules prereq commands and returns the output Path.
+    # prereq_done is keyed on (spec, var) to avoid cross-variable collisions.
+    # ------------------------------------------------------------------
     prereq_done = set()
-    nbins_emitted = False
-    counts = dict(minmax=0, pctile=0, indices=0, annual=0, merge=0)
 
-    def ensure(spec: str, var: str, bl_pipe: str) -> Path:
-        """Ensure prereq is scheduled; return its output Path."""
+    def ensure(spec, var, bl_pipe):
         key = (spec, var)
-        stat = spec.replace(",", "")
-        out = pctl_path(pctldir, var, stat, middle, bl_timespan)
+        op  = spec.split(",")[0]
+        assert op in PREREQ_CMD, f"Unknown prereq operator: {op}"
+        out = pctldir / f"{var}_{spec.replace(',', '')}_{MIDDLE}_{BL_TIMESPAN}.nc"
         if key in prereq_done:
             return out
 
-        parts = spec.split(",")
-        op = parts[0]
-
-        # Recursively ensure dependencies first
-        dep_files = []
-        for dep_op in PREREQ_DEPS[op]:
-            if op == "ydrunpctl":
-                dep_spec = f"{dep_op},{parts[-1]}"   # dep takes window only
-            else:
-                dep_spec = dep_op                     # timmin/timmax have no args
-            dep_files.append(ensure(dep_spec, var, bl_pipe))
-
-        # Emit this prereq's command
-        dep_str = " ".join(f'"{f}"' for f in dep_files)
+        # Recursively ensure dependencies first.  ydrunpctl passes its window
+        # arg down to ydrunmin/ydrunmax; timpctl's deps (timmin/timmax) take no args.
+        dep_args  = spec.split(",")[-1] if op == "ydrunpctl" else ""
+        dep_files = [
+            ensure(f"{dep_op},{dep_args}" if dep_args else dep_op, var, bl_pipe)
+            for dep_op in PREREQ_DEPS[op]
+        ]
+        dep_str = " ".join(str(f) for f in dep_files)
 
         if op in ("ydrunmin", "ydrunmax", "ydrunmean"):
-            window = parts[1]
-            cmd = f"cdo -s {op},{window} {bl_pipe} \"{out}\""
-            emit(cmd_files["minmax"], out, cmd)
-            counts["minmax"] += 1
-
+            cmd = f"cdo {spec} {bl_pipe} {out}"
         elif op == "ydrunpctl":
-            pctl_val, window = parts[1], parts[2]
-            cmd = (f"cdo -s ydrunpctl,{pctl_val},{window} {bl_pipe} "
-                   f"{dep_str} \"{out}\"")
-            emit(cmd_files["pctile"], out, cmd)
-            counts["pctile"] += 1
-
+            cmd = f"cdo {spec} {bl_pipe} {dep_str} {out}"
         elif op in ("timmin", "timmax"):
-            cmd = f"cdo -s {op} {bl_pipe} \"{out}\""
-            emit(cmd_files["minmax"], out, cmd)
-            counts["minmax"] += 1
+            cmd = f"cdo {op} {bl_pipe} {out}"
+        else:  # timpctl; mask dry days in pr baseline before computing percentile
+            pipe = f"-setrtomiss,,1 {bl_pipe}" if var == "pr" else bl_pipe
+            cmd  = f"cdo {spec} {pipe} {dep_str} {out}"
 
-        elif op == "timpctl":
-            pctl_val = parts[1]
-            masked_pipe = (f"-setrtomiss,,1 {bl_pipe}"
-                           if var == "pr" else bl_pipe)
-            cmd = (f"cdo -s timpctl,{pctl_val} {masked_pipe} "
-                   f"{dep_str} \"{out}\"")
-            emit(cmd_files["pctile"], out, cmd)
-            counts["pctile"] += 1
-
-        else:
-            raise ValueError(f"Unknown prereq operator: {op}")
-
+        emit(cmd_files[PREREQ_CMD[op]], out, cmd)
         prereq_done.add(key)
         return out
 
+    # ------------------------------------------------------------------
+    # Pass 2: emit indices / annual / merge commands
+    # ------------------------------------------------------------------
+    nbins_emitted = False
+
     with open(tsv, newline="") as fh:
-        reader = csv.DictReader(fh, delimiter="\t")
-        for row in reader:
+        for row in csv.DictReader(fh, delimiter="\t"):
             idx          = row["index"].strip()
             op           = row["cdo_operator"].strip()
             units        = row["units"].strip()
             freq         = row["output_frequency"].strip()
             prereq_specs = row["prereq_type"].strip()
-            inv          = row["input_vars"].strip()
+            vars_list    = row["input_vars"].strip().split("+")
             bootstrapped = row["bootstrapped"].strip() == "1"
 
-            vars_list   = inv.split("+")
             primary_var = vars_list[0]
 
-            # Check inputs exist
+            # Check all inputs are available
             skip = False
             for v in vars_list:
                 if v == "sftlf":
@@ -316,133 +300,113 @@ def main():
                         print(f"    WARNING: sftlf.fx not found; skipping {idx}",
                               file=sys.stderr)
                         skip = True; break
-                elif not (indir / f"{v}.day").is_dir():
+                elif v not in concat_ok:
                     skip = True; break
             if skip:
                 continue
 
-            bl_files = baseline_files(indir, primary_var, bstart, bend)
-            if prereq_specs != "none" and not bl_files:
-                print(f"    WARNING: no {primary_var} files overlap baseline "
-                      f"{bstart}-{bend}; skipping {idx}", file=sys.stderr)
-                continue
+            bl_pipe   = (f"-selyear,{bstart}/{bend} "
+                         f"{concatdir}/{primary_var}_{MIDDLE}_{timespan}.nc")
+            final_out = outdir / f"{idx}_{MIDDLE}_{timespan}.nc"
 
-            bl_pipe  = baseline_pipe(indir, primary_var, bstart, bend)
-            final_out = outdir / f"{idx}_{middle}_{timespan}.nc"
+            # Resolve prerequisites
+            prereq_str = " ".join(
+                str(ensure(spec, primary_var, bl_pipe))
+                for spec in prereq_specs.split("+")
+            ) if prereq_specs != "none" else ""
 
-            # -- Resolve prerequisites ---------------------------------------
-            # prereq_specs is either "none" or a "+"-separated list of specs
-            # e.g. "ydrunmin,5+ydrunmax,5" or "timpctl,75"
-            prereq_files = []
-            if prereq_specs != "none":
-                for spec in prereq_specs.split("+"):
-                    prereq_files.append(ensure(spec, primary_var, bl_pipe))
-
-            # Bootstrap operators need baseline args appended to op name
-            # and CDO_PCTL_NBINS set before first use
+            # Bootstrap operators append baseline years to op and need CDO_PCTL_NBINS
             op_suffix = ""
             if bootstrapped:
-                op_suffix = f",{bstart},{bend}"
+                op_suffix = f",{PCTL_WINDOW},{bstart},{bend}"
                 if not nbins_emitted:
-                    cmd_files["indices"].write(
-                        f"export CDO_PCTL_NBINS={pctl_nbins}\n")
+                    cmd_files["indices"].write(f"export CDO_PCTL_NBINS={pctl_nbins}\n")
                     nbins_emitted = True
 
-            # -- Secondary input expressions ---------------------------------
-            def secondary_inputs(yr=None):
+            # Secondary inputs: vars beyond the primary (e.g. tasmin for DTR, sftlf for GSL)
+            def sec_inputs(yr=None):
                 parts = []
                 for v in vars_list[1:]:
                     if v == "sftlf":
-                        parts.append(f'"{sftlf_file(indir)}"')
+                        parts.append(str(sftlf_file(indir)))
                     elif yr is None:
-                        files = day_files(indir, v)
-                        parts.append(
-                            f"-mergetime {' '.join(f'{chr(34)}{f}{chr(34)}' for f in files)}")
+                        parts.append(f"{concatdir}/{v}_{MIDDLE}_{timespan}.nc")
                     else:
                         yf = year_file(indir, v, yr)
-                        parts.append(f'"{yf}"' if yf else "MISSING")
+                        parts.append(str(yf) if yf else "MISSING")
                 return " ".join(parts)
 
-            prereq_str = " ".join(f'"{f}"' for f in prereq_files)
+            # Shared trailing fragment: optional prereqs then output file
+            def tail(out):
+                return (f" {prereq_str}" if prereq_str else "") + f" {out}"
 
-            # -- Emit index commands -----------------------------------------
             if freq == "annual":
-                pipe = full_pipe(indir, primary_var, units)
-                if not pipe:
-                    continue
-                sec = secondary_inputs()
-                cmd = (f"cdo -s {op}{op_suffix} {pipe}"
-                       f"{' ' + sec if sec else ''}"
-                       f"{' ' + prereq_str if prereq_str else ''}"
-                       f" \"{final_out}\"")
+                c    = UNIT_CONV.get(units, "")
+                pipe = f"{c} {concatdir}/{primary_var}_{MIDDLE}_{timespan}.nc" if c \
+                       else f"{concatdir}/{primary_var}_{MIDDLE}_{timespan}.nc"
+                sec  = sec_inputs()
+                cmd  = (f"cdo {op}{op_suffix} {pipe}"
+                        + (f" {sec}" if sec else "")
+                        + tail(final_out))
                 emit(cmd_files["indices"], final_out, cmd)
-                counts["indices"] += 1
 
             elif freq == "annual_loop":
-                c = conv(units)
+                c       = UNIT_CONV.get(units, "")
                 yr_outs = []
 
                 for yr in range(sim_start, sim_end + 1):
-                    yr_out = anndir / f"{idx}_{middle}_{yr}.nc"
-
-                    if len(vars_list) == 1:
-                        yf = year_file(indir, primary_var, yr)
-                        if yf is None:
-                            print(f"    WARNING: no file for {primary_var} "
-                                  f"year {yr}; skipping", file=sys.stderr)
-                            continue
-                        yr_pipe = f'{c} "{yf}"' if c else f'"{yf}"'
-                        cmd = (f"cdo -s {op} {yr_pipe}"
-                               f"{' ' + prereq_str if prereq_str else ''}"
-                               f" \"{yr_out}\"")
-                    else:
-                        sec = secondary_inputs(yr=yr)
-                        yf = year_file(indir, primary_var, yr)
-                        if yf is None:
-                            print(f"    WARNING: no file for {primary_var} "
-                                  f"year {yr}; skipping", file=sys.stderr)
-                            continue
-                        cmd = (f'cdo -s {op} "{yf}"'
-                               f"{' ' + sec if sec else ''}"
-                               f"{' ' + prereq_str if prereq_str else ''}"
-                               f" \"{yr_out}\"")
-
+                    yf = year_file(indir, primary_var, yr)
+                    if yf is None:
+                        print(f"    WARNING: no file for {primary_var} "
+                              f"year {yr}; skipping", file=sys.stderr)
+                        continue
+                    yr_out = anndir / f"{idx}_{MIDDLE}_{yr}.nc"
+                    sec    = sec_inputs(yr=yr)
+                    cmd    = (f"cdo {op} {f'{c} ' if c else ''}{yf}"
+                              + (f" {sec}" if sec else "")
+                              + tail(yr_out))
                     emit(cmd_files["annual"], yr_out, cmd)
                     yr_outs.append(yr_out)
-                    counts["annual"] += 1
 
                 if yr_outs:
-                    yr_list = " ".join(f'"{y}"' for y in yr_outs)
+                    yr_list = " ".join(str(y) for y in yr_outs)
                     emit(cmd_files["merge"], final_out,
-                         f'cdo -s mergetime {yr_list} "{final_out}"')
-                    counts["merge"] += 1
+                         f"cdo mergetime {yr_list} {final_out}")
 
             else:
                 print(f"    WARNING: unknown output_frequency '{freq}' "
                       f"for {idx}; skipping", file=sys.stderr)
 
+    # Close commandfiles; remove any that are empty
     for name, fh in cmd_files.items():
         fh.close()
         p = cmd_paths[name]
         if p.stat().st_size == 0:
             p.unlink()
 
+    # Count commands (lines not starting with 'export') in each commandfile
+    def count_cmds(p):
+        if not p.exists():
+            return 0
+        return sum(1 for ln in p.read_text().splitlines()
+                   if ln and not ln.startswith("export"))
+
+    counts = {name: count_cmds(cmd_paths[name]) for name in CMDFILES}
+
     print()
     print("Commandfile generation complete.")
     print(f"  TSV:                     {tsv}")
     print(f"  Commandfiles:            {cmddir}")
+    print(f"  Concatenated inputs:     {concatdir}")
     print(f"  Reference files:         {pctldir}")
     print(f"  Per-year temp files:     {anndir}")
     print(f"  Final index files:       {outdir}")
-    print(f"  Minmax: {counts['minmax']}  Pctile: {counts['pctile']}  "
-          f"Indices: {counts['indices']}  Annual: {counts['annual']}  "
-          f"Merge: {counts['merge']}")
+    print("  " + "  ".join(f"{n.capitalize()}: {counts[n]}" for n in CMDFILES))
     print()
-    print("Run in order:")
-    for name in ["minmax", "pctile", "indices", "annual", "merge"]:
-        p = cmd_paths[name]
-        if p.exists():
-            print(f"  launch_multi --run RUNDIR/{name:<7} {p}")
+    
+    print("To run in order using launch_multi:")
+    existing = [f"$cmddir/{name}.cmd" for name in CMDFILES if cmd_paths[name].exists()]
+    print(f"  launch_multi --chain --run $rundir {' '.join(existing)}")
 
 
 if __name__ == "__main__":

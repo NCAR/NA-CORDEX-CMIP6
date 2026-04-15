@@ -25,7 +25,7 @@ TNx	yearmax	tasmin	K	Annual maximum of daily minimum temperature	annual	none	0	W
 TN	yearmean	tasmin	K	Mean daily minimum temperature	annual	none	0	Annual mean of daily minimum near-surface air temperature	ECA&D index TN
 TN10p	etccdi_tn10p	tasmin	K	Cold nights	annual	ydrunmin,5+ydrunmax,5	1	Percent of days with TN < 10th percentile of baseline TN (bootstrapped)	CDO_PCTL_NBINS must be set; infile2/infile3 are ydrunmin/ydrunmax of baseline
 TN90p	etccdi_tn90p	tasmin	K	Warm nights	annual	ydrunmin,5+ydrunmax,5	1	Percent of days with TN > 90th percentile of baseline TN (bootstrapped)	CDO_PCTL_NBINS must be set
-CSDI	etccdi_csdi	tasmin	K	Cold spell duration index	annual	ydrunmin,5+ydrunmax,5	1	Count of days in spells of >= 6 consecutive days with TN < 10th percentile (bootstrapped)	CDO_PCTL_NBINS must be set
+CSDI	etccdi_csdi	tasmin	K	Cold spell duration index	annual	ydrunpctl,10,5	1	Count of days in spells of >= 6 consecutive days with TN < 10th percentile (bootstrapped)	CDO_PCTL_NBINS must be set
 CWDI	eca_cwdi	tasmin	K	Cold wave duration index	annual_loop	ydrunmean,5	0	Count of days in cold waves: >= 6 consecutive days with TN < TNnorm - 5°C	
 ID	etccdi_id	tasmax	K	Ice days	annual	none	0	Count of days with TX < 0°C	
 SU	etccdi_su	tasmax	K	Summer days	annual	none	0	Count of days with TX > 25°C	
@@ -35,7 +35,7 @@ TXx	yearmax	tasmax	K	Annual maximum of daily maximum temperature	annual	none	0	H
 TX	yearmean	tasmax	K	Mean daily maximum temperature	annual	none	0	Annual mean of daily maximum near-surface air temperature	ECA&D index TX
 TX10p	etccdi_tx10p	tasmax	K	Very cold days	annual	ydrunmin,5+ydrunmax,5	1	Percent of days with TX < 10th percentile of baseline TX (bootstrapped)	CDO_PCTL_NBINS must be set
 TX90p	etccdi_tx90p	tasmax	K	Very warm days	annual	ydrunmin,5+ydrunmax,5	1	Percent of days with TX > 90th percentile of baseline TX (bootstrapped)	CDO_PCTL_NBINS must be set
-WSDI	etccdi_wsdi	tasmax	K	Warm spell duration index	annual	ydrunmin,5+ydrunmax,5	1	Count of days in spells of >= 6 consecutive days with TX > 90th percentile (bootstrapped)	CDO_PCTL_NBINS must be set
+WSDI	etccdi_wsdi	tasmax	K	Warm spell duration index	annual	ydrunpctl,90,5	1	Count of days in spells of >= 6 consecutive days with TX > 90th percentile (bootstrapped)	CDO_PCTL_NBINS must be set
 HWDI	eca_hwdi	tasmax	K	Heat wave duration index	annual_loop	ydrunmean,5	0	Count of days in heat waves: >= 6 consecutive days with TX > TXnorm + 5°C	
 DTR	yearmean -sub	tasmax+tasmin	K	Mean diurnal temperature range	annual	none	0	Annual mean of daily (TX - TN)	Two-variable operator: yearmean of (tasmax - tasmin)
 ETR	eca_etr	tasmax+tasmin	K	Extreme temperature range	annual_loop	none	0	Max of TX minus min of TN over the period	
