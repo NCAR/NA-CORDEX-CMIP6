@@ -284,22 +284,29 @@ set outdir9 = $idir/data
 set cmddir9 = $idir/cmd
 set rundir9 = $idir/run
 
-$post/index.sh $indir9 $outdir9 $cmddir9
-
-$post/launch_multi --run $rundir9/ $cmddir9/prereqs.cmd
-
-# wait 'til it finishes, then run the indexes
-
-$post/launch_multi --run $rundir9 $cmddir9/indices.cmd
+python $post/index.py $indir9 $outdir9 $cmddir9
 
 
-## wait until it finishes, check everything ran correctly
-cd $rundir9/prereqs
-wc stdout*/* | tail -1
-tail -q -n 1 *.o* | cut -f 1 -d : | sort | uniq -c
-cd $rundir9/indices
-wc stdout*/* | tail -1
-tail -q -n 1 *.o* | cut -f 1 -d : | sort | uniq -c
+# launch jobs as dependent chain
+
+$post/launch_multi --chain --run $rundir9 --wall 00:30:00 --mem 20GB\
+		   $cmddir9/concat.cmd $cmddir9/minmax.cmd \
+		   $cmddir9/pctile.cmd  $cmddir9/indices.cmd \
+		   $cmddir9/annual.cmd $cmddir9/merge.cmd
+
+## check everything ran correctly
+
+cd $rundir9
+
+foreach i (*)
+  echo =====================
+  echo $i
+  wc -l $i/*.cmd
+  grep Done $i/*.o* | wc -l
+  wc $i/stdout*/* | tail -1
+  grep Done $i/*.o* | cut -f 2 -d = | cut -f 3-4 -d ' ' | sort -n | uniq -c
+end
+
 cd $topdir
 
 

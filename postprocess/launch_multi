@@ -14,6 +14,7 @@
 #                       (default: directory containing launch_multi)
 #   --config FILE       Environment config file (default: ~/config_env.sh)
 #   --copy FILE         Additional file/dir to copy (can be repeated)
+#   --chain             Submit jobs as a dependency chain (each waits for previous)
 #   --dry               Print commands without executing
 #   --sleep N           Delay in seconds between job submissions (default: 1)
 #   --wall TIME         Walltime (default: 00:20:00)
@@ -38,6 +39,7 @@ set -e
 
 # Defaults
 account="${PROJECT:-}"
+chain=0
 cmdfiles=()
 config="$HOME/config_env.sh"
 config_specified=0
@@ -134,6 +136,10 @@ while [[ $# -gt 0 ]]; do
             copyfiles+=("$2")
             shift 2
             ;;
+        --chain)
+            chain=1
+            shift
+            ;;
         --sleep)
             sleep="$2"
             shift 2
@@ -211,6 +217,7 @@ done
 run_cmd "mkdir -p $(printf %q "$runpath")"
 
 here="$(pwd)"
+prev_jobid=""
 
 for cmdfile in "${cmdfiles[@]}"; do
     # Get absolute path to cmdfile
@@ -251,12 +258,27 @@ for cmdfile in "${cmdfiles[@]}"; do
     if [[ -n "$mem" ]]; then
         launch_cmd+=" --mem $(printf %q "$mem")"
     fi
+    
+    # Add dependency on previous job if chaining
+    if [[ $chain -eq 1 && -n "$prev_jobid" ]]; then
+        launch_cmd+=" -W depend=afterok:$prev_jobid"
+    fi
+    
     for arg in "${passthrough[@]}"; do
         launch_cmd+=" $(printf %q "$arg")"
     done
     launch_cmd+=" $(printf %q "$cmd")"
     
-    run_cmd "$launch_cmd"
+    # Execute and capture job ID if chaining
+    if [[ $dry -eq 1 ]]; then
+        echo "  $launch_cmd"
+        [[ $chain -eq 1 ]] && prev_jobid="PREV_JOBID"
+    else
+        prev_jobid=$(eval "$launch_cmd" | tee /dev/stderr | tail -1)
+        echo "  Submitted: $prev_jobid"
+    fi
+    
     run_cmd "cd $(printf %q "$here")"
     run_cmd "sleep $sleep"
 done
+
