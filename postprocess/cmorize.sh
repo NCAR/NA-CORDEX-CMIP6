@@ -75,8 +75,8 @@ source "$sim_env"
 # ---------------------------------------------------------------------------
 # Look up per-variable specs from var_table.tsv
 # ---------------------------------------------------------------------------
-# Columns: var, freq, units, cell_methods, positive, levels, refh, quant,
-#          standard_name, long_name
+# Columns: var, freq, units, cell_methods, positive, levels, refh, plev,
+#          quant, standard_name, long_name
 
 var_row="$(awk -F'\t' -v v="$var" 'NR>1 && $1==v {print; exit}' "$var_table")"
 
@@ -91,9 +91,10 @@ cell_methods=$( echo "$var_row" | cut -f4)
 positive=$(     echo "$var_row" | cut -f5)
 levels=$(       echo "$var_row" | cut -f6)
 refh=$(         echo "$var_row" | cut -f7)
-quant=$(        echo "$var_row" | cut -f8)
-standard_name=$(echo "$var_row" | cut -f9)
-long_name=$(    echo "$var_row" | cut -f10)
+plev=$(         echo "$var_row" | cut -f8)
+quant=$(        echo "$var_row" | cut -f9)
+standard_name=$(echo "$var_row" | cut -f10)
+long_name=$(    echo "$var_row" | cut -f11)
 
 # ---------------------------------------------------------------------------
 # Derived metadata
@@ -254,10 +255,29 @@ fi
 
 # Step 4: Append spatial coordinates (trimmed to interior domain, excluding
 # the sponge zone).  Variable ordering is also established here.
-# If refh is set, also create the height scalar coordinate.
+#
+# Vertical scalar coordinate (mutually exclusive options):
+#   levels=pressure : create plev scalar coord (Pa) from the plev column
+#   refh set        : create height scalar coord (m) above ground
+#   neither         : surface variable, coords are just "lat lon"
 ncks -h -A -d x,$x_trim -d y,$y_trim "$coord_file" "$outfile"
 
-if [[ -n "$refh" && "$refh" != "--" ]]; then
+if [[ "$levels" == "pressure" ]]; then
+    [[ -z "$plev" || "$plev" == "--" ]] && {
+        echo "Error: levels=pressure but no plev value in var_table.tsv for $var" >&2
+        exit 1
+    }
+    ncap2 -h -A -s "plev=double(${plev})" "$outfile"
+    ncatted -h \
+        -a units,plev,o,c,Pa \
+        -a long_name,plev,o,c,pressure \
+        -a standard_name,plev,o,c,air_pressure \
+        -a positive,plev,o,c,down \
+        -a axis,plev,o,c,Z \
+        "$outfile"
+    coords="lat lon plev"
+
+elif [[ -n "$refh" && "$refh" != "--" ]]; then
     ncap2 -h -A -s "height=double(${refh})" "$outfile"
     ncatted -h \
         -a units,height,o,c,m \

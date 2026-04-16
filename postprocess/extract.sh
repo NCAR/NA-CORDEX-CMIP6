@@ -10,18 +10,33 @@
 # Variables are routed to one of two worker scripts:
 #   postprocess.core.variables.py    - standard CORDEX core variables
 #   postprocess.hyd-atm.variables.py - supplemental hydro/atmo variables
-#                                      (AFWA diagnostics, etc.)
+#                                      (AFWA diagnostics, pressure-level
+#                                      vars, height-AGL winds, etc.)
 
 set -euo pipefail
 
-# Default variable list for NA-CORDEX-CMIP6 postprocessing
+# Default variable list for NA-CORDEX-CMIP6 postprocessing.
+#
+# wbgt is intentionally NOT in DEFAULT_HYDATM_VARS because it requires the
+# thermofeel package, which is not in the standard npl conda env.  To process
+# wbgt, install thermofeel and pass --vars wbgt explicitly (it is still in
+# HYDATM_VARS below so routing works).
 DEFAULT_CORE_VARS="fx,clt,evspsbl,hurs,huss,pr,ps,psl,rlds,rsds,sfcWind,tas,tasmax,tasmin,uas,vas"
-DEFAULT_HYDATM_VARS="cape,cin,prw,fzra,wchill,heatidx,wbgt"
+DEFAULT_HYDATM_VARS="cape,cin,prw,fzra,wchill,heatidx,\
+mrro,mrros,mrso,snw,snd,\
+ua50m,va50m,ua100m,va100m,ua150m,va150m,\
+ta700,ta500,ta250,ua700,ua500,ua250,va700,va500,va250,\
+zg700,zg500,zg250,hus700,hus500,hus250"
 DEFAULT_VARS="${DEFAULT_CORE_VARS},${DEFAULT_HYDATM_VARS}"
 
 # Space-separated list of variables handled by postprocess.hyd-atm.variables.py.
 # All other variables are routed to postprocess.core.variables.py.
-HYDATM_VARS="cape cin prw fzra wchill heatidx wbgt"
+# wbgt is included for routing even though it's not in DEFAULT_HYDATM_VARS.
+HYDATM_VARS="cape cin prw fzra wchill heatidx wbgt
+mrro mrros mrso snw snd
+ua50m va50m ua100m va100m ua150m va150m
+ta700 ta500 ta250 ua700 ua500 ua250 va700 va500 va250
+zg700 zg500 zg250 hus700 hus500 hus250"
 
 script_for_var() {
     local v="$1"
@@ -46,7 +61,8 @@ Arguments:
 
 Options:
   --vars VAR[,VAR,...]  Comma-separated list of variables to process
-                        (default: all supported variables)
+                        (default: all supported variables except wbgt;
+                         wbgt requires the thermofeel package)
   --scripts PATH        Directory containing the postprocess scripts
                         (default: directory containing extract.sh)
   -h, --help            Show this help message
