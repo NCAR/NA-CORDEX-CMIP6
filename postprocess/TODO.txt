@@ -1,24 +1,8 @@
 
-regridding for GIS:
-
-cdo remapbic,r2880x1440 -sellonlatbox,175,350,5,80 $infile $outfile
-
-# this is dumb; writes a lot of missing data.  Properly define the
-# domain & grid in a file
-
-#huss_NAM-12_ERA5_evaluation_r1i1p1f1_NCAR_WRF461S-SN_v1-r1_hr_2000010100_2000123123.nc regridded.huss.nc
-
-
 ===========
 TODO items:
 
-regridding to lat-lon?
-	for the GIS climate indexes
-	subset of CORE vars (maybe just T & P)
-
-calculation of derived variables
-	downstream:    fire indexes
-	on extract:    WBGT, UTCI, NWS heat index etc.
+fix compression precision to use DSD instead of NSD
 
 post-process additional variables
 	** = 6-hourly
@@ -32,10 +16,22 @@ post-process additional variables
 	rsus, rlus
 	latent & sensible heat flux
 	
+---
+
+Climate indexes:
+	calculate seasonally in addition to annually
+	decadal 30-year averages
+	warming-level based 20-year averages
+	regridding to lat-lon
+		? for the GIS climate indexes
+		? subset of CORE vars (maybe just T & P)
+		define domain + grid in separate file
+		use cdo remapbic
 
 ---
 
-refactor stage 2
+updates for different simulations:
+
 
 allow for different set of variables to process
       extract.sh has hard-coded list of defaults
@@ -55,6 +51,7 @@ config files for different simulations
 
 switch from pandas to cftime to handle non-greg calendars
 
+check Jacob's script for workflow automation, which implements ssom
 
 Default $out/data /cmd & /run directory structure
 
@@ -65,24 +62,22 @@ extend --workflow cordex arg for launch_multi to use these defaults
 
 ---
 
-
 update README
-
 
 List Seth & Jacob as authors in all the scripts
 
 Make the comments in the header of each script consistent
 
-check that --workflow cordex defaults are documented - many-many
-running in parallel runs slower than just testing 1 year;
-transient memory spikes can generate error messages without causing failure
-
-So stick with 50 GB / 1 hr
+document fact that --workflow cordex defaults use 50 GB / 1 hr because
+many-many running in parallel are slower than when testing a single
+case (i/o bandwidth to disk, probably); also transient memory spikes
+can generate error messages without causing failure, which makes
+checking success harder
 
 ---
 
 refine launch_multi to examine the cmd file and copy scripts it needs
-into rundir based on that?
+into rundir based on that, rather than a default set by workflow?
 
 ---
 
@@ -93,5 +88,10 @@ even further and doing stuff like checking for Killed and whether the
 number of Done lines matches the number of commands, etc.  And it may
 need to do things a little differently depending on the step.
 
-Revamp based on WORKFLOW
+Revamp based on WORKFLOW.md
 
+---
+
+calculation of derived variables
+	downstream:    fire indexes
+	on extract:    WBGT, UTCI, NWS heat index etc.
