@@ -31,7 +31,7 @@ years=1980
 export PROJECT=NRIS0001
 
 # Conda environment for the Python steps
-conda_env=npl
+conda_env=na_cordex
 
 # ---------------------------------------------------------------------------
 # DERIVED PATHS - computed from the above; usually no need to edit

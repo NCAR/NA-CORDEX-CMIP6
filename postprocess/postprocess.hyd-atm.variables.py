@@ -438,9 +438,12 @@ for _comp in ['ua', 'va']:
 
 # Wet Bulb Globe Temperature (WBGT)
 # ---------------------------------------------------
-# Requires the thermofeel package (ECMWF):
-#   pip install thermofeel
-# or ensure it is available in the conda environment specified by config_env.sh.
+# Requires the thermofeel package (ECMWF).  The provided na_cordex conda
+# environment includes it; create and activate it from the repo with:
+#   conda env create -f postprocess/na_cordex.yml
+#   conda activate na_cordex
+# Alternatively, ensure thermofeel is available in whatever environment is
+# specified by config_env.sh.
 #
 # Processes hourly files one day at a time to manage memory (11 input
 # variables at 12km hourly resolution), then concatenates into a single
