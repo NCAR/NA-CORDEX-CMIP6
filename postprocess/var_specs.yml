@@ -97,6 +97,14 @@ wbgt:
   <<: *defaults
   refh: 2
   quant: 3
+utci:
+  <<: *defaults
+  refh: 2
+  quant: 3
+humidex:
+  <<: *defaults
+  refh: 2
+  quant: 3
 
 # --- Hydrology / soil / snow variables (6-hourly) ---
 mrro:

@@ -124,6 +124,38 @@
             "valid_max": "",
             "ok_min_mean_abs": "",
             "ok_max_mean_abs": ""
+        },
+        "humidex": {
+            "frequency": "1hr",
+            "units": "K",
+            "cell_methods": "area: mean time: point",
+            "cell_measures": "area: areacella",
+            "long_name": "Humidex",
+            "comment": "Humidex computed from WRF hourly output using the thermofeel package. Inputs include 2-meter temperature andd dewpoint. No CF standard name exists for this variable.",
+            "dimensions": "longitude latitude time1 height2m",
+            "out_name": "humidex",
+            "type": "real",
+            "positive": "",
+            "valid_min": "",
+            "valid_max": "",
+            "ok_min_mean_abs": "",
+            "ok_max_mean_abs": ""
+        },
+        "utci": {
+            "frequency": "1hr",
+            "units": "K",
+            "cell_methods": "area: mean time: point",
+            "cell_measures": "area: areacella",
+            "long_name": "Universal Thermal Climate Index",
+            "comment": "Universal Thermal Climate Index, computed from WRF hourly output using the thermofeel package. Inputs include T2, Q2, PSFC, U10, V10, COSZEN, SWDOWN, SWDDNI, GLW, LWUPB, and ALBEDO. No CF standard name exists for this variable.",
+            "dimensions": "longitude latitude time1 height2m",
+            "out_name": "utci",
+            "type": "real",
+            "positive": "",
+            "valid_min": "",
+            "valid_max": "",
+            "ok_min_mean_abs": "",
+            "ok_max_mean_abs": ""
         }
     }
 }
