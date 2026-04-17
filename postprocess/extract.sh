@@ -19,8 +19,8 @@ set -euo pipefail
 #
 # wbgt is intentionally NOT in DEFAULT_HYDATM_VARS because it requires the
 # thermofeel package, which is not in the standard npl conda env.  To process
-# wbgt, install thermofeel and pass --vars wbgt explicitly (it is still in
-# HYDATM_VARS below so routing works).
+# wbgt, utci, and humidex are intentionally NOT in DEFAULT_HYDATM_VARS because
+# they require the thermofeel package...
 DEFAULT_CORE_VARS="fx,clt,evspsbl,hurs,huss,pr,ps,psl,rlds,rsds,sfcWind,tas,tasmax,tasmin,uas,vas"
 DEFAULT_HYDATM_VARS="cape,cin,prw,fzra,wchill,heatidx,\
 mrro,mrros,mrso,snw,snd,\
@@ -32,7 +32,7 @@ DEFAULT_VARS="${DEFAULT_CORE_VARS},${DEFAULT_HYDATM_VARS}"
 # Space-separated list of variables handled by postprocess.hyd-atm.variables.py.
 # All other variables are routed to postprocess.core.variables.py.
 # wbgt is included for routing even though it's not in DEFAULT_HYDATM_VARS.
-HYDATM_VARS="cape cin prw fzra wchill heatidx wbgt
+HYDATM_VARS="cape cin prw fzra wchill heatidx wbgt utci humidex
 mrro mrros mrso snw snd
 ua50m va50m ua100m va100m ua150m va150m
 ta700 ta500 ta250 ua700 ua500 ua250 va700 va500 va250

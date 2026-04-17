@@ -722,8 +722,7 @@ _CLEAN = {var: globals()[f'clean_{var}']
                       'hus700','hus500','hus250',
                       'ua50m','ua100m','ua150m',
                       'va50m','va100m','va150m',
-                      'wbgt_utci', 'humidex',
-                      'cape','cin',
+                      'humidex', 'cape','cin',
                       'prw','fzra', 'heatidx',
                       'wchill',
                       ]}
