@@ -472,9 +472,12 @@ def _dew_point_from_vapor_pressure(e):
     ln_e = np.log(e_hPa / 6.1078)
     return (237.3 * ln_e) / (17.27 - ln_e) + 273.15
 
+def _compute_wbgt_utci_arrays(ds):
+    """Compute WBGT and UTCI from a single-day WRF dataset.
 
-def _compute_wbgt_arrays(ds):
-    """Compute WBGT from a single-day WRF dataset. Returns float32 array."""
+    Returns (wbgt, utci) as float32 arrays. MRT is computed once and shared
+    between both indices to avoid redundant radiation processing.
+    """
     import thermofeel
 
     coszen = np.clip(ds['COSZEN'].values, 0.0, 1.0)
@@ -506,28 +509,34 @@ def _compute_wbgt_arrays(ds):
     e_a = _vapor_pressure_from_q(Q2_safe, PSFC)
     td_k = _dew_point_from_vapor_pressure(e_a)
 
+    t2_f64  = T2.astype(np.float64)
+    mrt_f64 = mrt.astype(np.float64)
+    va_f64  = va.astype(np.float64)
+    td_f64  = td_k.astype(np.float64)
+
     wbgt = thermofeel.calculate_wbgt(
-        t2_k=T2.astype(np.float64),
-        mrt=mrt.astype(np.float64),
-        va=va.astype(np.float64),
-        td_k=td_k.astype(np.float64),
+        t2_k=t2_f64, mrt=mrt_f64, va=va_f64, td_k=td_f64,
     )
 
-    return wbgt.astype(np.float32)
+    utci = thermofeel.calculate_utci(
+        t2_k=t2_f64, va=va_f64, mrt=mrt_f64, td_k=td_f64,
+    )
+
+    return wbgt.astype(np.float32), utci.astype(np.float32)
 
 
-def clean_wbgt(_ds_unused):
-    """Compute WBGT from hourly WRF output, one day at a time.
+def clean_wbgt_utci(_ds_unused):
+    """Compute WBGT and UTCI from hourly WRF output, one day at a time.
 
-    Bypasses the standard load_by_tag mechanism because WBGT needs 11
-    simultaneous input variables and loading the full year would exceed
-    memory.  Instead, iterates over daily files, computes WBGT for each,
-    and concatenates into a single annual dataset.
+    Bypasses the standard load_by_tag mechanism because these indices need 11
+    simultaneous input variables and loading the full year would exceed memory.
+    MRT is computed once per day and shared between both indices.
 
     The _ds_unused argument is accepted for dispatch-table compatibility
     but ignored.
     """
-    daily_results = []
+    wbgt_days = []
+    utci_days = []
 
     # hr_files[0] is the day-before file; skip it
     for i, fpath in enumerate(hr_files[1:]):
@@ -537,28 +546,70 @@ def clean_wbgt(_ds_unused):
         ds = xr.open_dataset(fpath, engine='netcdf4')
         ds = ds[_WBGT_WRF_VARS]
 
-        wbgt_day = _compute_wbgt_arrays(ds)
+        wbgt_day, utci_day = _compute_wbgt_utci_arrays(ds)
         nt_day = wbgt_day.shape[0]
 
-        # Build a DataArray for this day with proper time coords
         day_offset = i * 24
         day_times = time_dim[day_offset : day_offset + nt_day]
 
-        da = xr.DataArray(
-            wbgt_day,
-            dims=['time', 'y', 'x'],
-            coords={'time': day_times},
-        )
-        daily_results.append(da)
+        wbgt_days.append(xr.DataArray(wbgt_day, dims=['time', 'y', 'x'],
+                                       coords={'time': day_times}))
+        utci_days.append(xr.DataArray(utci_day, dims=['time', 'y', 'x'],
+                                       coords={'time': day_times}))
         ds.close()
 
         if (i + 1) % 30 == 0:
-            print(f'  wbgt: processed {i + 1}/{len(hr_files) - 1} days')
+            print(f'  wbgt/utci: processed {i + 1}/{len(hr_files) - 1} days')
 
-    wbgt = xr.concat(daily_results, dim='time').to_dataset(name='wbgt')
-    print(f'  wbgt: finished, {len(wbgt.time)} timesteps')
+    wbgt = xr.concat(wbgt_days, dim='time').to_dataset(name='wbgt')
+    utci = xr.concat(utci_days, dim='time').to_dataset(name='utci')
+    print(f'  wbgt/utci: finished, {len(wbgt.time)} timesteps')
 
-    return [('wbgt', '1hr', wbgt)]
+    return [('wbgt', '1hr', wbgt), ('utci', '1hr', utci)]
+# ---------------------------------------------------
+
+# Humidex
+# ---------------------------------------------------
+# Requires the thermofeel package (ECMWF).
+# Inputs: T2, Q2, PSFC. No radiation fields required.
+# Dewpoint is derived from specific humidity using the same helper functions
+# used by WBGT/UTCI. Full-year load is acceptable given the small input size.
+#
+# References:
+#   Masterton & Richardson (1979), Humidex: a method of quantifying human
+#     discomfort due to excessive heat and humidity. Env. Canada CLI 1-79.
+#   thermofeel: Brimicombe et al. (2022), SoftwareX, 18, 101005
+
+_HUMIDEX_WRF_VARS = ['T2', 'Q2', 'PSFC']
+
+def clean_humidex(ds):
+    """Compute humidex from hourly WRF output (full-year load).
+
+    Derives dewpoint temperature from specific humidity and surface pressure,
+    then calls thermofeel.calculate_humidex.
+    """
+    import thermofeel
+
+    T2   = ds['T2'].values
+    Q2   = np.maximum(ds['Q2'].values, 0.0)
+    PSFC = ds['PSFC'].values
+
+    e_a  = _vapor_pressure_from_q(Q2, PSFC)
+    td_k = _dew_point_from_vapor_pressure(e_a)
+
+    humidex = thermofeel.calculate_humidex(
+        t2_k=T2.astype(np.float64),
+        td_k=td_k.astype(np.float64),
+    )
+
+    times = ds['time'].values[ds['time'].values >= time_dim[0].values]
+    da = xr.DataArray(
+        humidex.astype(np.float32),
+        dims=['time', 'y', 'x'],
+        coords={'time': ds['time'].values},
+    ).sel(time=time_dim)
+
+    return [('humidex', '1hr', da.to_dataset(name='humidex'))]
 # ---------------------------------------------------
 
 # Moving to AFWA diagnostic ouptuts
@@ -662,7 +713,6 @@ def clean_wchill(ds):
 # Note: wbgt handles its own file loading internally (see clean_wbgt);
 # the 'hr' loader tag is listed for consistency but the dataset passed
 # to clean_wbgt is ignored.
-
 _CLEAN = {var: globals()[f'clean_{var}']
           for var in ['snw','snd','mrso','mrros','mrro',
                       'ua700','ua500','ua250',
@@ -672,13 +722,20 @@ _CLEAN = {var: globals()[f'clean_{var}']
                       'hus700','hus500','hus250',
                       'ua50m','ua100m','ua150m',
                       'va50m','va100m','va150m',
-                      'wbgt', 'cape','cin', 
+                      'wbgt_utci', 'humidex',
+                      'cape','cin',
                       'prw','fzra', 'heatidx',
                       'wchill',
                       ]}
 
+# wbgt and utci both resolve to the combined clean function
+_CLEAN['wbgt'] = clean_wbgt_utci
+_CLEAN['utci'] = clean_wbgt_utci
+
 _OUTFREQ = defaultdict(lambda: '6hr',
                        wbgt='1hr',
+                       utci='1hr',
+                       humidex='1hr',
                        cape='1hr',
                        cin='1hr',
                        prw='1hr',
@@ -686,6 +743,7 @@ _OUTFREQ = defaultdict(lambda: '6hr',
                        heatidx='1hr',
                        wchill='1hr',
                        )
+
 
 _LOADER = {
     'mrro'   : 'six_hr_acc',
@@ -712,6 +770,8 @@ _LOADER = {
     'va100m' : 'zlev',
     'va150m' : 'zlev',
     'wbgt'   : 'hr',
+    'utci'   : 'hr',
+    'humidex': 'hr',
     'cape'   : 'afwa',
     'cin'    : 'afwa',
     'prw'    : 'afwa',
@@ -741,11 +801,11 @@ else:
         if _output_needed(variable, make_fname(variable, _OUTFREQ[variable])):
             # wbgt handles its own loading; pass None instead of loading
             # the full hourly dataset into memory
-            if loader_tag == 'hr' and variable == 'wbgt':
+            if loader_tag == 'hr' and variable in ('wbgt', 'utci'):
                 write_vars(clean_fn(None))
             else:
                 write_vars(clean_fn(load_by_tag(loader_tag)))
 
-#print('Done')
+print('Done')
 
 # Plotting is handled separately; see plot.postprocess.var.py
