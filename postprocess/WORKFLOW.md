@@ -289,7 +289,7 @@ python $post/index.py $indir9 $outdir9 $cmddir9
 
 # launch jobs as dependent chain
 
-$post/launch_multi --chain --run $rundir9 --wall 00:30:00 --mem 20GB\
+$post/launch_multi --chain --run $rundir9 --wall 00:30:00 --mem 50GB\
 		   $cmddir9/concat.cmd $cmddir9/minmax.cmd \
 		   $cmddir9/pctile.cmd  $cmddir9/indices.cmd \
 		   $cmddir9/annual.cmd $cmddir9/merge.cmd
