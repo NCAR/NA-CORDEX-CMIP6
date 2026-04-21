@@ -95,3 +95,15 @@ Revamp based on WORKFLOW.md
 calculation of derived variables
 	downstream:    fire indexes
 	on extract:    WBGT, UTCI, NWS heat index etc.
+
+---
+
+Someday:
+	climate indexes based on percentile exceedences
+		dropped because boostrapping is too slow
+	FTC - freeze-thaw cycles per year
+		defined as days with tmax > 0 and tmin < -1 C
+			definition from climateatlas.ca
+		dropped because it's a `yearsum -mul -ltc -gtc` chain
+		in CDO and it can't figure out which file goes where
+

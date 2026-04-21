@@ -26,7 +26,6 @@ Generates six commandfiles that must be run in order:
 
   indices.cmd  - Indices whose CDO operators natively output annual time
                  steps.  Unit conversion applied here, not in prereqs.
-                 Includes CDO_PCTL_NBINS export before bootstrapped cmds.
 
   annual.cmd   - One command per year for operators that summarise over
                  their entire input.  Each command operates on the single
@@ -57,7 +56,6 @@ UNIT_CONV = {
 }
 
 PCTL_WINDOW  = 5   # running-window width for ydrun* operators
-PCTL_NBINS_K = 2   # sizeof(double)/sizeof(int) factor for CDO_PCTL_NBINS
 
 # Commandfile each prereq operator writes to.  Also the single source of
 # truth for prereq operator names; used with CMDFILES to define all six
@@ -188,8 +186,6 @@ def main():
     pctldir.mkdir(exist_ok=True)
     anndir.mkdir(exist_ok=True)
 
-    pctl_nbins = PCTL_WINDOW * (bend - bstart + 1) * PCTL_NBINS_K + 2
-
     all_nc = sorted(indir.glob("*.day/*.nc"))
     if not all_nc:
         sys.exit(f"Error: No *.nc files found under {indir}/*.day/")
@@ -203,7 +199,6 @@ def main():
     BL_TIMESPAN = f"{bstart}0101-{bend}1231"
 
     print(f"Baseline period: {bstart}-{bend}")
-    print(f"CDO_PCTL_NBINS:  {pctl_nbins}")
     print(f"  DRS middle: {MIDDLE}")
     print(f"  Timespan:   {timespan}  ({sim_start}-{sim_end})")
 
@@ -278,8 +273,6 @@ def main():
     # ------------------------------------------------------------------
     # Pass 2: emit indices / annual / merge commands
     # ------------------------------------------------------------------
-    nbins_emitted = False
-
     with open(tsv, newline="") as fh:
         for row in csv.DictReader(fh, delimiter="\t"):
             idx          = row["index"].strip()
@@ -288,7 +281,6 @@ def main():
             freq         = row["output_frequency"].strip()
             prereq_specs = row["prereq_type"].strip()
             vars_list    = row["input_vars"].strip().split("+")
-            bootstrapped = row["bootstrapped"].strip() == "1"
 
             primary_var = vars_list[0]
 
@@ -315,14 +307,6 @@ def main():
                 for spec in prereq_specs.split("+")
             ) if prereq_specs != "none" else ""
 
-            # Bootstrap operators append baseline years to op and need CDO_PCTL_NBINS
-            op_suffix = ""
-            if bootstrapped:
-                op_suffix = f",{PCTL_WINDOW},{bstart},{bend}"
-                if not nbins_emitted:
-                    cmd_files["indices"].write(f"export CDO_PCTL_NBINS={pctl_nbins}\n")
-                    nbins_emitted = True
-
             # Secondary inputs: vars beyond the primary (e.g. tasmin for DTR, sftlf for GSL)
             def sec_inputs(yr=None):
                 parts = []
@@ -345,7 +329,7 @@ def main():
                 pipe = f"{c} {concatdir}/{primary_var}_{MIDDLE}_{timespan}.nc" if c \
                        else f"{concatdir}/{primary_var}_{MIDDLE}_{timespan}.nc"
                 sec  = sec_inputs()
-                cmd  = (f"cdo {op}{op_suffix} {pipe}"
+                cmd  = (f"cdo {op} {pipe}"
                         + (f" {sec}" if sec else "")
                         + tail(final_out))
                 emit(cmd_files["indices"], final_out, cmd)
@@ -403,7 +387,7 @@ def main():
     print(f"  Final index files:       {outdir}")
     print("  " + "  ".join(f"{n.capitalize()}: {counts[n]}" for n in CMDFILES))
     print()
-    
+
     print("To run in order using launch_multi:")
     existing = [f"$cmddir/{name}.cmd" for name in CMDFILES if cmd_paths[name].exists()]
     print(f"  launch_multi --chain --run $rundir {' '.join(existing)}")
