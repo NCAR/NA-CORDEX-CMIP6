@@ -29,9 +29,10 @@ ta700,ta500,ta250,ua700,ua500,ua250,va700,va500,va250,\
 zg700,zg500,zg250,hus700,hus500,hus250"
 DEFAULT_VARS="${DEFAULT_CORE_VARS},${DEFAULT_HYDATM_VARS}"
 
-# Space-separated list of variables handled by postprocess.hyd-atm.variables.py.
-# All other variables are routed to postprocess.core.variables.py.
-# wbgt is included for routing even though it's not in DEFAULT_HYDATM_VARS.
+# wbgt, utci, and humidex are intentionally NOT in DEFAULT_HYDATM_VARS because
+# they require the thermofeel package. Pass them explicitly via --vars.
+# Note: utci is produced automatically when wbgt runs; submitting utci as a
+# standalone job will cause a file conflict. Use --vars wbgt to get both.
 HYDATM_VARS="cape cin prw fzra wchill heatidx wbgt utci humidex
 mrro mrros mrso snw snd
 ua50m va50m ua100m va100m ua150m va150m
@@ -159,6 +160,10 @@ FIRST_CHUNK="$WRFDIR/$(chunk_dir_for_year "$START_YEAR")"
 generated_cmds=()
 
 for var in "${VARLIST[@]}"; do
+    if [[ "$var" == "utci" ]]; then
+        echo "Note: utci is produced automatically when wbgt runs; skipping standalone utci job."
+        continue
+    fi
     cmdfile="$CMDDIR/${var}.cmd"
     > "$cmdfile"
 

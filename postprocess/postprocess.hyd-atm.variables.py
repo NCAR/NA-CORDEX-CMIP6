@@ -590,34 +590,61 @@ def clean_wbgt_utci(_ds_unused):
 
 _HUMIDEX_WRF_VARS = ['T2', 'Q2', 'PSFC']
 
-def clean_humidex(ds):
-    """Compute humidex from hourly WRF output (full-year load).
+def clean_humidex(_ds_unused):
+    """Compute humidex from hourly WRF output, one day at a time.
 
-    Derives dewpoint temperature from specific humidity and surface pressure,
-    then calls thermofeel.calculate_humidex.
+    Bypasses both the standard load_by_tag mechanism and write_vars, writing
+    output incrementally to NetCDF via xarray append mode to avoid accumulating
+    a full year of arrays in memory. Returns an empty list so the call site
+    has nothing further to do.
+
+    Dewpoint is derived from specific humidity and surface pressure using the
+    same helper functions as WBGT/UTCI.
     """
     import thermofeel
 
-    T2   = ds['T2'].values
-    Q2   = np.maximum(ds['Q2'].values, 0.0)
-    PSFC = ds['PSFC'].values
+    humidex_fout = os.path.join(outdir, 'humidex', make_fname('humidex', '1hr'))
+    os.makedirs(os.path.join(outdir, 'humidex'), exist_ok=True)
 
-    e_a  = _vapor_pressure_from_q(Q2, PSFC)
-    td_k = _dew_point_from_vapor_pressure(e_a)
+    for i, fpath in enumerate(hr_files[1:]):
+        if not os.path.exists(fpath):
+            raise FileNotFoundError(f'Hourly file not found: {fpath}')
 
-    humidex = thermofeel.calculate_humidex(
-        t2_k=T2.astype(np.float64),
-        td_k=td_k.astype(np.float64),
-    )
+        ds = xr.open_dataset(fpath, engine='netcdf4')
+        ds = ds[_HUMIDEX_WRF_VARS]
 
-    times = ds['time'].values[ds['time'].values >= time_dim[0].values]
-    da = xr.DataArray(
-        humidex.astype(np.float32),
-        dims=['time', 'y', 'x'],
-        coords={'time': ds['time'].values},
-    ).sel(time=time_dim)
+        T2   = ds['T2'].values
+        Q2   = np.maximum(ds['Q2'].values, 0.0)
+        PSFC = ds['PSFC'].values
+        ds.close()
 
-    return [('humidex', '1hr', da.to_dataset(name='humidex'))]
+        e_a  = _vapor_pressure_from_q(Q2, PSFC)
+        td_k = _dew_point_from_vapor_pressure(e_a)
+
+        humidex = thermofeel.calculate_humidex(
+            t2_k=T2.astype(np.float64),
+            td_k=td_k.astype(np.float64),
+        ).astype(np.float32)
+
+        day_offset = i * 24
+        day_times = time_dim[day_offset : day_offset + humidex.shape[0]]
+
+        mode = 'w' if i == 0 else 'a'
+
+        xr.DataArray(humidex, dims=['time', 'y', 'x'],
+                     coords={'time': day_times}) \
+          .to_dataset(name='humidex') \
+          .to_netcdf(humidex_fout, mode=mode, unlimited_dims=['time'])
+
+        if (i + 1) % 30 == 0:
+            print(f'  humidex: processed {i + 1}/{len(hr_files) - 1} days')
+
+    print(f'  humidex: finished')
+    print(f'postproc time: {time.perf_counter() - t0:.1f} sec')
+    mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    print(f'postproc max memory: {mem / (1024*1024):.1f} GB')
+
+    return []
 # ---------------------------------------------------
 
 # Moving to AFWA diagnostic ouptuts
@@ -808,7 +835,7 @@ else:
         if _output_needed(variable, make_fname(variable, _OUTFREQ[variable])):
             # wbgt handles its own loading; pass None instead of loading
             # the full hourly dataset into memory
-            if loader_tag == 'hr' and variable in ('wbgt', 'utci'):
+            if loader_tag == 'hr' and variable in ('wbgt', 'utci','humidex'):
                 clean_fn(None)
             else:
                 write_vars(clean_fn(load_by_tag(loader_tag)))
