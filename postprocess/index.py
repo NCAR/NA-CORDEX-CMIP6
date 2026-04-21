@@ -317,7 +317,7 @@ def main():
                         parts.append(f"{concatdir}/{v}_{MIDDLE}_{timespan}.nc")
                     else:
                         yf = year_file(indir, v, yr)
-                        parts.append(str(yf) if yf else "MISSING")
+                        parts.append(f"-selyear,{yr} {yf}" if yf else "MISSING")
                 return " ".join(parts)
 
             # Shared trailing fragment: optional prereqs then output file
@@ -346,7 +346,7 @@ def main():
                         continue
                     yr_out = anndir / f"{idx}_{MIDDLE}_{yr}.nc"
                     sec    = sec_inputs(yr=yr)
-                    cmd    = (f"cdo {op} {f'{c} ' if c else ''}{yf}"
+                    cmd    = (f"cdo {op} {f'{c} ' if c else ''}-selyear,{yr} {yf}"
                               + (f" {sec}" if sec else "")
                               + tail(yr_out))
                     emit(cmd_files["annual"], yr_out, cmd)

@@ -19,14 +19,18 @@ post-process additional variables
 ---
 
 Climate indexes:
-	calculate seasonally in addition to annually
-	decadal 30-year averages
-	warming-level based 20-year averages
-	regridding to lat-lon
-		? for the GIS climate indexes
-		? subset of CORE vars (maybe just T & P)
-		define domain + grid in separate file
-		use cdo remapbic
+	Need to fix units, stdname, longname, varnames
+	Some indexes end up with different epoch.  Fix?
+
+	*after* other simulations
+		calculate seasonally in addition to annually
+		decadal 30-year averages
+		warming-level based 20-year averages
+		regridding to lat-lon
+			? for the GIS climate indexes
+			? subset of CORE vars (maybe just T & P)
+			define domain + grid in separate file
+			use cdo remapbic
 
 ---
 
