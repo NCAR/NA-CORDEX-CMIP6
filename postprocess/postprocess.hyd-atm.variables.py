@@ -524,21 +524,21 @@ def _compute_wbgt_utci_arrays(ds):
 
     return wbgt.astype(np.float32), utci.astype(np.float32)
 
-
 def clean_wbgt_utci(_ds_unused):
     """Compute WBGT and UTCI from hourly WRF output, one day at a time.
 
-    Bypasses the standard load_by_tag mechanism because these indices need 11
-    simultaneous input variables and loading the full year would exceed memory.
+    Bypasses both the standard load_by_tag mechanism and write_vars, writing
+    output incrementally to NetCDF via xarray append mode to avoid accumulating
+    a full year of arrays in memory. Returns an empty list so the call site
+    has nothing further to do.
+
     MRT is computed once per day and shared between both indices.
-
-    The _ds_unused argument is accepted for dispatch-table compatibility
-    but ignored.
     """
-    wbgt_days = []
-    utci_days = []
+    wbgt_fout = os.path.join(outdir, 'wbgt', make_fname('wbgt', '1hr'))
+    utci_fout = os.path.join(outdir, 'utci', make_fname('utci', '1hr'))
+    os.makedirs(os.path.join(outdir, 'wbgt'), exist_ok=True)
+    os.makedirs(os.path.join(outdir, 'utci'), exist_ok=True)
 
-    # hr_files[0] is the day-before file; skip it
     for i, fpath in enumerate(hr_files[1:]):
         if not os.path.exists(fpath):
             raise FileNotFoundError(f'Hourly file not found: {fpath}')
@@ -548,24 +548,32 @@ def clean_wbgt_utci(_ds_unused):
 
         wbgt_day, utci_day = _compute_wbgt_utci_arrays(ds)
         nt_day = wbgt_day.shape[0]
+        ds.close()
 
         day_offset = i * 24
         day_times = time_dim[day_offset : day_offset + nt_day]
 
-        wbgt_days.append(xr.DataArray(wbgt_day, dims=['time', 'y', 'x'],
-                                       coords={'time': day_times}))
-        utci_days.append(xr.DataArray(utci_day, dims=['time', 'y', 'x'],
-                                       coords={'time': day_times}))
-        ds.close()
+        mode = 'w' if i == 0 else 'a'
+
+        xr.DataArray(wbgt_day, dims=['time', 'y', 'x'],
+                     coords={'time': day_times}) \
+          .to_dataset(name='wbgt') \
+          .to_netcdf(wbgt_fout, mode=mode, unlimited_dims=['time'])
+
+        xr.DataArray(utci_day, dims=['time', 'y', 'x'],
+                     coords={'time': day_times}) \
+          .to_dataset(name='utci') \
+          .to_netcdf(utci_fout, mode=mode, unlimited_dims=['time'])
 
         if (i + 1) % 30 == 0:
             print(f'  wbgt/utci: processed {i + 1}/{len(hr_files) - 1} days')
 
-    wbgt = xr.concat(wbgt_days, dim='time').to_dataset(name='wbgt')
-    utci = xr.concat(utci_days, dim='time').to_dataset(name='utci')
-    print(f'  wbgt/utci: finished, {len(wbgt.time)} timesteps')
+    print(f'  wbgt/utci: finished')
+    print(f'postproc time: {time.perf_counter() - t0:.1f} sec')
+    mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    print(f'postproc max memory: {mem / (1024*1024):.1f} GB')
 
-    return [('wbgt', '1hr', wbgt), ('utci', '1hr', utci)]
+    return []
 # ---------------------------------------------------
 
 # Humidex
@@ -801,7 +809,7 @@ else:
             # wbgt handles its own loading; pass None instead of loading
             # the full hourly dataset into memory
             if loader_tag == 'hr' and variable in ('wbgt', 'utci'):
-                write_vars(clean_fn(None))
+                clean_fn(None)
             else:
                 write_vars(clean_fn(load_by_tag(loader_tag)))
 
