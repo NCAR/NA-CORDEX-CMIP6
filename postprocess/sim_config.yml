@@ -86,8 +86,12 @@ dreq_csv_url: "https://raw.githubusercontent.com/WCRP-CORDEX/data-request-table/
 # CORDEX-CMIP6 CMOR table base URL (frequency name appended, e.g. _1hr.json)
 cmor_table_base_url: "https://raw.githubusercontent.com/WCRP-CORDEX/cordex-cmip6-cmor-tables/main/Tables/CORDEX-CMIP6"
 
-# Frequencies for which CMOR tables are downloaded
+# Frequencies for which CMOR tables are downloaded.
+# Local supplemental tables (NCAR-CORDEX-CMIP6_<freq>.json) are loaded
+# automatically from the scripts directory for any frequency listed here
+# or for supplemental-only frequencies (e.g. 1hr for AFWA, 6hr for zlev).
 cmor_table_freqs:
   - fx
   - 1hr
+  - 6hr
   - day

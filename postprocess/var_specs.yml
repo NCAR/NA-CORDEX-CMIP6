@@ -1,15 +1,19 @@
 # Local variable specifications for NA-CORDEX-CMIP6 postprocessing.
 # Units, standard_name, long_name, cell_methods, and frequency are pulled
-# from the authoritative WCRP-CORDEX CMOR tables at runtime.
+# from the authoritative WCRP-CORDEX CMOR tables at runtime, with local
+# NCAR-CORDEX-CMIP6_*.json tables providing supplemental entries for
+# variables not in the upstream data request.
 #
 # Fields:
-#   levels: vertical level type (single, fixed, pressure, soil)
-#   refh:   reference height in meters (omit if not applicable)
+#   levels: vertical level type (single, fixed, pressure)
+#   refh:   reference height in meters (omit if not applicable; used for
+#           single-level vars at a fixed height above ground, e.g. tas at 2m,
+#           sfcWind at 10m, ua100m at 100m)
+#   plev:   pressure level in Pa (required for levels: pressure)
 #   quant:  quantization level for lossy compression (omit for fx variables)
 #
 # YAML anchors (&name) and aliases (*name) are used to express shared specs
 # explicitly.  Defaults are defined once and overridden where needed.
-
 _defaults: &defaults
   levels: single
   quant: 5
@@ -66,6 +70,124 @@ rsds:
 
 rlds:
   <<: *defaults
+
+# --- AFWA diagnostic variables (supplemental, local CMOR table) ---
+cape:
+  <<: *defaults
+  quant: 3
+cin:
+  <<: *defaults
+  quant: 3
+prw:
+  <<: *defaults
+  quant: 3
+fzra:
+  <<: *defaults
+wchill:
+  <<: *defaults
+  refh: 2
+  quant: 3
+heatidx:
+  <<: *defaults
+  refh: 2
+  quant: 3
+
+# --- Derived thermal comfort variable (supplemental, local CMOR table) ---
+wbgt:
+  <<: *defaults
+  refh: 2
+  quant: 3
+utci:
+  <<: *defaults
+  refh: 2
+  quant: 3
+humidex:
+  <<: *defaults
+  refh: 2
+  quant: 3
+
+# --- Hydrology / soil / snow variables (6-hourly) ---
+mrro:
+  <<: *defaults
+mrros:
+  <<: *defaults
+mrso:
+  <<: *defaults
+snw:
+  <<: *defaults
+snd:
+  <<: *defaults
+
+# --- Height-AGL wind variables (6-hourly, supplemental local CMOR table) ---
+ua50m: &zlev_specs
+  <<: *defaults
+  refh: 50
+  quant: 3
+va50m:
+  <<: *zlev_specs
+ua100m:
+  <<: *zlev_specs
+  refh: 100
+va100m:
+  <<: *zlev_specs
+  refh: 100
+ua150m:
+  <<: *zlev_specs
+  refh: 150
+va150m:
+  <<: *zlev_specs
+  refh: 150
+
+# --- Pressure-level variables (6-hourly) ---
+# levels: pressure   - tells cmorize.sh to create a plev scalar coordinate
+# plev: <Pa>         - pressure value in Pascals
+ta700: &pres_specs
+  <<: *defaults
+  levels: pressure
+  plev: 70000
+  quant: 3
+ta500:
+  <<: *pres_specs
+  plev: 50000
+ta250:
+  <<: *pres_specs
+  plev: 25000
+
+ua700:
+  <<: *pres_specs
+ua500:
+  <<: *pres_specs
+  plev: 50000
+ua250:
+  <<: *pres_specs
+  plev: 25000
+
+va700:
+  <<: *pres_specs
+va500:
+  <<: *pres_specs
+  plev: 50000
+va250:
+  <<: *pres_specs
+  plev: 25000
+
+zg700:
+  <<: *pres_specs
+zg500:
+  <<: *pres_specs
+  plev: 50000
+zg250:
+  <<: *pres_specs
+  plev: 25000
+
+hus700:
+  <<: *pres_specs
+hus500:
+  <<: *pres_specs
+  plev: 50000
+hus250:
+  <<: *pres_specs
+  plev: 25000
 
 # --- Time-invariant variables (no compression) ---
 sftlf:

@@ -268,7 +268,7 @@ you're done.
 To get access to all the software packages you need in the runtime environment
 (for this workflow, that includes CDO and NCO) `launch_cf` needs a script named
 `config_env.sh` in the directory where it is run with the appropriate
-`module load` commands and `conda activate npl` for the Python scripts.
+`module load` commands and `conda activate na_cordex` for the Python scripts.
 `launch_multi` will copy `~/config_env.sh` or you can specify it with
 `--config`.
 
