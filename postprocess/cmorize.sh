@@ -210,7 +210,7 @@ tempfile="${outfile}.cmortemp.nc"
 
 # Step 1: Extract time coordinate into a temporary file.
 # CDO will drop time if there's no data variable, so create a dummy one.
-ncks -h -A --hdr_pad $padding -v time "$infile" "$tempfile"
+ncks -h -O --hdr_pad $padding -v time "$infile" "$tempfile"
 ncatted -h -a history,global,d,, "$tempfile"
 ncap2 -h -A -s 'dummy[$time]=0.0f' "$tempfile" "$tempfile"
 ncap2 -h -O -s 'time=double(time)' "$tempfile" "$tempfile"
@@ -229,7 +229,7 @@ ncatted -h \
 # downstream aggregation steps)
 cdo -setreftime,1950-01-01,00:00:00,1day "$tempfile" "$outfile"
 ncatted -h -a units,time,o,c,"days since 1950-01-01 00:00:00" "$outfile"
-ncks --no_alphabetize -h -O -x -v dummy "$outfile" "$outfile"
+ncks -h -O -7 --no_alphabetize -x -v dummy "$outfile" "$outfile"
 
 # Step 3: Adjust time coordinate based on cell_methods.
 # For averaged variables: shift time to interval midpoint and add bounds.
