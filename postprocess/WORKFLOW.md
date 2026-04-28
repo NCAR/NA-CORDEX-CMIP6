@@ -60,6 +60,10 @@ python $post/setup.py $raw $sdir
 ################
 # Step 1: extract
 
+# If you're re-running the extract stage (e.g., if new variables were
+# added) and you don't want to regenerate everything, just change
+# $cmddir1 and $rundir1
+
 set edir = $topdir/extract
 set outdir1 = $edir/data
 set cmddir1 = $edir/cmd

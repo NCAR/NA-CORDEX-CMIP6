@@ -171,13 +171,20 @@ for var in "${VARLIST[@]}"; do
         continue
     fi
 
-    # Skip if output directory exists and is non-empty, unless --force
-    vardir="$OUTDIR/$var"
-    if [[ $FORCE -eq 0 && -d "$vardir" && -n "$(ls -A "$vardir" 2>/dev/null)" ]]; then
-        echo "Skipping $var: output directory already exists and is non-empty"
-        continue
+# Skip if output directory exists and is non-empty, unless --force
+    if [[ $FORCE -eq 0 ]]; then
+        if [[ "$var" == "fx" ]]; then
+            if [[ -d "$OUTDIR/sftlf" && -n "$(ls -A "$OUTDIR/sftlf" 2>/dev/null)" ]] && \
+               [[ -d "$OUTDIR/orog"  && -n "$(ls -A "$OUTDIR/orog"  2>/dev/null)" ]]; then
+                echo "Skipping fx: output directories (sftlf, orog) already exist and are non-empty"
+                continue
+            fi
+        elif [[ -d "$OUTDIR/$var" && -n "$(ls -A "$OUTDIR/$var" 2>/dev/null)" ]]; then
+            echo "Skipping $var: output directory already exists and is non-empty"
+            continue
+        fi
     fi
-
+    
     cmdfile="$CMDDIR/${var}.cmd"
     > "$cmdfile"
 
