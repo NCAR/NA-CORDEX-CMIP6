@@ -3,6 +3,7 @@ channels:
     - conda-forge
     - defaults
 dependencies:
+    - python=3.14.4
     - cartopy=0.25.0
     - cftime=1.6.5
     - matplotlib=3.10.9
