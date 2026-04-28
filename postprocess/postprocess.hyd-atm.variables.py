@@ -604,7 +604,17 @@ def _compute_wbgt_utci_arrays(ds):
         t2_k=t2_f64, va=va_f64, mrt=mrt_f64, td_k=td_f64,
     )
 
-    return wbgt.astype(np.float32), utci.astype(np.float32)
+    ta_c  = T2 - 273.15
+    mrt_c = mrt - 273.15
+
+    valid = (
+    (ta_c >= -50) & (ta_c <= 50) &
+    (va <= 17) &
+    ((mrt_c - ta_c) >= -30) & ((mrt_c - ta_c) <= 70)
+    )
+    utci = np.where(valid, utci, np.nan).astype(np.float32)
+
+    return wbgt.astype(np.float32), utci
 
 
 def clean_wbgt_utci(_ds_unused):
