@@ -24,6 +24,7 @@ set -euo pipefail
 DEFAULT_CORE_VARS="fx,clt,evspsbl,hurs,huss,pr,ps,psl,rlds,rsds,sfcWind,tas,tasmax,tasmin,uas,vas"
 DEFAULT_HYDATM_VARS="cape,cin,prw,fzra,wchill,heatidx,\
 mrro,mrros,mrso,snw,snd,\
+rsus,rlus,hfls,hfss,snm,\
 ua50m,va50m,ua100m,va100m,ua150m,va150m,\
 ta700,ta500,ta250,ua700,ua500,ua250,va700,va500,va250,\
 zg700,zg500,zg250,hus700,hus500,hus250"
@@ -35,6 +36,7 @@ DEFAULT_VARS="${DEFAULT_CORE_VARS},${DEFAULT_HYDATM_VARS}"
 # standalone job will cause a file conflict. Use --vars wbgt to get both.
 HYDATM_VARS="cape cin prw fzra wchill heatidx wbgt utci humidex
 mrro mrros mrso snw snd
+rsus rlus hfls hfss snm
 ua50m va50m ua100m va100m ua150m va150m
 ta700 ta500 ta250 ua700 ua500 ua250 va700 va500 va250
 zg700 zg500 zg250 hus700 hus500 hus250"
