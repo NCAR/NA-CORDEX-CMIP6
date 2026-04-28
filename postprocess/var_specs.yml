@@ -117,6 +117,18 @@ snw:
   <<: *defaults
 snd:
   <<: *defaults
+snm:
+  <<: *defaults
+
+# --- Surface radiation and heat flux variables (6-hourly) ---
+rsus:
+  <<: *defaults
+rlus:
+  <<: *defaults
+hfls:
+  <<: *defaults
+hfss:
+  <<: *defaults
 
 # --- Height-AGL wind variables (6-hourly, supplemental local CMOR table) ---
 ua50m: &zlev_specs

@@ -334,6 +334,88 @@ def clean_mrro(ds):
     return [('mrro', '6hr', mrro)]
 # ---------------------------------------------------
 
+
+# Surface upwelling shortwave radiation
+# ---------------------------------------------------
+def clean_rsus(ds):
+    # SWUPB units : W m-2
+    # SWUPB description : INSTANTANEOUS UPWELLING SHORTWAVE FLUX AT BOTTOM
+
+    rsus = ds['SWUPB']
+    rsus['time'] = six_hr_time_dim
+    rsus = rsus.to_dataset(name='rsus').drop_attrs()
+
+    rsus['rsus'].attrs['positive'] = 'up'
+
+    return [('rsus', '6hr', rsus)]
+# ---------------------------------------------------
+
+# Surface upwelling longwave radiation
+# ---------------------------------------------------
+def clean_rlus(ds):
+    # LWUPB units : W m-2
+    # LWUPB description : INSTANTANEOUS UPWELLING LONGWAVE FLUX AT BOTTOM
+
+    rlus = ds['LWUPB']
+    rlus['time'] = six_hr_time_dim
+    rlus = rlus.to_dataset(name='rlus').drop_attrs()
+
+    rlus['rlus'].attrs['positive'] = 'up'
+
+    return [('rlus', '6hr', rlus)]
+# ---------------------------------------------------
+
+# Surface upward latent heat flux
+# ---------------------------------------------------
+def clean_hfls(ds):
+    # LH units : W m-2
+    # LH description : LATENT HEAT FLUX AT THE SURFACE
+
+    hfls = ds['LH']
+    hfls['time'] = six_hr_time_dim
+    hfls = hfls.to_dataset(name='hfls').drop_attrs()
+
+    hfls['hfls'].attrs['positive'] = 'up'
+
+    return [('hfls', '6hr', hfls)]
+# ---------------------------------------------------
+
+# Surface upward sensible heat flux
+# ---------------------------------------------------
+def clean_hfss(ds):
+    # HFX units : W m-2
+    # HFX description : UPWARD HEAT FLUX AT THE SURFACE
+
+    hfss = ds['HFX']
+    hfss['time'] = six_hr_time_dim
+    hfss = hfss.to_dataset(name='hfss').drop_attrs()
+
+    hfss['hfss'].attrs['positive'] = 'up'
+
+    return [('hfss', '6hr', hfss)]
+# ---------------------------------------------------
+
+# Surface snow melt
+# ---------------------------------------------------
+def clean_snm(ds):
+    # ACSNOM units : kg m-2 (accumulated)
+    # ACSNOM description : ACCUMULATED MELTED SNOW
+    # Convert to kg m-2 s-1 by differencing and dividing by 21600
+
+    da = ds['ACSNOM']
+    da['time'] = six_hr_acc_time_dim
+
+    snm = (da.diff(dim='time') / 21600.0).sel(time=six_hr_time_dim)
+
+    landmask = ds_fx['LANDMASK'].mean(dim='Time').rename(dname_map_xy)
+    snm = snm.where(landmask == 1, 1.e20)
+
+    snm = snm.to_dataset(name='snm').drop_attrs()
+
+    return [('snm', '6hr', snm)]
+# ---------------------------------------------------
+
+
 # Pressure level data
 # ---------------------------------------------------
 # Pressure levels in Pa, matching the num_press_levels_stag dimension order
@@ -524,51 +606,87 @@ def _compute_wbgt_utci_arrays(ds):
 
     return wbgt.astype(np.float32), utci.astype(np.float32)
 
+
 def clean_wbgt_utci(_ds_unused):
     """Compute WBGT and UTCI from hourly WRF output, one day at a time.
 
     Bypasses both the standard load_by_tag mechanism and write_vars, writing
-    output incrementally to NetCDF via xarray append mode to avoid accumulating
-    a full year of arrays in memory. Returns an empty list so the call site
-    has nothing further to do.
+    output incrementally to NetCDF via netCDF4 to avoid accumulating a full
+    year of arrays in memory. Returns an empty list so the call site has
+    nothing further to do.
 
     MRT is computed once per day and shared between both indices.
     """
+    import netCDF4 as nc
+
     wbgt_fout = os.path.join(outdir, 'wbgt', make_fname('wbgt', '1hr'))
     utci_fout = os.path.join(outdir, 'utci', make_fname('utci', '1hr'))
     os.makedirs(os.path.join(outdir, 'wbgt'), exist_ok=True)
     os.makedirs(os.path.join(outdir, 'utci'), exist_ok=True)
 
-    for i, fpath in enumerate(hr_files[1:]):
-        if not os.path.exists(fpath):
-            raise FileNotFoundError(f'Hourly file not found: {fpath}')
+    def _init_nc(fpath, varname, first_day_times):
+        ds = nc.Dataset(fpath, 'w', format='NETCDF4')
+        ds.createDimension('time', None)
+        ds.createDimension('y', first_day_times.shape[0] and None or None)
+        t = ds.createVariable('time', 'f8', ('time',))
+        t.units = 'hours since 1900-01-01'
+        t.calendar = 'standard'
+        v = ds.createVariable(varname, 'f4', ('time', 'y', 'x'),
+                              fill_value=1.e20)
+        return ds, t, v
 
-        ds = xr.open_dataset(fpath, engine='netcdf4')
-        ds = ds[_WBGT_WRF_VARS]
+    t_written = 0
+    wbgt_nc = utci_nc = None
 
-        wbgt_day, utci_day = _compute_wbgt_utci_arrays(ds)
-        nt_day = wbgt_day.shape[0]
-        ds.close()
+    try:
+        for i, fpath in enumerate(hr_files[1:]):
+            if not os.path.exists(fpath):
+                raise FileNotFoundError(f'Hourly file not found: {fpath}')
 
-        day_offset = i * 24
-        day_times = time_dim[day_offset : day_offset + nt_day]
+            ds = xr.open_dataset(fpath, engine='netcdf4')
+            ds = ds[_WBGT_WRF_VARS]
 
-        mode = 'w' if i == 0 else 'a'
+            wbgt_day, utci_day = _compute_wbgt_utci_arrays(ds)
+            nt_day = wbgt_day.shape[0]
+            ds.close()
 
-        xr.DataArray(wbgt_day, dims=['time', 'y', 'x'],
-                     coords={'time': day_times}) \
-          .to_dataset(name='wbgt') \
-          .to_netcdf(wbgt_fout, mode=mode, unlimited_dims=['time'])
+            day_offset = i * 24
+            day_times = time_dim[day_offset : day_offset + nt_day]
+            # Convert timestamps to hours since 1900-01-01 for netCDF4
+            epoch = pd.Timestamp('1900-01-01')
+            time_vals = np.array([(t - epoch).total_seconds() / 3600.0
+                                  for t in day_times])
 
-        xr.DataArray(utci_day, dims=['time', 'y', 'x'],
-                     coords={'time': day_times}) \
-          .to_dataset(name='utci') \
-          .to_netcdf(utci_fout, mode=mode, unlimited_dims=['time'])
+            if i == 0:
+                ny, nx = wbgt_day.shape[1], wbgt_day.shape[2]
+                wbgt_nc = nc.Dataset(wbgt_fout, 'w', format='NETCDF4')
+                utci_nc = nc.Dataset(utci_fout, 'w', format='NETCDF4')
+                for ds_nc, varname in [(wbgt_nc, 'wbgt'), (utci_nc, 'utci')]:
+                    ds_nc.createDimension('time', None)
+                    ds_nc.createDimension('y', ny)
+                    ds_nc.createDimension('x', nx)
+                    t_var = ds_nc.createVariable('time', 'f8', ('time',))
+                    t_var.units = 'hours since 1900-01-01'
+                    t_var.calendar = 'standard'
+                    ds_nc.createVariable(varname, 'f4', ('time', 'y', 'x'),
+                                         fill_value=1.e20)
 
-        if (i + 1) % 30 == 0:
-            print(f'  wbgt/utci: processed {i + 1}/{len(hr_files) - 1} days')
+            wbgt_nc['time'][t_written:t_written + nt_day] = time_vals
+            wbgt_nc['wbgt'][t_written:t_written + nt_day] = wbgt_day
+            utci_nc['time'][t_written:t_written + nt_day] = time_vals
+            utci_nc['utci'][t_written:t_written + nt_day] = utci_day
+            t_written += nt_day
 
-    print(f'  wbgt/utci: finished')
+            if (i + 1) % 30 == 0:
+                wbgt_nc.sync()
+                utci_nc.sync()
+                print(f'  wbgt/utci: processed {i + 1}/{len(hr_files) - 1} days')
+
+    finally:
+        if wbgt_nc: wbgt_nc.close()
+        if utci_nc: utci_nc.close()
+
+    print(f'  wbgt/utci: finished, {t_written} timesteps')
     print(f'postproc time: {time.perf_counter() - t0:.1f} sec')
     mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     print(f'postproc max memory: {mem / (1024*1024):.1f} GB')
@@ -749,7 +867,8 @@ def clean_wchill(ds):
 # the 'hr' loader tag is listed for consistency but the dataset passed
 # to clean_wbgt is ignored.
 _CLEAN = {var: globals()[f'clean_{var}']
-          for var in ['snw','snd','mrso','mrros','mrro',
+          for var in ['snw','snd','mrso','mrros','mrro', 
+                      'rsus','rlus','hfls','hfss','snm',
                       'ua700','ua500','ua250',
                       'va700','va500','va250',
                       'ta700','ta500','ta250',
@@ -782,6 +901,7 @@ _OUTFREQ = defaultdict(lambda: '6hr',
 _LOADER = {
     'mrro'   : 'six_hr_acc',
     'mrros'  : 'six_hr_acc',
+    'snm'    : 'six_hr_acc',
     'ua700'  : 'pres',
     'ua500'  : 'pres',
     'ua250'  : 'pres',
