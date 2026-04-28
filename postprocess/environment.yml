@@ -15,3 +15,5 @@ dependencies:
     - pip=26.0.1
     - pip:
         - thermofeel==2.1.7
+        - esgf-qa
+        - esgvoc
