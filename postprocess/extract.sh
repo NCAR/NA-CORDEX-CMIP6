@@ -66,6 +66,8 @@ Options:
                          wbgt requires the thermofeel package)
   --scripts PATH        Directory containing the postprocess scripts
                         (default: directory containing extract.sh)
+  --force               Overwrite existing output (default: skip variables
+                        whose output directory already exists and is non-empty)
   -h, --help            Show this help message
 EOF
     exit 1
@@ -85,11 +87,13 @@ chunk_dir_for_year() {
 # Parse options
 VARS="$DEFAULT_VARS"
 SCRIPTS_DIR="$(dirname "$(realpath "$0")")"
+FORCE=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --vars)   VARS="$2"; shift 2 ;;
+        --vars)    VARS="$2"; shift 2 ;;
         --scripts) SCRIPTS_DIR="$(realpath "$2")"; shift 2 ;;
+        --force)   FORCE=1; shift ;;
         -h|--help) usage ;;
         -*) echo "Error: Unknown option $1" >&2; usage ;;
         *) break ;;
@@ -164,6 +168,14 @@ for var in "${VARLIST[@]}"; do
         echo "Note: utci is produced automatically when wbgt runs; skipping standalone utci job."
         continue
     fi
+
+    # Skip if output directory exists and is non-empty, unless --force
+    vardir="$OUTDIR/$var"
+    if [[ $FORCE -eq 0 && -d "$vardir" && -n "$(ls -A "$vardir" 2>/dev/null)" ]]; then
+        echo "Skipping $var: output directory already exists and is non-empty"
+        continue
+    fi
+
     cmdfile="$CMDDIR/${var}.cmd"
     > "$cmdfile"
 
