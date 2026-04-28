@@ -6,28 +6,32 @@ TODO items:
 #    test new vars
 #    	 snow melt, rsus, rlus, hfls, hfss
 #     	 extract
-	 format
-    
+#
+#    make sure everything written is rd1 (yes -- contiguous)
+
     create new, clean conda env w/ qa stuff in it
     	   add script for post-install esgvoc commands
-    	   update README
-	   modify extract to skip fx & include thermofeel vars
-    
-    merge postprocess scripts
-    	  make sure everything written is rd1
-	  
+      	   update README
+
+#    modify extract to skip fx
+    & include thermofeel vars
+    	  
     fix time chunking post aggregate / pre compress
         I think the cleanest way to fix it is with an nccopy:
 	e.g., nccopy -c time:366 -c time_bnds:366,2
 
-
     change compression to DSD instead of NSD
     
-    update (eliminate?) variable sets in extract.sh
+    sim_config.yml: multiple sections instead of overwrite?
+
+
+    deferred:
+        merge postprocess scripts, factor out clean_ functions
+
+	update (eliminate?) variable sets in extract.sh
     	   just do everything in TSV?
 
-    sim_config.yml: multiple sections instead of overwrite?
-    	
+
 ---
 
 Climate indexes:

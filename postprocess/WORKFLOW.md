@@ -43,7 +43,7 @@ tcsh
 ################
 # Step 0: setup
 
-conda activate npl
+conda activate nac6
 
 
 set raw = `realpath ~/image/collections/na-cordex-cmip6/raw/ERA5/eval/`
@@ -212,8 +212,6 @@ $post/relocate.sh $indir6 $sdir $outdir6
 ################
 # Step 7: QA
 
-# See below for instructions on installing esgf-qa
-
 set qdir = $topdir/qa
 
 set indir7  = `find $topdir/CORDEX-CMIP6 -type d -name v1-r1`
@@ -249,7 +247,7 @@ end
 cd $rundir7
 cp $cmdfile .
 echo module restore default > config_env.sh
-echo conda activate esgf-qa >> config_env.sh
+echo conda activate nac6 >> config_env.sh
 
 launch_cf -A $PROJECT -l walltime=00:05:00 -q casper -j oe -N esgf_qa $cmdfile
 
