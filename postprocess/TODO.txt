@@ -2,20 +2,29 @@
 ===========
 TODO items:
 
-fix compression precision to use DSD instead of NSD
+    add --force & skipping existing to extract.sh
+    test new vars
+    	 snow melt, rsus, rlus, hfls, hfss?
+    
+    create new, clean conda env w/ qa stuff in it
+    	   add script for post-install esgvoc commands
+    	   update README
+    
+    merge postprocess scripts
+    	  make sure everything written is rd1
+	  
+    fix time chunking post aggregate / pre compress
+        I think the cleanest way to fix it is with an nccopy:
+	e.g., nccopy -c time:366 -c time_bnds:366,2
 
-post-process additional variables
-	** = 6-hourly
-	** 3 pressure levels of z, ua, va, ta
-	     750, 500, 250, (850 desirable but mountains)
-	** snw (swe), snow depth(? caps at 5 m), snow melt
-	** U & V at 50, 100, & 150 m (zlev file)
-	
-	mrso (total soil moisture - 1D?  3D?)
-	mrro & mrros
-	rsus, rlus
-	latent & sensible heat flux
-	
+
+    change compression to DSD instead of NSD
+    
+    update (eliminate?) variable sets in extract.sh
+    	   just do everything in TSV?
+
+    sim_config.yml: multiple sections instead of overwrite?
+    	
 ---
 
 Climate indexes:
