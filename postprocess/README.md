@@ -100,32 +100,80 @@ CSV and CMOR JSON tables needed by downstream steps.
 If `dreq_default.csv` already exists at `$WORK/cordex6/dreq_default.csv`,
 `setup.py` copies it rather than downloading it.
 
+
 ### `extract.sh`
 
-NA-CORDEX simulations are run in decadal chunks with ~3 years of spinup.  For
-example, raw WRF output for 1980--1989 lives in a subdirectory named
-`1977_chunk`.  `extract.sh` maps requested years to the correct chunk
-directory automatically.
+Generates commandfiles that use `postprocess.core.variables.py` and
+`postprocess.hyd-atm.variables.py` to extract data from raw wrfout
+files into yearly files by variable.  Skips over any existing outputs
+unless you use `--force`.
 
 Extracted data is organized in per-variable subdirectories (e.g., all `uas`
 files go into a subdirectory named `uas`).
 
-If `CMDDIR` is not specified, it defaults to `.`.
+NA-CORDEX simulations are run in decadal chunks with 2.5 years of
+spinup, so (for example) the simulation for 1980--1989 starts in June
+1977, and the raw WRF output files live in a subdirectory named
+`1977_chunk`.  `extract.sh` handle mapping the requested years to the
+correct chunk directory.
 
-### `format.sh` and `cmorize.sh`
 
-`format.sh` reads variable metadata from `dreq_default.csv` and `var_specs.yml`
-at commandfile-generation time and embeds it as positional arguments to
-`cmorize.sh` in the commandfile.  `cmorize.sh` uses the coordinate files
-produced by `setup.py`.
+### `format.sh`
+
+Generates commandfiles that use `cmorize.sh` to reformat extracted
+data, adding coordinate variables and metadata to meet CF and CORDEX
+specs.  Takes the setup directory generates by `setup.py` as an
+argument because `cmorize.sh` needs the ancillary files saved there.
+
 
 ### `aggregate.sh`
 
-Run twice: first to aggregate hourly data to daily, then again to aggregate
-daily to monthly.  Both passes can write to the same output directory.
+Generates commandfiles that use CDO & NCO commands to aggregate sub-daily
+data to daily and daily to monthly.  Needs to be run twice in a row;
+both passes can (should) write to the same output directory.  Also
+copies & concatenates files as appropriate if no aggregation is
+needed.  Files are organized by variable and frequency.
+
 
 ### `compress.sh`
 
-Generates one `ncks --ppc` command per file.  Variables with a `qnt` entry in
-`var_specs.yml` receive lossy compression at that precision; all others receive
-lossless deflate only (`-7 -L1`), as required by the CORDEX spec.
+Generates commandfiles that apply lossy compression to data using
+`ncks -L1 --ppc`.  Level of compression is defined as number of decimal
+significant digits (DSD) in `var_specs.yml`.
+
+
+### `plot.sh`
+
+Generates commandfiles that create diagnostic plots of the data using
+`plot.postprocess.var.py`.  The plots show the first, last, and middle
+timesteps plus a timeseries plot near Boulder, CO; this is generally
+enough to spot the kinds of errors created by errors in
+postprocessing.  Plots are saved in a `figs` subdirectory rather than
+a `data` directory, but otherwise organized in the same way.
+
+
+### `relocate.sh`
+
+For QA and publication on ESGF, the files must be organized into a DRS
+directory tree following the CORDEX spec.  `relocate.sh` does this
+using hard links, to avoid duplicating the data.  To copy the DRS tree
+to a different filesystem, use Globus, which will do it in parallel
+with error-checking.
+
+
+### `merge-qa.py`
+
+The workflow uses `esgqa` to check the formatting of the output files,
+which generates a JSON file for each branch of the dataset.  To avoid
+needing to upload dozens of files to the website that interpret them,
+`merge-qa.py` combines them into a single JSON file.
+
+
+### `index.py`
+
+Generates commandfiles that calculate climate indexes (one file per
+index) using CDO & NCO, for use in GIS-based climate impacts studies.
+A number of commands take other derived quantities as inputs, so the
+commandfiles must be run in sequence, rather than in parallel; use the
+`--chain` option for `launch_multi` to submit them as dependent jobs.
+

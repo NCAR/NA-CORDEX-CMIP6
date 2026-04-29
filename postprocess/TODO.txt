@@ -9,9 +9,9 @@ TODO items:
 #
 #    make sure everything written is rd1 (yes -- contiguous)
 
-    create new, clean conda env w/ qa stuff in it
-    	   add script for post-install esgvoc commands
-      	   update README
+#    create new, clean conda env w/ qa stuff in it
+#    	   add script for post-install esgvoc commands
+#      	   update README
 
 #    modify extract to skip fx
     & include thermofeel vars
@@ -31,6 +31,8 @@ TODO items:
 	update (eliminate?) variable sets in extract.sh
     	   just do everything in TSV?
 
+	setup: drop looking for dreq CSV in ~/work/cordex6
+	launch_multi: change default config_env.sh
 
 ---
 
