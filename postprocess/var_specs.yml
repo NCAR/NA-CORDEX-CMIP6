@@ -42,11 +42,12 @@ vas:
 hurs:
   <<: *defaults
   refh: 2
-  quant: 3
+  quant: 2
 
 huss:
   <<: *defaults
   refh: 2
+  quant: 5
 
 ps:
   <<: *defaults
@@ -58,77 +59,93 @@ clt:
 
 pr:
   <<: *defaults
+  quant: 7
 
 evspsbl:
   <<: *defaults
+  quant: 7
 
 psl:
   <<: *defaults
+  quant: 2
 
 rsds:
   <<: *defaults
+  quant: 2
 
 rlds:
   <<: *defaults
+  quant: 2
 
 # --- AFWA diagnostic variables (supplemental, local CMOR table) ---
 cape:
   <<: *defaults
-  quant: 3
+  quant: 1
 cin:
   <<: *defaults
-  quant: 3
+  quant: 1
 prw:
   <<: *defaults
-  quant: 3
+  quant: 2
 fzra:
   <<: *defaults
+  quant: 6
 wchill:
   <<: *defaults
   refh: 2
-  quant: 3
+  quant: 2
 heatidx:
   <<: *defaults
   refh: 2
-  quant: 3
+  quant: 2
 
 # --- Derived thermal comfort variable (supplemental, local CMOR table) ---
 wbgt:
   <<: *defaults
   refh: 2
-  quant: 3
+  quant: 2
 utci:
   <<: *defaults
   refh: 2
-  quant: 3
+  quant: 2
 humidex:
   <<: *defaults
   refh: 2
-  quant: 3
+  quant: 2
 
 # --- Hydrology / soil / snow variables (6-hourly) ---
 mrro:
   <<: *defaults
+  quant: 7
 mrros:
   <<: *defaults
+  quant: 7
 mrso:
   <<: *defaults
+  quant: 7
 snw:
   <<: *defaults
+  quant: 3
 snd:
   <<: *defaults
+  quant: 3
 snm:
   <<: *defaults
+  quant: 7 
 
 # --- Surface radiation and heat flux variables (6-hourly) ---
 rsus:
   <<: *defaults
+  quant: 2
 rlus:
   <<: *defaults
+  quant: 2
 hfls:
   <<: *defaults
+  quant: 2
 hfss:
   <<: *defaults
+  quant: 2
 
 # --- Height-AGL wind variables (6-hourly, supplemental local CMOR table) ---
 ua50m: &zlev_specs
