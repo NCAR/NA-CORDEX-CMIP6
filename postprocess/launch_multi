@@ -27,11 +27,9 @@
 #   --help              Show this help
 #
 # Workflows (--workflow NAME):
-#   cordex    Sets --wall 1:00:00, --mem 50GB, --config ~/config_env.npl.sh,
-#             and copies any scripts or files that might be needed
-#             (e.g., postprocess.core.variables.py,
-#             postprocess.hyd-atm.variables.py, var_specs.yml)
-#             from SCRIPTS_DIR.
+#   cordex    Sets --wall 1:00:00, --mem 50GB,
+#             --config $SCRIPTS_DIR/config_env.sh, and copies scripts
+#             needed by the workflow from SCRIPTS_DIR.
 #             All of these can be overridden by flags that follow --workflow.
 #
 # Any other arguments are passed through to launch_cf (and then to qsub).
@@ -87,14 +85,13 @@ apply_workflow() {
         cordex)
             walltime="1:00:00"
             mem="50GB"
-            config="$HOME/config_env.npl.sh"
+            config="$scripts_dir/config_env.sh"
             config_specified=1
             copyfiles+=(
                 "$scripts_dir/postprocess.core.variables.py"
                 "$scripts_dir/postprocess.hyd-atm.variables.py"
                 "$scripts_dir/cmorize.sh"
-                "$scripts_dir/var_specs.yml"
-		"$scripts_dir/plot.postprocess.var.py"
+                "$scripts_dir/plot.postprocess.var.py"
             )
             ;;
         *)
@@ -202,10 +199,8 @@ if [[ ! -f "$config" ]]; then
     if [[ $config_specified -eq 1 ]]; then
         die "Config file not found: $config"
     else
-        warn "Default config ~/config_env.sh not found."
-        warn "Run environment will be bare-bones with no access to software in modules."
-        warn "Consider creating a minimal one with:"
-        warn "  echo 'module restore default' > ~/config_env.sh"
+        warn "Default config ~/config_env.sh not found; using 'module restore default'."
+        warn "Create ~/config_env.sh to customize the run environment."
         config=""
     fi
 fi
@@ -245,6 +240,8 @@ for cmdfile in "${cmdfiles[@]}"; do
     
     if [[ -n "$config" ]]; then
         run_cmd "cp $(printf %q "$config") $(printf %q "$rundir/config_env.sh")"
+    else
+        run_cmd "echo 'module restore default' > $(printf %q "$rundir/config_env.sh")"
     fi
     
     for f in "${copyfiles[@]}"; do
@@ -283,4 +280,3 @@ for cmdfile in "${cmdfiles[@]}"; do
     run_cmd "cd $(printf %q "$here")"
     run_cmd "sleep $sleep"
 done
-

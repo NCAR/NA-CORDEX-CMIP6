@@ -1,3 +1,4 @@
+module load ncarenv
 module load nco
 module load cdo
 module load conda

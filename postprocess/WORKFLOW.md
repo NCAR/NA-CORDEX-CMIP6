@@ -73,6 +73,8 @@ $post/extract.sh $raw $outdir1 1980-2023 $cmddir1
 
 $post/launch_multi --workflow cordex --run $rundir1 $cmddir1/*cmd
 
+## NOTE: if you're extracting wbgt/utci, runs can take 2-3 hours
+
 
 ## wait until it finishes, check everything ran correctly
 cd $rundir1

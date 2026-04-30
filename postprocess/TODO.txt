@@ -2,28 +2,23 @@
 ===========
 TODO items:
 
-#    add --force & skipping existing to extract.sh
-#    test new vars
-#    	 snow melt, rsus, rlus, hfls, hfss
-#     	 extract
-#
-#    make sure everything written is rd1 (yes -- contiguous)
 
-#    create new, clean conda env w/ qa stuff in it
-#    	   add script for post-install esgvoc commands
-#      	   update README
-
-#    modify extract to skip fx
-    & include thermofeel vars
-    	  
+    check 6-hourly aggregation
+    
     fix time chunking post aggregate / pre compress
         I think the cleanest way to fix it is with an nccopy:
 	e.g., nccopy -c time:366 -c time_bnds:366,2
 
     change compression to DSD instead of NSD
-    
-    sim_config.yml: multiple sections instead of overwrite?
 
+    run new vars through remainder of postprocessing steps
+      aggregate
+      compess
+      plot
+      relocate
+      qa
+      
+    
 
     deferred:
         merge postprocess scripts, factor out clean_ functions
@@ -32,7 +27,6 @@ TODO items:
     	   just do everything in TSV?
 
 	setup: drop looking for dreq CSV in ~/work/cordex6
-	launch_multi: change default config_env.sh
 
 ---
 
