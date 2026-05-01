@@ -718,62 +718,84 @@ def clean_wbgt_utci(_ds_unused):
 
 _HUMIDEX_WRF_VARS = ['T2', 'Q2', 'PSFC']
 
+# ---------------------------------------------------
 def clean_humidex(_ds_unused):
     """Compute humidex from hourly WRF output, one day at a time.
 
     Bypasses both the standard load_by_tag mechanism and write_vars, writing
-    output incrementally to NetCDF via xarray append mode to avoid accumulating
-    a full year of arrays in memory. Returns an empty list so the call site
-    has nothing further to do.
+    output incrementally to NetCDF via netCDF4 to avoid accumulating a full
+    year of arrays in memory. Returns an empty list so the call site has
+    nothing further to do.
 
     Dewpoint is derived from specific humidity and surface pressure using the
     same helper functions as WBGT/UTCI.
     """
     import thermofeel
+    import netCDF4 as nc
 
     humidex_fout = os.path.join(outdir, 'humidex', make_fname('humidex', '1hr'))
     os.makedirs(os.path.join(outdir, 'humidex'), exist_ok=True)
 
-    for i, fpath in enumerate(hr_files[1:]):
-        if not os.path.exists(fpath):
-            raise FileNotFoundError(f'Hourly file not found: {fpath}')
+    epoch = pd.Timestamp('1900-01-01')
+    t_written = 0
+    humidex_nc = None
 
-        ds = xr.open_dataset(fpath, engine='netcdf4')
-        ds = ds[_HUMIDEX_WRF_VARS]
+    try:
+        for i, fpath in enumerate(hr_files[1:]):
+            if not os.path.exists(fpath):
+                raise FileNotFoundError(f'Hourly file not found: {fpath}')
 
-        T2   = ds['T2'].values
-        Q2   = np.maximum(ds['Q2'].values, 0.0)
-        PSFC = ds['PSFC'].values
-        ds.close()
+            ds = xr.open_dataset(fpath, engine='netcdf4')
+            ds = ds[_HUMIDEX_WRF_VARS]
 
-        e_a  = _vapor_pressure_from_q(Q2, PSFC)
-        td_k = _dew_point_from_vapor_pressure(e_a)
+            T2   = ds['T2'].values
+            Q2   = np.maximum(ds['Q2'].values, 0.0)
+            PSFC = ds['PSFC'].values
+            ds.close()
 
-        humidex = thermofeel.calculate_humidex(
-            t2_k=T2.astype(np.float64),
-            td_k=td_k.astype(np.float64),
-        ).astype(np.float32)
+            e_a  = _vapor_pressure_from_q(Q2, PSFC)
+            td_k = _dew_point_from_vapor_pressure(e_a)
 
-        day_offset = i * 24
-        day_times = time_dim[day_offset : day_offset + humidex.shape[0]]
+            humidex = thermofeel.calculate_humidex(
+                t2_k=T2.astype(np.float64),
+                td_k=td_k.astype(np.float64),
+            ).astype(np.float32)
 
-        mode = 'w' if i == 0 else 'a'
+            nt_day = humidex.shape[0]
+            day_offset = i * 24
+            day_times = time_dim[day_offset : day_offset + nt_day]
+            time_vals = np.array([(t - epoch).total_seconds() / 3600.0
+                                  for t in day_times])
 
-        xr.DataArray(humidex, dims=['time', 'y', 'x'],
-                     coords={'time': day_times}) \
-          .to_dataset(name='humidex') \
-          .to_netcdf(humidex_fout, mode=mode, unlimited_dims=['time'])
+            if i == 0:
+                ny, nx = humidex.shape[1], humidex.shape[2]
+                humidex_nc = nc.Dataset(humidex_fout, 'w', format='NETCDF4')
+                humidex_nc.createDimension('time', None)
+                humidex_nc.createDimension('y', ny)
+                humidex_nc.createDimension('x', nx)
+                t_var = humidex_nc.createVariable('time', 'f8', ('time',))
+                t_var.units = 'hours since 1900-01-01'
+                t_var.calendar = 'standard'
+                humidex_nc.createVariable('humidex', 'f4', ('time', 'y', 'x'),
+                                          fill_value=1.e20)
 
-        if (i + 1) % 30 == 0:
-            print(f'  humidex: processed {i + 1}/{len(hr_files) - 1} days')
+            humidex_nc['time'][t_written:t_written + nt_day] = time_vals
+            humidex_nc['humidex'][t_written:t_written + nt_day] = humidex
+            t_written += nt_day
 
-    print(f'  humidex: finished')
+            if (i + 1) % 30 == 0:
+                humidex_nc.sync()
+                print(f'  humidex: processed {i + 1}/{len(hr_files) - 1} days')
+
+    finally:
+        if humidex_nc: humidex_nc.close()
+
+    print(f'  humidex: finished, {t_written} timesteps')
     print(f'postproc time: {time.perf_counter() - t0:.1f} sec')
     mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     print(f'postproc max memory: {mem / (1024*1024):.1f} GB')
 
     return []
-# ---------------------------------------------------
 
 # Moving to AFWA diagnostic ouptuts
 
