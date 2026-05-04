@@ -3,6 +3,12 @@
 TODO items:
 
 
+    humidex is only saving 1 day of data
+    	    test fix
+	    test rewrites
+
+    need to make NA = 1e20 = missing universal (e.g., utci)
+
     check 6-hourly aggregation
     
     fix time chunking post aggregate / pre compress
@@ -10,6 +16,7 @@ TODO items:
 	e.g., nccopy -c time:366 -c time_bnds:366,2
 
     change compression to DSD instead of NSD
+    	   merge in changes from gdex_data branch
 
     run new vars through remainder of postprocessing steps
       aggregate
@@ -77,8 +84,6 @@ extend --workflow cordex arg for launch_multi to use these defaults
 
 
 ---
-
-update README
 
 List Seth & Jacob as authors in all the scripts
 
