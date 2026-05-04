@@ -16,7 +16,15 @@ TODO items:
 	e.g., nccopy -c time:366 -c time_bnds:366,2
 
     change compression to DSD instead of NSD
-    	   merge in changes from gdex_data branch
+    	merge in changes from gdex_data branch
+
+    change creation_date to `date`?
+    	-> wrfdir no longer needed by setup.py
+	pull static vars & coords from geo_em.d01.nc instead?
+	     lives in collections/.../CMIP6/ERA5/aer/
+	     (checked: identical for all simulations)
+	also pull gridcell corners for setup/wrf.xy.coords
+	
 
     run new vars through remainder of postprocessing steps
       aggregate
