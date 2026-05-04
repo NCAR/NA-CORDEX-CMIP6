@@ -1,0 +1,9 @@
+# Grid description file for NAM-12i common 1/8-degree lat/lon grid
+
+gridtype = lonlat
+xsize = 1400
+ysize = 600
+xfirst = 175.0625
+xinc = 0.125
+yfirst = 5.0625
+yinc = 0.125
