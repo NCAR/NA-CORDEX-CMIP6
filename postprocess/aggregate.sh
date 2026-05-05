@@ -79,10 +79,13 @@ mkdir -p "$OUTDIR" "$CMDDIR"
 #                        levels, refh, quant, standard_name, long_name
 AGGVARS=$(awk -F'\t' 'NR>1 && $2 != "fx" {print $1}' "$VAR_TABLE" | sort -u)
 
-# Hourly instantaneous variables: need time/time_bnds fixup after daily
-# aggregation.  Time units are assumed to be 'days since ...' throughout
-# (guaranteed by cmorize.sh).
-POINTVARS=$(awk -F'\t' 'NR>1 && $2 ~ /hr/ && $4 ~ /time: point/ {print $1}' "$VAR_TABLE")
+# Instantaneous (cell_methods="time: point") variables need to have
+# their time coordinate shifted forward by half an interval after
+# aggregation to put it at the midpoint of the interval (per cordex
+# spec); extensive (cell_methods="time: min/max/mean") variables have
+# already been adjusted by cmorize.
+
+POINTVARS=$(awk -F'\t' 'NR>1 && $4 ~ /time: point/ {print $1}' "$VAR_TABLE")
 
 # Function to extract year from CORDEX filename timespan field
 # (YYYYMMDDhhmm-YYYYMMDDhhmm or YYYYMMDD-YYYYMMDD or YYYYMM-YYYYMM)
@@ -252,7 +255,7 @@ for vardir in "$INDIR"/*/; do
 
     echo "  Years available: $minyear-$maxyear ($varname)"
 
-    # Generate hourly copy commandfile if input is hourly
+    # Generate sub-daily copy commandfile (hourly or 6-hourly input)
     if [[ "$infreq" =~ hr$ ]]; then
         hr_cmdfile="$CMDDIR/${varname}.${infreq}.cmd"
         > "$hr_cmdfile"
@@ -363,11 +366,8 @@ for vardir in "$INDIR"/*/; do
             mkdir -p "$outdir_var"
 
             # Determine CDO operator and generate command.
-            # For instantaneous (time: point) variables aggregated to daily,
-            # settbounds,hour ensures correct [day 00:00, day+1 00:00] bounds,
-            # and ncap2 shifts the time coordinate from 11:30 to 12:00.
-            # bash -c ensures && semantics regardless of the user's default shell.
-            # Time units are assumed to be 'days since ...' throughout (guaranteed by cmorize.sh).
+            # bash -c ensures && semantics regardless of the user's shell.
+            # Time units assumed to be 'days since ...' (guaranteed by cmorize)
             case "$freq" in
                 mon)
                     echo "cdo monmean -mergetime ${infiles[*]} $outpath" >> "$cmdfile"
@@ -376,8 +376,17 @@ for vardir in "$INDIR"/*/; do
                     if [[ "$infreq" == "day" ]]; then
                         echo "cdo mergetime ${infiles[*]} $outpath" >> "$cmdfile"
                     elif echo "$POINTVARS" | grep -qw "$varname"; then
-                        ncap2_expr='time=time+0.5/24.0'
-                        echo "bash -c \"cdo daymean -settbounds,hour -mergetime ${infiles[*]} $outpath && ncap2 -A -s '$ncap2_expr' $outpath\"" >> "$cmdfile"
+                        # shift time coordinate forward by half an interval
+                        case "$infreq" in
+                            1hr) interval='(1/24.0)' ;;
+                            6hr) interval='(6/24.0)' ;;
+                            *) echo "Error: interval unknown for input frequency $infreq"
+                               echo "Output file: $outfile"
+                               exit 1
+                               ;;
+                        esac
+                        timeshift="'time=time+$interval/2.0'"
+                        echo "bash -c \"cdo daymean -mergetime ${infiles[*]} $outpath && ncap2 -A -s $timeshift $outpath\"" >> "$cmdfile"
                     else
                         echo "cdo daymean -mergetime ${infiles[*]} $outpath" >> "$cmdfile"
                     fi
@@ -385,7 +394,7 @@ for vardir in "$INDIR"/*/; do
                 *) echo "Error: Unknown frequency $freq" >&2; exit 1 ;;
             esac
         done
-
+	
         ngenerated=$((ncommands - nskipped))
         echo "    Generated $ngenerated commands, skipped $nskipped/$ncommands existing files"
 
@@ -401,4 +410,4 @@ echo "Commandfile generation complete!"
 echo "Commandfiles written to: $CMDDIR"
 echo ""
 echo "To run with launch_multi:"
-echo "  launch_multi --workflow cordex --run RUNDIR $CMDDIR/*.cmd"
+echo "  launch_multi --workflow cordex --run \$RUNDIR $CMDDIR/*.cmd"

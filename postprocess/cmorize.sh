@@ -14,7 +14,7 @@
 # Creates output by:
 #   1. Extracting and reformatting the time coordinate
 #   2. Setting the reference epoch
-#   3. Adjusting time coordinates based on cell_methods and frequency
+#   3. Adding time_bnds and ajusting time coordinates based on cell_methods
 #   4. Appending spatial coordinates from wrf.xy.coords.nc
 #   5. Trimming the sponge zone and appending the data variable
 #   6. Writing all CF and CORDEX global and variable attributes
@@ -108,6 +108,16 @@ tracking_id="hdl:21.14103/$(uuidgen)"
 x_trim="${sponge_cells},-$((sponge_cells + 1))"
 y_trim="${sponge_cells},-$((sponge_cells + 1))"
 
+# Interval length in days for each output frequency.  Note: this gets
+# used in an ncap2 call, so express it precisely here and let ncap2
+# handle calculating it to avoid errors due to loss of precision.
+case "$freq" in
+    1hr) interval="(1/24.0)" ;;
+    6hr) interval="(6/24.0)" ;;
+    day) interval="1" ;;
+    *)   interval="" ;;
+esac
+
 # ---------------------------------------------------------------------------
 # write_attributes OUTFILE COORDS
 #
@@ -176,7 +186,7 @@ write_attributes() {
 }
 
 # ---------------------------------------------------------------------------
-# Fixed-level (fx) variables: no time dimension
+# Fixed-level (fx) variables -- no time dimension
 # ---------------------------------------------------------------------------
 
 if [[ "$levels" == "fixed" ]]; then
@@ -194,7 +204,7 @@ if [[ "$levels" == "fixed" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Single-level variables: have a time dimension
+# Single-level variables
 #
 # This approach is a bit roundabout to avoid rewriting the entire file
 # multiple times, which is very slow.  The CDO setreftime command
@@ -221,37 +231,43 @@ ncatted -h \
 	-a standard_name,time,o,c,time \
 	-a axis,time,o,c,T \
 	"$tempfile"
-# Calendar is inherited from wrfout; needs to be changed to match the
-# driving GCM calendar when processing CMIP6-driven simulations
 
-# Step 2: Set reference epoch, remove dummy variable
-# Time units are 'days since 1950-01-01 00:00:00' throughout (required by
-# downstream aggregation steps)
-cdo -setreftime,1950-01-01,00:00:00,1day "$tempfile" "$outfile"
-ncatted -h -a units,time,o,c,"days since 1950-01-01 00:00:00" "$outfile"
+
+# Step 2: Set epoch & calendar and remove dummy variable. Calendar
+# (inherited from driver) is defined in sim_config.yml, $calendar is
+# set by sourcing sim.env.
+
+epoch="1950-01-01 00:00:00"  ## required by CORDEX spec
+
+cdo --no_history -setreftime,"${epoch/ /,/},1day" -setcalendar,"${calendar}" \
+    "$tempfile" "$outfile"
+ncatted -h \
+    -a units,time,o,c,"days since ${epoch}" \
+    -a calendar,time,o,c,"${calendar}" \
+    "$outfile"
 ncks -h -O -7 --no_alphabetize -x -v dummy "$outfile" "$outfile"
 
-# Step 3: Adjust time coordinate based on cell_methods.
-# For averaged variables: shift time to interval midpoint and add bounds.
-# For min/max variables: shift to noon and add day-length bounds.
-# For instantaneous (time: point) variables: no shift, no bounds.
-if [[ "$cell_methods" == "area: time: mean" ]]; then
-    # Shift to midpoint of 1-hour interval, add bounds
-    ncap2 -h -O -s 'time+=1.0/48.0' "$outfile" "$outfile"
-    ncap2 -h -A -s 'defdim("bnds",2)' "$outfile" "$outfile"
-    ncap2 -h -A -s 'time_bnds[$time,$bnds]=0.0; time_bnds(:,0)=time-1.0/48.0; time_bnds(:,1)=time+1.0/48.0' "$outfile" "$outfile"
-    ncatted -h -O -a bounds,time,o,c,"time_bnds" "$outfile" "$outfile"
 
-elif [[ "$cell_methods" == "area: mean time: maximum" || \
-        "$cell_methods" == "area: mean time: minimum" ]]; then
-    # Shift to noon, add day-length bounds
-    ncap2 -h -O -s 'time+=0.5' "$outfile" "$outfile"
-    ncap2 -h -A -s 'defdim("bnds",2)' "$outfile" "$outfile"
-    ncap2 -h -A -s 'time_bnds[$time,$bnds]=0.0; time_bnds(:,0)=time-0.5; time_bnds(:,1)=time+0.5' "$outfile" "$outfile"
-    ncatted -h -O -a bounds,time,o,c,"time_bnds" "$outfile" "$outfile"
+# Step 3: Adjust time coordinate and add time_bnds
+# time-intensive (instantaneous) vars: time at beginning of interval
+# time-extensive (interval-stat) vars: time at midpoint of interval
+
+# Note: CF doesn't require time_bnds for instantaneous vars, but
+# providing it helps CDO get things right when aggregating later on
+
+ncap2 -h -A -s "defdim(\"bnds\",2); \
+      	       time_bnds[\$time,\$bnds]=0.0; \
+    	       time_bnds(:,0)=time; \
+    	       time_bnds(:,1)=time+${interval}; \
+      	       time@bounds=\"time_bnds\";" \
+      "$outfile" "$outfile"
+
+time_extensive='time: (mean|min|max)'
+if [[ "$cell_methods" =~ $time_extensive ]]; then
+    # shift time coordinate to the midpoint of the interval
+    ncap2 -h -O -s "time+=${interval}/2.0" "$outfile" "$outfile"
 fi
-# time: point variables need no adjustment here; the daily aggregation step
-# in aggregate.sh handles their time bounds via settbounds,hour + ncap2
+
 
 # Step 4: Append spatial coordinates (trimmed to interior domain, excluding
 # the sponge zone).  Variable ordering is also established here.

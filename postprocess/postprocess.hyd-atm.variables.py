@@ -36,19 +36,16 @@
 
 # Example execution:
 # ------------------------------------------------
-# $ python postprocess.core.variables.py {wrfout_path} 1980 tas {outdir}
+# $ python postprocess.hyd-atm.variables.py {wrfout_path} 1980 mrro {outdir}
 # ------------------------------------------------
 
 from collections import defaultdict
 import xarray as xr
 from xarray import ufuncs
-from datetime import date
 import numpy as np
-import pandas as pd
 import glob
 import sys
 import os
-import json
 import time
 import resource
 
@@ -75,22 +72,28 @@ do_overwrite_existing = True
 # WRF input file (HGT and LANDMASK in wrfinput_d01) rather than from
 # an output file; wrfinput_path is the authoritative source for these
 # input files for the NA-CORDEX simulations.
-wrfinput_path     = "/glade/derecho/scratch/jsallen/NA-CORDEX-CMIP6/ERA5_HIST_E03/input_example/"
+wrfinput_path = "/glade/derecho/scratch/jsallen/NA-CORDEX-CMIP6/ERA5_HIST_E03/input_example/"
 
-wrfout_hour_fname  = "wrfout_hour_d01_"  # prefix for files with hourly output
-wrfout_6hour_fname = "wrfout_d01_"  # prefix for files with hourly output
-wrfout_pres_fname  = "wrfout_pres_d01_"  # prefix for files with hourly output
-wrfout_zlev_fname  = "wrfout_zlev_d01_"  # prefix for files with hourly output
-wrfout_fx_fname    = "wrfout_5day_d01_"  # prefix for files with LANDFRAC and HGT
+# filename prefixes for the different types of wrfout files
+wrfout_fx_fname   = "wrfout_5day_d01_"  # files that contain fixed vars
+wrfout_hour_fname = "wrfout_hour_d01_"  # hourly outputs
+wrfout_6hr_fname  = "wrfout_d01_"       # 6-hourly outputs
+wrfout_afwa_fname = "wrfout_afwa_d01_"  # AFWA diagnostics
+wrfout_pres_fname = "wrfout_pres_d01_"  # pressure-level outputs
+wrfout_zlev_fname = "wrfout_zlev_d01_"  # height-AGL outputs
+
+# Calendar and epoch are simulation-specific; both will eventually be read
+# from sim_config (future consolidation step).
+_cal   = 'standard'
+_epoch = '1950-01-01 00:00:00'
 
 # -------------------------------
 # END OF USER DEFINED VARIABLES
 # -------------------------------
 
 # Dimension renaming (specified by CORDEX)
-#-------------------
-dname_map_t = {'Time': 'time'}
-dname_map_xy = {'west_east': 'x', 'south_north': 'y'}
+dname_map_t   = {'Time': 'time'}
+dname_map_xy  = {'west_east': 'x', 'south_north': 'y'}
 dname_map_xyt = dname_map_t | dname_map_xy
 
 
@@ -124,87 +127,72 @@ def make_fname(var, cmor_freq):
     elif cmor_freq == 'mon':
         return f'{var}_{fname_base}_mon_{year}01-{year}12.nc'
 
-# Create array of target files
-# ----------------------------
-start_date   = pd.Timestamp(f'{year}-01-01')
-day_before   = start_date - pd.Timedelta(days=1)
-end_of_month = start_date + pd.offsets.MonthEnd(0)
-end_date     = start_date + pd.offsets.YearEnd(0) + pd.Timedelta(hours=23)
-#end_date = start_date + pd.offsets.MonthEnd(0) + pd.Timedelta(hours=23) # Uncomment for quicker testing
 
-time_dim     = pd.date_range(start_date, end_date, freq='h')
-acc_time_dim = pd.date_range(day_before, end_date, freq='h')
-day_time_dim = pd.date_range(day_before, end_date, freq='d')
-six_hr_time_dim = pd.date_range(start_date, end_date, freq='6h')
-six_hr_acc_time_dim = pd.date_range(day_before, end_date, freq='6h')
-
-hr_files     = []
-six_hr_files = []
-afwa_files   = []
-pres_files   = []
-zlev_files   = []
-for date in day_time_dim:
-    d = str(date)[:10]
-    file_str = f'{wrfout_path}/{wrfout_hour_fname}{d}_00:00:00'
-    hr_files.append(file_str)
-
-    afwa_file_str = f'{wrfout_path}/wrfout_afwa_d01_{d}_00:00:00'
-    afwa_files.append(afwa_file_str)
-
-    six_hr_file_str = f'{wrfout_path}/wrfout_d01_{d}_00:00:00'
-    six_hr_files.append(six_hr_file_str)
-    
-    pres_file_str = f'{wrfout_path}/wrfout_pres_d01_{d}_00:00:00'
-    pres_files.append(pres_file_str)
-
-    zlev_file_str = f'{wrfout_path}/wrfout_zlev_d01_{d}_00:00:00'
-    zlev_files.append(zlev_file_str)
-
+# Time coordinate construction
 # ----------------------------
 
-# Load datasets when needed
-# -------------------------
+# Calendar (_cal) is defined above in the user-defined variables
+# section.  Eventually it will come from sim_config.
 
+def _build_time_dim(yr, freq_hours):
+    """CFTimeIndex at freq_hours intervals for yr."""
+    return xr.cftime_range(start=f'{yr}-01-01',
+                           end=f'{int(yr)+1}-01-01',
+                           freq=f'{freq_hours}h',
+                           closed='left',
+                           calendar=_cal,
+                           )
+
+
+# File loading
+# ------------
+# load_wrf is called at the dispatch site using parameters from _LOADER.
+# The day-before file is prepended for accumulated variables so that the
+# first diff gives the correct first-interval value.
+#
+# _day_before_file assumes Dec 31 exists in the prior year (which it
+# does in standard and no-leap calendars as represented by WRF).
+
+def _day_before_file(prefix, yr):
+    """Return list containing the Dec 31 file of the prior year for prefix."""
+    matches = sorted(glob.glob(f'{wrfout_path}/{prefix}{int(yr)-1}-12-31*'))
+    if not matches:
+        raise FileNotFoundError(
+            f'Day-before file not found for year {yr} '
+            f'(pattern: {wrfout_path}/{prefix}{int(yr)-1}-12-31*)')
+    return matches
+
+def load_wrf(prefix, yr, accumulated=False):
+    """Load WRF output files for the given year into a dataset.
+
+    Globs for files matching prefix+yr, sorts lexically, and prepends the
+    day-before file when accumulated=True.  Renames WRF dimensions to CORDEX
+    conventions."""
+    files = sorted(glob.glob(f'{wrfout_path}/{prefix}{yr}-*'))
+    if not files:
+        raise FileNotFoundError(
+            f'No WRF files found for year {yr} '
+            f'(pattern: {wrfout_path}/{prefix}{yr}-*)')
+    if accumulated:
+        files = _day_before_file(prefix, yr) + files
+
+    ds = xr.open_mfdataset(files,
+                            concat_dim='Time',
+                            combine='nested',
+                            chunks={'time': 1, 'south_north': 673, 'west_east': 707},
+                            mask_and_scale=False,
+                            decode_times=False,
+                            decode_coords=False,
+                           ).fillna(1.e20)
+    return ds.rename(dname_map_xyt)
+
+
+# fx dataset: loaded once at startup since multiple clean functions use it
 fx_glob = f'{wrfout_path}/{wrfout_fx_fname}{year}*'
 if not (fx_matches := glob.glob(fx_glob)):
     raise FileNotFoundError(f'No fx files found matching: {fx_glob}')
 ds_fx = xr.open_dataset(fx_matches[0])
 
-def load_wrf(files, accumulated=False):
-    """Load WRF output files into a dataset and rename dimensions.
-    accumulated=True sets mask_and_scale=False, needed for bucket variables
-    like precipitation and radiation that use integer overflow accumulation."""
-    ds = xr.open_mfdataset(files,
-                             concat_dim='Time',
-                             combine='nested',
-                             chunks={'time':1,'south_north':673,'west_east':707},
-                             mask_and_scale=(not accumulated),
-                             decode_times=False,
-                             decode_coords=False).fillna(1.e20)
-    return ds.rename(dname_map_xyt)
-
-# Loader tags:
-#   'hr'   : standard hourly files, skip day-before timestep
-#   'acc'  : hourly files including day-before timestep, for accumulated vars
-#   'afwa' : AFWA diagnostic files, skip day-before timestep
-#   'afwa_acc' : AFWA diagnostic files including day-before timestep, for accumulated vars
-#   'pres' : Pressure level files, skip day-before timestep
-#   'zlev' : Hub-height wind files, skip day-before timestep
-#   'six_hr' : standard six-hourly files, skip day-before timestep
-#   'six_hr_acc' : six-hourly files including day-before timestep, for accumulated vars
-
-def load_by_tag(tag):
-    if tag == 'hr'  : return load_wrf(hr_files[1:])
-    if tag == 'acc' : return load_wrf(hr_files,    accumulated=True)
-    if tag == 'afwa': return load_wrf(afwa_files[1:])
-    if tag == 'afwa_acc': return load_wrf(afwa_files, accumulated=True)
-    if tag == 'pres': return load_wrf(pres_files[1:])
-    if tag == 'zlev': return load_wrf(zlev_files[1:])
-    if tag == 'six_hr': return load_wrf(six_hr_files[1:])
-    if tag == 'six_hr_acc': return load_wrf(six_hr_files, accumulated=True)
-    raise ValueError(f'Unknown loader tag: {tag}')
-
-# ----------------------
 
 # Output existence check
 # ----------------------
@@ -213,6 +201,7 @@ def _output_needed(var, fout):
         print(f'{var}/{fout} EXISTS : Skipping')
         return False
     return True
+
 
 # Write extracted variables
 # -------------------------
@@ -236,17 +225,22 @@ def write_vars(var_da_list):
 
 # Clean functions
 # ---------------
-# Each takes a loaded dataset and returns a list of
-# (var, cmor_freq, dataset) tuples for write_vars to process.
+# Each receives a loaded dataset (ds) and a pre-built time coordinate
+# (time_dim), amd returns a list of (var, cmor_freq, dataset) tuples
+# for write_vars.
+#
+# wbgt, utci, and humidex are exceptions: they load one file at a time
+# for memory reasons and are called directly without ds or time_dim.
 
 # Snow water equivalent - surface snow amount
 # ---------------------------------------------------
-def clean_snw(ds):
-    snw = ds['SNOW']
-    snw['time'] = six_hr_time_dim
+def clean_snw(ds, time_dim):
+    # SNOW units : kg m-2
+    # SNOW description : SNOW WATER EQUIVALENT
 
     landmask = ds_fx['LANDMASK'].mean(dim='Time').rename(dname_map_xy)
-    snw = snw.where(landmask == 1, 1.e20)
+    snw = ds['SNOW'].where(landmask == 1, 1.e20)
+    snw['time'] = time_dim
 
     snw = snw.to_dataset(name='snw').drop_attrs()
     return [('snw', '6hr', snw)]
@@ -254,20 +248,20 @@ def clean_snw(ds):
 
 # Snow depth
 # ---------------------------------------------------
-def clean_snd(ds):
+def clean_snd(ds, time_dim):
     # SNOWH units : m
     # SNOWH description : PHYSICAL SNOW DEPTH
 
     snd = ds['SNOWH']
-    snd['time'] = six_hr_time_dim
-    snd = snd.to_dataset(name='snd').drop_attrs()
+    snd['time'] = time_dim
 
+    snd = snd.to_dataset(name='snd').drop_attrs()
     return [('snd', '6hr', snd)]
 # ---------------------------------------------------
 
 # Total soil moisture content
 # ---------------------------------------------------
-def clean_mrso(ds):
+def clean_mrso(ds, time_dim):
     # SMOIS units: m3 m-3 (volumetric)
     # SMOIS description: SOIL MOISTURE
     # Noah-MP soil layer thicknesses (m): 0.10, 0.30, 0.60, 1.00
@@ -283,135 +277,118 @@ def clean_mrso(ds):
 
     landmask = ds_fx['LANDMASK'].mean(dim='Time').rename(dname_map_xy)
     mrso = mrso.where(landmask == 1, 1.e20)
+    mrso['time'] = time_dim
 
-    mrso['time'] = six_hr_time_dim
     mrso = mrso.to_dataset(name='mrso').drop_attrs()
-
     return [('mrso', '6hr', mrso)]
 # ---------------------------------------------------
 
 # Surface runoff
 # ---------------------------------------------------
-def clean_mrros(ds):
-    # SFROFF units : mm
+def clean_mrros(ds, time_dim):
+    # SFROFF units : mm (accumulated)
     # SFROFF description : SURFACE RUNOFF
 
-    da = ds['SFROFF'] 
-    da['time'] = six_hr_acc_time_dim
+    da = ds['SFROFF']
 
     # Differentiate along time axis and convert to kg/m^2/s
-    mrros = (da.diff(dim='time') / 21600.0).sel(time=six_hr_time_dim)
+    mrros = (da.diff(dim='time') / 21600.0)
 
+    # Mask out ocean
     landmask = ds_fx['LANDMASK'].mean(dim='Time').rename(dname_map_xy)
     mrros = mrros.where(landmask == 1, 1.e20)
+    mrros['time'] = time_dim
 
     mrros = mrros.to_dataset(name='mrros').drop_attrs()
-
     return [('mrros', '6hr', mrros)]
 # ---------------------------------------------------
 
 # Total runoff
 # ---------------------------------------------------
-def clean_mrro(ds):
-    # SFROFF units : mm
+def clean_mrro(ds, time_dim):
+    # SFROFF units : mm (accumulated)
     # SFROFF description : SURFACE RUNOFF
-    # UDROFF units : mm
+    # UDROFF units : mm (accumulated)
     # UDROFF description : UNDERGROUND RUNOFF
 
-    da = ds[['SFROFF','UDROFF']]
-    da['time'] = six_hr_acc_time_dim
-
     # Differentiate along time axis and convert to kg/m^2/s
-    acc_mrro = ( (da['SFROFF']) + da['UDROFF'] ) # mm total
-    mrro = (acc_mrro.diff(dim='time')/21600.0).sel(time=six_hr_time_dim)
+    mrro = ((ds['SFROFF'] + ds['UDROFF']).diff(dim='time') / 21600.0)
 
     # Mask out ocean
     landmask = ds_fx['LANDMASK'].mean(dim='Time').rename(dname_map_xy)
     mrro = mrro.where(landmask == 1, 1.e20)
+    mrro['time'] = time_dim
 
     mrro = mrro.to_dataset(name='mrro').drop_attrs()
-
     return [('mrro', '6hr', mrro)]
 # ---------------------------------------------------
 
-
 # Surface upwelling shortwave radiation
 # ---------------------------------------------------
-def clean_rsus(ds):
+def clean_rsus(ds, time_dim):
     # SWUPB units : W m-2
     # SWUPB description : INSTANTANEOUS UPWELLING SHORTWAVE FLUX AT BOTTOM
 
     rsus = ds['SWUPB']
-    rsus['time'] = six_hr_time_dim
+    rsus['time'] = time_dim
+
     rsus = rsus.to_dataset(name='rsus').drop_attrs()
-
-    rsus['rsus'].attrs['positive'] = 'up'
-
     return [('rsus', '6hr', rsus)]
 # ---------------------------------------------------
 
 # Surface upwelling longwave radiation
 # ---------------------------------------------------
-def clean_rlus(ds):
+def clean_rlus(ds, time_dim):
     # LWUPB units : W m-2
     # LWUPB description : INSTANTANEOUS UPWELLING LONGWAVE FLUX AT BOTTOM
 
     rlus = ds['LWUPB']
-    rlus['time'] = six_hr_time_dim
+    rlus['time'] = time_dim
+
     rlus = rlus.to_dataset(name='rlus').drop_attrs()
-
-    rlus['rlus'].attrs['positive'] = 'up'
-
     return [('rlus', '6hr', rlus)]
 # ---------------------------------------------------
 
 # Surface upward latent heat flux
 # ---------------------------------------------------
-def clean_hfls(ds):
+def clean_hfls(ds, time_dim):
     # LH units : W m-2
     # LH description : LATENT HEAT FLUX AT THE SURFACE
 
     hfls = ds['LH']
-    hfls['time'] = six_hr_time_dim
+    hfls['time'] = time_dim
+
     hfls = hfls.to_dataset(name='hfls').drop_attrs()
-
-    hfls['hfls'].attrs['positive'] = 'up'
-
     return [('hfls', '6hr', hfls)]
 # ---------------------------------------------------
 
 # Surface upward sensible heat flux
 # ---------------------------------------------------
-def clean_hfss(ds):
+def clean_hfss(ds, time_dim):
     # HFX units : W m-2
     # HFX description : UPWARD HEAT FLUX AT THE SURFACE
 
     hfss = ds['HFX']
-    hfss['time'] = six_hr_time_dim
+    hfss['time'] = time_dim
+
     hfss = hfss.to_dataset(name='hfss').drop_attrs()
-
-    hfss['hfss'].attrs['positive'] = 'up'
-
     return [('hfss', '6hr', hfss)]
 # ---------------------------------------------------
 
 # Surface snow melt
 # ---------------------------------------------------
-def clean_snm(ds):
+def clean_snm(ds, time_dim):
     # ACSNOM units : kg m-2 (accumulated)
     # ACSNOM description : ACCUMULATED MELTED SNOW
+
     # Convert to kg m-2 s-1 by differencing and dividing by 21600
-
-    da = ds['ACSNOM']
-    da['time'] = six_hr_acc_time_dim
-
-    snm = (da.diff(dim='time') / 21600.0).sel(time=six_hr_time_dim)
+    snm = (ds['ACSNOM'].diff(dim='time') / 21600.0)
 
     landmask = ds_fx['LANDMASK'].mean(dim='Time').rename(dname_map_xy)
     snm = snm.where(landmask == 1, 1.e20)
+    snm['time'] = time_dim
 
     snm = snm.to_dataset(name='snm').drop_attrs()
-
     return [('snm', '6hr', snm)]
 # ---------------------------------------------------
 
@@ -425,35 +402,18 @@ _PRESS_LEVELS_PA = [100000, 92500, 85000, 75000, 70000, 60000, 50000,
 # Map level in hPa to dimension index
 _PLEV_INDEX = {lev // 100: i for i, lev in enumerate(_PRESS_LEVELS_PA)}
 
+# function factory for cleaning generic pressure-level variables
 def _make_pres_clean(outvar, wrf_var, level_hPa):
     idx = _PLEV_INDEX[level_hPa]
-    def clean(ds):
-        da = ds[wrf_var]
-        da['time'] = six_hr_time_dim
-        sliced = da.isel(num_press_levels_stag=idx)
-        return [(outvar, '6hr', sliced.to_dataset(name=outvar).drop_attrs())]
+    def clean(ds, time_dim):
+        da = ds[wrf_var].isel(num_press_levels_stag=idx)
+        da['time'] = time_dim
+
+        da = da.to_dataset(name=outvar).drop_attrs()
+        return [(outvar, '6hr', da)]
     return clean
 
-def _make_pres_wind_clean(outvar, level_hPa, component):
-    """component: 'u' or 'v'"""
-    idx = _PLEV_INDEX[level_hPa]
-    def clean(ds):
-        u = ds['U_PL'].isel(num_press_levels_stag=idx)
-        v = ds['V_PL'].isel(num_press_levels_stag=idx)
-        u['time'] = six_hr_time_dim
-        v['time'] = six_hr_time_dim
-
-        cosa = ds_fx['COSALPHA'].mean(dim='Time').rename(dname_map_xy)
-        sina = ds_fx['SINALPHA'].mean(dim='Time').rename(dname_map_xy)
-
-        if component == 'u':
-            rotated = (u * cosa) - (v * sina)
-        else:
-            rotated = (v * cosa) + (u * sina)
-
-        return [(outvar, '6hr', rotated.to_dataset(name=outvar).drop_attrs())]
-    return clean
-
+# generate clean functions for zg & ta vars
 for _var, _wrf, _levels in [
     ('ta',  'T_PL',   [700, 500, 250]),
     ('zg',  'GHT_PL', [700, 500, 250]),
@@ -462,22 +422,48 @@ for _var, _wrf, _levels in [
         _name = f'{_var}{_lev}'
         globals()[f'clean_{_name}'] = _make_pres_clean(_name, _wrf, _lev)
 
+
+# function factory for cleaning pressure-level winds
+def _make_pres_wind_clean(outvar, level_hPa, component):
+    """component: 'u' or 'v'"""
+    idx = _PLEV_INDEX[level_hPa]
+    def clean(ds, time_dim):
+        u = ds['U_PL'].isel(num_press_levels_stag=idx)
+        v = ds['V_PL'].isel(num_press_levels_stag=idx)
+
+        cosa = ds_fx['COSALPHA'].mean(dim='Time').rename(dname_map_xy)
+        sina = ds_fx['SINALPHA'].mean(dim='Time').rename(dname_map_xy)
+
+        if component == 'u':
+            rotated = (u * cosa) - (v * sina)
+        else:
+            rotated = (v * cosa) + (u * sina)
+        rotated['time'] = time_dim
+
+        rotated = rotated.to_dataset(name=outvar).drop_attrs()
+        return [(outvar, '6hr', rotated)]
+    return clean
+
+# generate clean functions for ua & va vars
 for _comp in ['ua', 'va']:
     for _lev in [700, 500, 250]:
         _name = f'{_comp}{_lev}'
         globals()[f'clean_{_name}'] = _make_pres_wind_clean(_name, _lev, _comp[0])
 
-# Specific humidity 
+# function factory for cleaning specific humidity
 def _make_pres_hus_clean(outvar, level_hPa):
     idx = _PLEV_INDEX[level_hPa]
-    def clean(ds):
+    def clean(ds, time_dim):
         q = ds['Q_PL'].isel(num_press_levels_stag=idx)
-        q['time'] = six_hr_time_dim
         # Convert mixing ratio (kg/kg) to specific humidity: hus = q / (1 + q)
-        hus = q / (1 + q)
-        return [(outvar, '6hr', hus.to_dataset(name=outvar).drop_attrs())]
+        hus = (q / (1 + q))
+        hus['time'] = time_dim
+
+        hus = hus.to_dataset(name=outvar).drop_attrs()
+        return [(outvar, '6hr', hus)]
     return clean
 
+# generate clean functions for hus vars
 for _lev in [700, 500, 250]:
     _name = f'hus{_lev}'
     globals()[f'clean_{_name}'] = _make_pres_hus_clean(_name, _lev)
@@ -493,11 +479,9 @@ _ZLEV_INDEX = {lev: i for i, lev in enumerate(_Z_LEVELS_M)}
 def _make_zlev_wind_clean(outvar, level_m, component):
     """component: 'u' or 'v'"""
     idx = _ZLEV_INDEX[level_m]
-    def clean(ds):
+    def clean(ds, time_dim):
         u = ds['U_ZL'].isel(num_z_levels_stag=idx)
         v = ds['V_ZL'].isel(num_z_levels_stag=idx)
-        u['time'] = six_hr_time_dim
-        v['time'] = six_hr_time_dim
 
         cosa = ds_fx['COSALPHA'].mean(dim='Time').rename(dname_map_xy)
         sina = ds_fx['SINALPHA'].mean(dim='Time').rename(dname_map_xy)
@@ -506,8 +490,10 @@ def _make_zlev_wind_clean(outvar, level_m, component):
             rotated = (u * cosa) - (v * sina)
         else:
             rotated = (v * cosa) + (u * sina)
+        rotated['time'] = time_dim
 
-        return [(outvar, '6hr', rotated.to_dataset(name=outvar).drop_attrs())]
+        rotated = rotated.to_dataset(name=outvar).drop_attrs()
+        return [(outvar, '6hr', rotated)]
     return clean
 
 for _comp in ['ua', 'va']:
@@ -515,21 +501,76 @@ for _comp in ['ua', 'va']:
         _name = f'{_comp}{_lev}m'
         globals()[f'clean_{_name}'] = _make_zlev_wind_clean(_name, _lev, _comp[0])
 
+# ---------------------------------------------------
+
+# AFWA diagnostic variables
+# ---------------------------------------------------
+
+def clean_cape(ds, time_dim):
+    # AFWA_CAPE units : J kg-1
+    # AFWA_CAPE description : AFWA Diagnostic: Convective Avail Pot Energy
+
+    cape = ds['AFWA_CAPE'].to_dataset(name='cape').drop_attrs()
+    cape['time'] = time_dim
+    return [('cape', '1hr', cape)]
+
+def clean_cin(ds, time_dim):
+    # AFWA_CIN units : J kg-1
+    # AFWA_CIN description : AFWA Diagnostic: Convective Inhibition
+
+    cin = ds['AFWA_CIN'].to_dataset(name='cin').drop_attrs()
+    cin['time'] = time_dim
+    return [('cin', '1hr', cin)]
+
+def clean_prw(ds, time_dim):
+    # AFWA_PWAT units : kg m-2
+    # AFWA_PWAT description : AFWA Diagnostic: Precipitable Water
+
+    prw = ds['AFWA_PWAT'].to_dataset(name='prw').drop_attrs()
+    prw['time'] = time_dim
+    return [('prw', '1hr', prw)]
+
+def clean_fzra(ds, time_dim):
+    # AFWA_FZRA units : mm (accumulated)
+    # AFWA_FZRA description : AFWA Diagnostic: Freezing rain fall
+    # Convert to kg m-2 s-1 by differencing and dividing by 3600
+
+    fzra = (ds['AFWA_FZRA'].diff(dim='time') / 3600.0).to_dataset(name='fzra').drop_attrs()
+    fzra['time'] = time_dim
+    return [('fzra', '1hr', fzra)]
+
+def clean_heatidx(ds, time_dim):
+    # AFWA_HEATIDX units : K
+    # AFWA_HEATIDX description : AFWA Diagnostic: Heat index
+
+    heatidx = ds['AFWA_HEATIDX'].to_dataset(name='heatidx').drop_attrs()
+    heatidx['time'] = time_dim
+    return [('heatidx', '1hr', heatidx)]
+
+def clean_wchill(ds, time_dim):
+    # AFWA_WCHILL units : K
+    # AFWA_WCHILL description : AFWA Diagnostic: Wind chill
+    wchill = ds['AFWA_WCHILL'].to_dataset(name='wchill').drop_attrs()
+    wchill['time'] = time_dim
+    return [('wchill', '1hr', wchill)]
 
 # ---------------------------------------------------
 
-# Wet Bulb Globe Temperature (WBGT)
+# Wet Bulb Globe Temperature (WBGT) and
+# Universal Thermal Comfort Index (UTCI)
 # ---------------------------------------------------
-# Requires the thermofeel package (ECMWF).  The provided na_cordex conda
+# Requires the thermofeel package (ECMWF).  The provided nac6 conda
 # environment includes it; create and activate it from the repo with:
-#   conda env create -f postprocess/na_cordex.yml
-#   conda activate na_cordex
-# Alternatively, ensure thermofeel is available in whatever environment is
-# specified by config_env.sh.
+#   conda env create -f postprocess/environment.yml
+#   conda activate nac6
 #
 # Processes hourly files one day at a time to manage memory (11 input
-# variables at 12km hourly resolution), then concatenates into a single
-# annual file consistent with the rest of the pipeline.
+# variables at 12km hourly resolution), writing output incrementally to
+# NetCDF via netCDF4.  Both indices are computed together since they share
+# the expensive MRT calculation.
+#
+# These functions do not follow the standard (ds, time_dim) signature;
+# they are called directly from the dispatch site as special cases.
 #
 # References:
 #   MRT: Di Napoli et al. (2020), Int J Biometeorol, 64:1233-1245
@@ -553,6 +594,7 @@ def _dew_point_from_vapor_pressure(e):
     e_hPa = np.maximum(e / 100.0, 0.001)
     ln_e = np.log(e_hPa / 6.1078)
     return (237.3 * ln_e) / (17.27 - ln_e) + 273.15
+
 
 def _compute_wbgt_utci_arrays(ds):
     """Compute WBGT and UTCI from a single-day WRF dataset.
@@ -606,66 +648,53 @@ def _compute_wbgt_utci_arrays(ds):
 
     ta_c  = T2 - 273.15
     mrt_c = mrt - 273.15
-
     valid = (
-    (ta_c >= -50) & (ta_c <= 50) &
-    (va <= 17) &
-    ((mrt_c - ta_c) >= -30) & ((mrt_c - ta_c) <= 70)
+        (ta_c >= -50) & (ta_c <= 50) &
+        (va <= 17) &
+        ((mrt_c - ta_c) >= -30) & ((mrt_c - ta_c) <= 70)
     )
     utci = np.where(valid, utci, np.nan).astype(np.float32)
 
     return wbgt.astype(np.float32), utci
 
 
-def clean_wbgt_utci(_ds_unused):
+def clean_wbgt_utci():
     """Compute WBGT and UTCI from hourly WRF output, one day at a time.
 
-    Bypasses both the standard load_by_tag mechanism and write_vars, writing
-    output incrementally to NetCDF via netCDF4 to avoid accumulating a full
-    year of arrays in memory. Returns an empty list so the call site has
-    nothing further to do.
+    Loads one file at a time to avoid accumulating a full year of arrays in
+    memory, writing output incrementally to NetCDF via netCDF4.  Returns an
+    empty list so the call site has nothing further to do.
 
     MRT is computed once per day and shared between both indices.
     """
     import netCDF4 as nc
+    import cftime as _cftime
 
     wbgt_fout = os.path.join(outdir, 'wbgt', make_fname('wbgt', '1hr'))
     utci_fout = os.path.join(outdir, 'utci', make_fname('utci', '1hr'))
     os.makedirs(os.path.join(outdir, 'wbgt'), exist_ok=True)
     os.makedirs(os.path.join(outdir, 'utci'), exist_ok=True)
 
-    def _init_nc(fpath, varname, first_day_times):
-        ds = nc.Dataset(fpath, 'w', format='NETCDF4')
-        ds.createDimension('time', None)
-        ds.createDimension('y', first_day_times.shape[0] and None or None)
-        t = ds.createVariable('time', 'f8', ('time',))
-        t.units = 'hours since 1900-01-01'
-        t.calendar = 'standard'
-        v = ds.createVariable(varname, 'f4', ('time', 'y', 'x'),
-                              fill_value=1.e20)
-        return ds, t, v
+    time_index = _build_time_dim(year, 1)
+    time_units = f'hours since {_epoch}'
+    time_vals  = _cftime.date2num(list(time_index), time_units, calendar=_cal)
+
+    hr_files = sorted(glob.glob(f'{wrfout_path}/{wrfout_hour_fname}{year}-*'))
+    if not hr_files:
+        raise FileNotFoundError(
+            f'No hourly WRF files found for year {year} in {wrfout_path}')
 
     t_written = 0
     wbgt_nc = utci_nc = None
 
     try:
-        for i, fpath in enumerate(hr_files[1:]):
-            if not os.path.exists(fpath):
-                raise FileNotFoundError(f'Hourly file not found: {fpath}')
-
+        for i, fpath in enumerate(hr_files):
             ds = xr.open_dataset(fpath, engine='netcdf4')
             ds = ds[_WBGT_WRF_VARS]
 
             wbgt_day, utci_day = _compute_wbgt_utci_arrays(ds)
             nt_day = wbgt_day.shape[0]
             ds.close()
-
-            day_offset = i * 24
-            day_times = time_dim[day_offset : day_offset + nt_day]
-            # Convert timestamps to hours since 1900-01-01 for netCDF4
-            epoch = pd.Timestamp('1900-01-01')
-            time_vals = np.array([(t - epoch).total_seconds() / 3600.0
-                                  for t in day_times])
 
             if i == 0:
                 ny, nx = wbgt_day.shape[1], wbgt_day.shape[2]
@@ -676,21 +705,21 @@ def clean_wbgt_utci(_ds_unused):
                     ds_nc.createDimension('y', ny)
                     ds_nc.createDimension('x', nx)
                     t_var = ds_nc.createVariable('time', 'f8', ('time',))
-                    t_var.units = 'hours since 1900-01-01'
-                    t_var.calendar = 'standard'
+                    t_var.units    = time_units
+                    t_var.calendar = _cal
                     ds_nc.createVariable(varname, 'f4', ('time', 'y', 'x'),
                                          fill_value=1.e20)
 
-            wbgt_nc['time'][t_written:t_written + nt_day] = time_vals
+            wbgt_nc['time'][t_written:t_written + nt_day] = time_vals[t_written:t_written + nt_day]
             wbgt_nc['wbgt'][t_written:t_written + nt_day] = wbgt_day
-            utci_nc['time'][t_written:t_written + nt_day] = time_vals
+            utci_nc['time'][t_written:t_written + nt_day] = time_vals[t_written:t_written + nt_day]
             utci_nc['utci'][t_written:t_written + nt_day] = utci_day
             t_written += nt_day
 
             if (i + 1) % 30 == 0:
                 wbgt_nc.sync()
                 utci_nc.sync()
-                print(f'  wbgt/utci: processed {i + 1}/{len(hr_files) - 1} days')
+                print(f'  wbgt/utci: processed {i + 1}/{len(hr_files)} days')
 
     finally:
         if wbgt_nc: wbgt_nc.close()
@@ -709,7 +738,7 @@ def clean_wbgt_utci(_ds_unused):
 # Requires the thermofeel package (ECMWF).
 # Inputs: T2, Q2, PSFC. No radiation fields required.
 # Dewpoint is derived from specific humidity using the same helper functions
-# used by WBGT/UTCI. Full-year load is acceptable given the small input size.
+# used by WBGT/UTCI. Processes one day at a time to limit memory use.
 #
 # References:
 #   Masterton & Richardson (1979), Humidex: a method of quantifying human
@@ -718,279 +747,153 @@ def clean_wbgt_utci(_ds_unused):
 
 _HUMIDEX_WRF_VARS = ['T2', 'Q2', 'PSFC']
 
-# ---------------------------------------------------
-def clean_humidex(_ds_unused):
+def clean_humidex():
     """Compute humidex from hourly WRF output, one day at a time.
 
-    Bypasses both the standard load_by_tag mechanism and write_vars, writing
-    output incrementally to NetCDF via netCDF4 to avoid accumulating a full
-    year of arrays in memory. Returns an empty list so the call site has
-    nothing further to do.
-
-    Dewpoint is derived from specific humidity and surface pressure using the
-    same helper functions as WBGT/UTCI.
+    Writes output incrementally via xarray append mode to avoid accumulating
+    a full year of arrays in memory. Returns an empty list so the call site
+    has nothing further to do.
     """
     import thermofeel
-    import netCDF4 as nc
 
     humidex_fout = os.path.join(outdir, 'humidex', make_fname('humidex', '1hr'))
     os.makedirs(os.path.join(outdir, 'humidex'), exist_ok=True)
 
-    epoch = pd.Timestamp('1900-01-01')
-    t_written = 0
-    humidex_nc = None
+    time_index = _build_time_dim(year, 1)
 
-    try:
-        for i, fpath in enumerate(hr_files[1:]):
-            if not os.path.exists(fpath):
-                raise FileNotFoundError(f'Hourly file not found: {fpath}')
+    hr_files = sorted(glob.glob(f'{wrfout_path}/{wrfout_hour_fname}{year}-*'))
+    if not hr_files:
+        raise FileNotFoundError(
+            f'No hourly WRF files found for year {year} in {wrfout_path}')
 
-            ds = xr.open_dataset(fpath, engine='netcdf4')
-            ds = ds[_HUMIDEX_WRF_VARS]
+    for i, fpath in enumerate(hr_files):
+        ds = xr.open_dataset(fpath, engine='netcdf4')
+        ds = ds[_HUMIDEX_WRF_VARS]
 
-            T2   = ds['T2'].values
-            Q2   = np.maximum(ds['Q2'].values, 0.0)
-            PSFC = ds['PSFC'].values
-            ds.close()
+        T2   = ds['T2'].values
+        Q2   = np.maximum(ds['Q2'].values, 0.0)
+        PSFC = ds['PSFC'].values
+        ds.close()
 
-            e_a  = _vapor_pressure_from_q(Q2, PSFC)
-            td_k = _dew_point_from_vapor_pressure(e_a)
+        e_a  = _vapor_pressure_from_q(Q2, PSFC)
+        td_k = _dew_point_from_vapor_pressure(e_a)
 
-            humidex = thermofeel.calculate_humidex(
-                t2_k=T2.astype(np.float64),
-                td_k=td_k.astype(np.float64),
-            ).astype(np.float32)
+        humidex = thermofeel.calculate_humidex(
+            t2_k=T2.astype(np.float64),
+            td_k=td_k.astype(np.float64),
+        ).astype(np.float32)
 
-            nt_day = humidex.shape[0]
-            day_offset = i * 24
-            day_times = time_dim[day_offset : day_offset + nt_day]
-            time_vals = np.array([(t - epoch).total_seconds() / 3600.0
-                                  for t in day_times])
+        day_times = time_index[i * 24 : i * 24 + humidex.shape[0]]
+        mode = 'w' if i == 0 else 'a'
 
-            if i == 0:
-                ny, nx = humidex.shape[1], humidex.shape[2]
-                humidex_nc = nc.Dataset(humidex_fout, 'w', format='NETCDF4')
-                humidex_nc.createDimension('time', None)
-                humidex_nc.createDimension('y', ny)
-                humidex_nc.createDimension('x', nx)
-                t_var = humidex_nc.createVariable('time', 'f8', ('time',))
-                t_var.units = 'hours since 1900-01-01'
-                t_var.calendar = 'standard'
-                humidex_nc.createVariable('humidex', 'f4', ('time', 'y', 'x'),
-                                          fill_value=1.e20)
+        xr.DataArray(humidex, dims=['time', 'y', 'x'],
+                     coords={'time': day_times}) \
+          .to_dataset(name='humidex') \
+          .to_netcdf(humidex_fout, mode=mode, unlimited_dims=['time'])
 
-            humidex_nc['time'][t_written:t_written + nt_day] = time_vals
-            humidex_nc['humidex'][t_written:t_written + nt_day] = humidex
-            t_written += nt_day
+        if (i + 1) % 30 == 0:
+            print(f'  humidex: processed {i + 1}/{len(hr_files)} days')
 
-            if (i + 1) % 30 == 0:
-                humidex_nc.sync()
-                print(f'  humidex: processed {i + 1}/{len(hr_files) - 1} days')
-
-    finally:
-        if humidex_nc: humidex_nc.close()
-
-    print(f'  humidex: finished, {t_written} timesteps')
+    print(f'  humidex: finished')
     print(f'postproc time: {time.perf_counter() - t0:.1f} sec')
     mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     print(f'postproc max memory: {mem / (1024*1024):.1f} GB')
 
     return []
-
-# Moving to AFWA diagnostic ouptuts
-
-# cape
 # ---------------------------------------------------
-def clean_cape(ds):
-    # AFWA_CAPE units : J kg-1
-    # AFWA_CAPE description : AFWA Diagnostic: Convective Avail Pot Energy
-
-    cape = ds['AFWA_CAPE']
-    cape['time'] = time_dim
-    cape = cape.to_dataset(name='cape').drop_attrs()
-
-    return [('cape', '1hr', cape)]
-# ---------------------------------------------------
-
-# cin 
-# ---------------------------------------------------
-def clean_cin(ds):
-    # AFWA_CIN units : J kg-1
-    # AFWA_CIN description : AFWA Diagnostic: Convective Inhibition
-
-    cin = ds['AFWA_CIN']
-    cin['time'] = time_dim
-    cin = cin.to_dataset(name='cin').drop_attrs()
-
-    return [('cin', '1hr', cin)]
-# ---------------------------------------------------
-
-# prw
-# ---------------------------------------------------
-def clean_prw(ds):
-    # AFWA_PWAT units : kg m-2
-    # AFWA_PWAT description : AFWA Diagnostic: Precipitable Water
-
-    prw = ds['AFWA_PWAT']
-    prw['time'] = time_dim
-    prw = prw.to_dataset(name='prw').drop_attrs()
-
-    return [('prw', '1hr', prw)]
-# ---------------------------------------------------
-
-# fzra
-# ---------------------------------------------------
-def clean_fzra(ds):
-    # AFWA_FZRA units : mm (accumulated)
-    # Convert to kg m-2 s-1 (mm/s) by differencing and dividing by 3600
-
-    fzra = ds['AFWA_FZRA']
-    fzra['time'] = acc_time_dim
-    fzra = (fzra / 3600).diff(dim='time').to_dataset(name='fzra').sel(time=time_dim)
-
-    return [('fzra', '1hr', fzra)]
-# ---------------------------------------------------
-
-
-# heatidx
-# ---------------------------------------------------
-def clean_heatidx(ds):
-    # AFWA_HEATIDX units : K
-    # AFWA_HEATIDX description : AFWA Diagnostic: Heat index
-
-    heatidx = ds['AFWA_HEATIDX']
-    heatidx['time'] = time_dim
-    heatidx = heatidx.to_dataset(name='heatidx').drop_attrs()
-
-    return [('heatidx', '1hr', heatidx)]
-# ---------------------------------------------------
-
-# wchill
-# ---------------------------------------------------
-def clean_wchill(ds):
-    # AFWA_WCHILL units : K
-    # AFWA_WCHILL description : AFWA Diagnostic: Wind chill
-
-    wchill = ds['AFWA_WCHILL']
-    wchill['time'] = time_dim
-    wchill = wchill.to_dataset(name='wchill').drop_attrs()
-
-    return [('wchill', '1hr', wchill)]
-# ---------------------------------------------------
-
 
 
 # Dispatch table
 # --------------
-# Maps variable names to their clean function and loader tag.
-# The default output frequency is '6hr'; exceptions are listed in _OUTFREQ.
-# The default loader is 'six_hr'; exceptions are listed in _LOADER.
+# _CLEAN maps variable names to their clean function.
+# _LOADER maps variable names to (prefix, freq_hours, accumulated).
+# _OUTFREQ maps variable names to their output frequency (default '6hr').
 #
-# Loader tags:
-#   'hr'   : standard hourly files, skip day-before timestep
-#   'acc'  : hourly files including day-before timestep, for accumulated vars
-#   'afwa' : AFWA diagnostic files, skip day-before timestep
-#   'pres' : Pressure level files, skip day-before timestep
-#   'zlev' : Hub-height wind files, skip day-before timestep
-#   'six_hr' : standard six-hourly files, skip day-before timestep
-#   'six_hr_acc' : six-hourly files including day-before timestep
+# At the call site, load_wrf and _build_time_dim are called using _LOADER
+# parameters, then ds and time_dim are passed into clean_fn.
 #
-# Note: wbgt handles its own file loading internally (see clean_wbgt);
-# the 'hr' loader tag is listed for consistency but the dataset passed
-# to clean_wbgt is ignored.
+# wbgt and utci both resolve to the combined clean_wbgt_utci function and
+# are called directly as special cases (no ds or time_dim).  Submitting
+# utci as a standalone job would conflict with wbgt output; use --vars wbgt
+# to get both.
+
 _CLEAN = {var: globals()[f'clean_{var}']
-          for var in ['snw','snd','mrso','mrros','mrro', 
-                      'rsus','rlus','hfls','hfss','snm',
-                      'ua700','ua500','ua250',
-                      'va700','va500','va250',
-                      'ta700','ta500','ta250',
-                      'zg700','zg500','zg250',
-                      'hus700','hus500','hus250',
-                      'ua50m','ua100m','ua150m',
-                      'va50m','va100m','va150m',
-                      'humidex', 'cape','cin',
-                      'prw','fzra', 'heatidx',
-                      'wchill',
+          for var in ['snw', 'snd', 'mrso', 'mrros', 'mrro',
+                      'rsus', 'rlus', 'hfls', 'hfss', 'snm',
+                      'ua700', 'ua500', 'ua250',
+                      'va700', 'va500', 'va250',
+                      'ta700', 'ta500', 'ta250',
+                      'zg700', 'zg500', 'zg250',
+                      'hus700', 'hus500', 'hus250',
+                      'ua50m', 'ua100m', 'ua150m',
+                      'va50m', 'va100m', 'va150m',
+                      'cape', 'cin', 'prw', 'fzra', 'heatidx', 'wchill',
                       ]}
 
-# wbgt and utci both resolve to the combined clean function
-_CLEAN['wbgt'] = clean_wbgt_utci
-_CLEAN['utci'] = clean_wbgt_utci
+_CLEAN['wbgt']    = clean_wbgt_utci
+_CLEAN['utci']    = clean_wbgt_utci
+_CLEAN['humidex'] = clean_humidex
 
 _OUTFREQ = defaultdict(lambda: '6hr',
-                       wbgt='1hr',
-                       utci='1hr',
-                       humidex='1hr',
-                       cape='1hr',
-                       cin='1hr',
-                       prw='1hr',
-                       fzra='1hr',
-                       heatidx='1hr',
-                       wchill='1hr',
-                       )
+                       wbgt='1hr', utci='1hr', humidex='1hr',
+                       cape='1hr', cin='1hr', prw='1hr',
+                       fzra='1hr', heatidx='1hr', wchill='1hr')
 
+# (prefix, freq_hours, accumulated)
+_LOADER = defaultdict(lambda: (wrfout_6hr_fname, 6, False), {
+    'mrro'   : (wrfout_6hr_fname,  6, True),
+    'mrros'  : (wrfout_6hr_fname,  6, True),
+    'snm'    : (wrfout_6hr_fname,  6, True),
+    'ua700'  : (wrfout_pres_fname, 6, False),
+    'ua500'  : (wrfout_pres_fname, 6, False),
+    'ua250'  : (wrfout_pres_fname, 6, False),
+    'va700'  : (wrfout_pres_fname, 6, False),
+    'va500'  : (wrfout_pres_fname, 6, False),
+    'va250'  : (wrfout_pres_fname, 6, False),
+    'ta700'  : (wrfout_pres_fname, 6, False),
+    'ta500'  : (wrfout_pres_fname, 6, False),
+    'ta250'  : (wrfout_pres_fname, 6, False),
+    'zg700'  : (wrfout_pres_fname, 6, False),
+    'zg500'  : (wrfout_pres_fname, 6, False),
+    'zg250'  : (wrfout_pres_fname, 6, False),
+    'hus700' : (wrfout_pres_fname, 6, False),
+    'hus500' : (wrfout_pres_fname, 6, False),
+    'hus250' : (wrfout_pres_fname, 6, False),
+    'ua50m'  : (wrfout_zlev_fname, 6, False),
+    'ua100m' : (wrfout_zlev_fname, 6, False),
+    'ua150m' : (wrfout_zlev_fname, 6, False),
+    'va50m'  : (wrfout_zlev_fname, 6, False),
+    'va100m' : (wrfout_zlev_fname, 6, False),
+    'va150m' : (wrfout_zlev_fname, 6, False),
+    'cape'   : (wrfout_afwa_fname, 1, False),
+    'cin'    : (wrfout_afwa_fname, 1, False),
+    'prw'    : (wrfout_afwa_fname, 1, False),
+    'fzra'   : (wrfout_afwa_fname, 1, True),
+    'heatidx': (wrfout_afwa_fname, 1, False),
+    'wchill' : (wrfout_afwa_fname, 1, False),
+})
 
-_LOADER = {
-    'mrro'   : 'six_hr_acc',
-    'mrros'  : 'six_hr_acc',
-    'snm'    : 'six_hr_acc',
-    'ua700'  : 'pres',
-    'ua500'  : 'pres',
-    'ua250'  : 'pres',
-    'va700'  : 'pres',
-    'va500'  : 'pres',
-    'va250'  : 'pres',
-    'ta700'  : 'pres',
-    'ta500'  : 'pres',
-    'ta250'  : 'pres',
-    'zg700'  : 'pres',
-    'zg500'  : 'pres',
-    'zg250'  : 'pres',
-    'hus250' : 'pres',
-    'hus500' : 'pres',
-    'hus700' : 'pres',
-    'ua50m'  : 'zlev',
-    'ua100m' : 'zlev',
-    'ua150m' : 'zlev',
-    'va50m'  : 'zlev',
-    'va100m' : 'zlev',
-    'va150m' : 'zlev',
-    'wbgt'   : 'hr',
-    'utci'   : 'hr',
-    'humidex': 'hr',
-    'cape'   : 'afwa',
-    'cin'    : 'afwa',
-    'prw'    : 'afwa',
-    'fzra'   : 'afwa_acc',
-    'heatidx': 'afwa',
-    'wchill' : 'afwa',
-}
-
-def get_dispatch(var):
-    """Return (clean_fn, loader_tag) for a variable,
-    applying defaults for anything not explicitly overridden."""
-    if var not in _CLEAN:
-        return None
-    return _CLEAN[var], _LOADER.get(var, 'six_hr')
+# Special-case variables that load their own files one at a time
+_SELF_LOADING = {'wbgt', 'utci', 'humidex'}
 
 
 # Call functions
 # --------------
 if variable == 'fx':
-    clean_fx()
+    pass  # fx variables are handled by postprocess.core.variables.py
 else:
-    entry = get_dispatch(variable)
-    if entry is None:
+    clean_fn = _CLEAN.get(variable)
+    if clean_fn is None:
         print(f'Warning: unknown variable {variable}')
     else:
-        clean_fn, loader_tag = entry
         if _output_needed(variable, make_fname(variable, _OUTFREQ[variable])):
-            # wbgt handles its own loading; pass None instead of loading
-            # the full hourly dataset into memory
-            if loader_tag == 'hr' and variable in ('wbgt', 'utci','humidex'):
-                clean_fn(None)
+            if variable in _SELF_LOADING:
+                write_vars(clean_fn())
             else:
-                write_vars(clean_fn(load_by_tag(loader_tag)))
+                prefix, freq_hours, accumulated = _LOADER[variable]
+                ds       = load_wrf(prefix, year, accumulated)
+                time_dim = _build_time_dim(year, freq_hours)
+                write_vars(clean_fn(ds, time_dim))
 
 print('Done')
 

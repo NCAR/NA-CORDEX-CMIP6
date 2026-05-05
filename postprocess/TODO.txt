@@ -9,7 +9,15 @@ TODO items:
 
     need to make NA = 1e20 = missing universal (e.g., utci)
 
-    check 6-hourly aggregation
+    deal with 6-hourly data
+        update aggregation
+	updates to handle non-standard calendars while we're at it
+	    add calendar to sim-config
+	    swap cftime in for pandas
+	add time_bnds to "time: point" vars to fix CDO hack
+	simplify file globbing
+	make epoch parametric, not hard-coded
+	write correct time coordinates during extract, drop fixes from format
     
     fix time chunking post aggregate / pre compress
         I think the cleanest way to fix it is with an nccopy:
@@ -37,6 +45,8 @@ TODO items:
 
     deferred:
         merge postprocess scripts, factor out clean_ functions
+
+	move clean_fx into setup
 
 	update (eliminate?) variable sets in extract.sh
     	   just do everything in TSV?

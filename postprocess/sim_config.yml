@@ -24,6 +24,12 @@ driving_variant_label: "r1i1p1f1"
 domain: "North America"
 domain_id: "NAM-12"
 
+# Calendar inherited from the driving model.  Use "standard" for ERA5 and
+# most CMIP6 models.  Other allowed values: "proleptic_gregorian",
+# "365_day" (no-leap), "360_day".  If the driving model uses the deprecated
+# "gregorian" calendar, use "standard" here instead.
+calendar: "standard"
+
 # Date the simulation finished running (YYYY-MM-DD).
 # If this is not manually defined here, setup.py will attempt to
 # derive this automatically; verify its value before proceeding.

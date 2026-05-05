@@ -265,6 +265,7 @@ def write_var_table(rows, outpath):
 # These map directly to sim_config.yml keys.
 SIM_ENV_KEYS = [
     "activity_id",
+    "calendar",
     "contact",
     "creation_date",
     "domain",
@@ -516,3 +517,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
