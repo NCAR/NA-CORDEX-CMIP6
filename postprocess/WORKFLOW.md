@@ -73,8 +73,16 @@ $post/extract.sh $raw $outdir1 1980-2023 $cmddir1
 
 $post/launch_multi --workflow cordex --run $rundir1 $cmddir1/*cmd
 
+
 ## NOTE: if you're extracting wbgt/utci, runs can take 2-3 hours;
 ## override --workflow defaults with --wall (at end of flags)
+
+set cmdxtra = $edir/cmd.xtra
+set runxtra = $edir/run.xtra
+
+$post/extract.sh --vars wbgt,humidex $raw $outdir1 1980-2023 $cmdxtra
+
+$post/launch_multi --workflow cordex --run $runxtra --wall 03:00:00 $cmdxtra/*cmd
 
 
 ## wait until it finishes, check everything ran correctly
@@ -82,7 +90,7 @@ cd $rundir1
 foreach i (*)
 echo $i
 cat $i/stdout*/* | sort
-tail -q -n 1 $i/*.o*
+tail -q -n 1 $i/*.o* | cut -f 1 -d : | uniq -c
 echo ------------
 end
 cd $topdir

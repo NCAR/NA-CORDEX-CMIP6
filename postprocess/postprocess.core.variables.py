@@ -48,6 +48,7 @@ import sys
 import os
 import time
 import resource
+import warnings
 
 t0 = time.perf_counter()
 
@@ -96,6 +97,9 @@ dname_map_t   = {'Time': 'time'}
 dname_map_xy  = {'west_east': 'x', 'south_north': 'y'}
 dname_map_xyt = dname_map_t | dname_map_xy
 
+# 'rd1' chunking pattern (applied before dimension renaming)
+_CHUNKS = {'Time': 1, 'south_north': 337, 'west_east': 354}
+
 
 # File naming
 # -----------
@@ -138,12 +142,14 @@ def make_fname(var, cmor_freq):
 
 def _build_time_dim(yr, freq_hours):
     """CFTimeIndex at freq_hours intervals for yr."""
-    return xr.cftime_range(start=f'{yr}-01-01',
-                           end=f'{int(yr)+1}-01-01',
-                           freq=f'{freq_hours}h',
-                           closed='left',
-                           calendar=_cal,
-                           )
+    return xr.date_range(start=f'{yr}-01-01',
+                         end=f'{int(yr)+1}-01-01',
+                         freq=f'{freq_hours}h',
+                         inclusive='left',
+                         unit='s',
+                         calendar=_cal,
+                         use_cftime=True,
+                         )
 
 
 # File loading
@@ -167,25 +173,40 @@ def _day_before_file(prefix, yr):
 def load_wrf(prefix, yr, accumulated=False):
     """Load WRF output files for the given year into a dataset.
 
-    Globs for files matching prefix+yr, sorts lexically, and prepends the
-    day-before file when accumulated=True.  Renames WRF dimensions to CORDEX
-    conventions."""
+    Globs for files matching prefix+yr, sorts lexically, and prepends
+    the last timestep of the day-before file when accumulated=True.
+    Renames WRF dimensions to CORDEX conventions. """
     files = sorted(glob.glob(f'{wrfout_path}/{prefix}{yr}-*'))
     if not files:
         raise FileNotFoundError(
             f'No WRF files found for year {yr} '
             f'(pattern: {wrfout_path}/{prefix}{yr}-*)')
-    if accumulated:
-        files = _day_before_file(prefix, yr) + files
 
-    ds = xr.open_mfdataset(files,
-                            concat_dim='Time',
-                            combine='nested',
-                            chunks={'time': 1, 'south_north': 673, 'west_east': 707},
-                            mask_and_scale=False,
-                            decode_times=False,
-                            decode_coords=False,
-                           ).fillna(1.e20)
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', message='.*separate the stored chunks.*')
+        ds = xr.open_mfdataset(files,
+                               concat_dim='Time',
+                               combine='nested',
+                               chunks=_CHUNKS,
+                               mask_and_scale=False,
+                               decode_times=False,
+                               decode_coords=False,
+                               ).fillna(1.e20)
+
+        if accumulated:
+            prev_file = _day_before_file(prefix, yr)
+            prev_ds = xr.open_mfdataset(prev_file,
+                                        concat_dim='Time',
+                                        combine='nested',
+                                        chunks=_CHUNKS,
+                                        mask_and_scale=False,
+                                        decode_times=False,
+                                        decode_coords=False,
+                                        ).isel(Time=[-1]).fillna(1.e20)
+            # NB: list index [-1] prevents loss of time dim, which
+            # leads to unwanted dimension reordering on concatenation
+            ds = xr.concat([prev_ds, ds], dim='Time')
+
     return ds.rename(dname_map_xyt)
 
 
@@ -258,7 +279,7 @@ def clean_tasmax(ds, time_dim):
     tasmax['time'] = _build_time_dim(year, 24)
 
     tasmax = tasmax.to_dataset(name='tasmax').drop_attrs()
-    return [('tasmax', 'day', tas_max)]
+    return [('tasmax', 'day', tasmax)]
 # ---------------------------------------------------
 
 # Daily minimum near-surface air temperature
@@ -275,7 +296,7 @@ def clean_tasmin(ds, time_dim):
     tasmin['time'] = _build_time_dim(year, 24)
 
     tasmin = tasmin.to_dataset(name='tasmin').drop_attrs()
-    return [('tasmin', 'day', tas_min)]
+    return [('tasmin', 'day', tasmin)]
 # ---------------------------------------------------
 
 # Hourly precipitation accumulation
@@ -296,7 +317,8 @@ def clean_pr(ds, time_dim):
     tp = ( ((da['I_RAINC']*100.) + da['RAINC']) +
            ((da['I_RAINNC']*100.) + da['RAINNC']) ) / 3600
     pr = tp.diff(dim='time')
-    pr['time'] = time_dim
+    pr = pr.assign_coords(time=time_dim)
+    #pr['time'] = time_dim
 
     pr = pr.to_dataset(name='pr').drop_attrs()
     return [('pr', '1hr', pr)]
@@ -452,7 +474,8 @@ def clean_rsds(ds, time_dim):
     # accumulate J/hour/m-2 to W/m2
     acc_rsds = ( (da['I_ACSWDNB'] * 1e9) + da['ACSWDNB'] ) / 3600
     rsds = acc_rsds.diff(dim='time')
-    rsds['time'] = time_dim
+    rsds = rsds.assign_coords(time=time_dim)
+    #rsds['time'] = time_dim
 
     rsds = rsds.to_dataset(name='rsds').drop_attrs()
     return [('rsds', '1hr', rsds)]
@@ -469,7 +492,8 @@ def clean_rlds(ds, time_dim):
     # accumulate J/hour/m-2 to W/m2
     acc_rlds = ( (da['I_ACLWDNB'] * 1e9) + da['ACLWDNB'] ) / 3600
     rlds = acc_rlds.diff(dim='time')
-    rlds['time'] = time_dim
+    rlds = rlds.assign_coords(time=time_dim)
+    #rlds['time'] = time_dim
 
     rlds = rlds.to_dataset(name='rlds').drop_attrs()
     return [('rlds', '1hr', rlds)]
@@ -567,5 +591,4 @@ else:
             ds       = load_wrf(prefix, year, accumulated)
             time_dim = _build_time_dim(year, freq_hours)
             write_vars(clean_fn(ds, time_dim))
-
-# Plotting is handled separately; see plot.postprocess.var.py
+            ds.close()

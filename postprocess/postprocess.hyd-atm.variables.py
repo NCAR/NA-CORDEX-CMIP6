@@ -48,6 +48,7 @@ import sys
 import os
 import time
 import resource
+import warnings
 
 t0 = time.perf_counter()
 
@@ -96,6 +97,9 @@ dname_map_t   = {'Time': 'time'}
 dname_map_xy  = {'west_east': 'x', 'south_north': 'y'}
 dname_map_xyt = dname_map_t | dname_map_xy
 
+# 'rd1' chunking pattern (applied before dimension renaming)
+_CHUNKS = {'Time': 1, 'south_north': 337, 'west_east': 354}
+
 
 # File naming
 # -----------
@@ -136,12 +140,14 @@ def make_fname(var, cmor_freq):
 
 def _build_time_dim(yr, freq_hours):
     """CFTimeIndex at freq_hours intervals for yr."""
-    return xr.cftime_range(start=f'{yr}-01-01',
-                           end=f'{int(yr)+1}-01-01',
-                           freq=f'{freq_hours}h',
-                           closed='left',
-                           calendar=_cal,
-                           )
+    return xr.date_range(start=f'{yr}-01-01',
+                         end=f'{int(yr)+1}-01-01',
+                         freq=f'{freq_hours}h',
+                         inclusive='left',
+                         unit='s',
+                         calendar=_cal,
+                         use_cftime=True,
+                         )
 
 
 # File loading
@@ -165,26 +171,49 @@ def _day_before_file(prefix, yr):
 def load_wrf(prefix, yr, accumulated=False):
     """Load WRF output files for the given year into a dataset.
 
-    Globs for files matching prefix+yr, sorts lexically, and prepends the
-    day-before file when accumulated=True.  Renames WRF dimensions to CORDEX
-    conventions."""
+    Globs for files matching prefix+yr, sorts lexically, and prepends
+    the last timestep of the day-before file when accumulated=True.
+    Renames WRF dimensions to CORDEX conventions. """
     files = sorted(glob.glob(f'{wrfout_path}/{prefix}{yr}-*'))
     if not files:
         raise FileNotFoundError(
             f'No WRF files found for year {yr} '
             f'(pattern: {wrfout_path}/{prefix}{yr}-*)')
-    if accumulated:
-        files = _day_before_file(prefix, yr) + files
 
-    ds = xr.open_mfdataset(files,
-                            concat_dim='Time',
-                            combine='nested',
-                            chunks={'time': 1, 'south_north': 673, 'west_east': 707},
-                            mask_and_scale=False,
-                            decode_times=False,
-                            decode_coords=False,
-                           ).fillna(1.e20)
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', message='.*separate the stored chunks.*')
+        ds = xr.open_mfdataset(files,
+                               concat_dim='Time',
+                               combine='nested',
+                               chunks=_CHUNKS,
+                               mask_and_scale=False,
+                               decode_times=False,
+                               decode_coords=False,
+                               ).fillna(1.e20)
+        if accumulated:
+            prev_file = _day_before_file(prefix, yr)
+            prev_ds = xr.open_mfdataset(prev_file,
+                                        concat_dim='Time',
+                                        combine='nested',
+                                        chunks=_CHUNKS,
+                                        mask_and_scale=False,
+                                        decode_times=False,
+                                        decode_coords=False,
+                                        ).isel(Time=[-1]).fillna(1.e20)
+            # NB: list index [-1] prevents loss of time dim, which
+            # leads to unwanted dimension reordering on concatenation
+            ds = xr.concat([prev_ds, ds], dim='Time')
+
     return ds.rename(dname_map_xyt)
+
+# # debugging function
+# def diagnose(d, tag):
+#     with warnings.catch_warnings():
+#         warnings.filterwarnings('ignore', category=FutureWarning)
+#         print(tag)
+#         print(d.sizes)
+#         print(d)
+#         print("------------------------")
 
 
 # fx dataset: loaded once at startup since multiple clean functions use it
@@ -297,7 +326,8 @@ def clean_mrros(ds, time_dim):
     # Mask out ocean
     landmask = ds_fx['LANDMASK'].mean(dim='Time').rename(dname_map_xy)
     mrros = mrros.where(landmask == 1, 1.e20)
-    mrros['time'] = time_dim
+    mrros = mrros.assign_coords(time=time_dim)
+    #mrros['time'] = time_dim
 
     mrros = mrros.to_dataset(name='mrros').drop_attrs()
     return [('mrros', '6hr', mrros)]
@@ -317,7 +347,7 @@ def clean_mrro(ds, time_dim):
     # Mask out ocean
     landmask = ds_fx['LANDMASK'].mean(dim='Time').rename(dname_map_xy)
     mrro = mrro.where(landmask == 1, 1.e20)
-    mrro['time'] = time_dim
+    mrro = mrro.assign_coords(time=time_dim)
 
     mrro = mrro.to_dataset(name='mrro').drop_attrs()
     return [('mrro', '6hr', mrro)]
@@ -386,7 +416,8 @@ def clean_snm(ds, time_dim):
 
     landmask = ds_fx['LANDMASK'].mean(dim='Time').rename(dname_map_xy)
     snm = snm.where(landmask == 1, 1.e20)
-    snm['time'] = time_dim
+    snm = snm.assign_coords(time=time_dim)
+    #snm['time'] = time_dim
 
     snm = snm.to_dataset(name='snm').drop_attrs()
     return [('snm', '6hr', snm)]
@@ -535,8 +566,11 @@ def clean_fzra(ds, time_dim):
     # AFWA_FZRA description : AFWA Diagnostic: Freezing rain fall
     # Convert to kg m-2 s-1 by differencing and dividing by 3600
 
-    fzra = (ds['AFWA_FZRA'].diff(dim='time') / 3600.0).to_dataset(name='fzra').drop_attrs()
-    fzra['time'] = time_dim
+    fzra = (ds['AFWA_FZRA'].diff(dim='time') / 3600.0)
+    fzra = fzra.assign_coords(time=time_dim) 
+
+    fzra = fzra.to_dataset(name='fzra').drop_attrs()
+
     return [('fzra', '1hr', fzra)]
 
 def clean_heatidx(ds, time_dim):
@@ -553,6 +587,7 @@ def clean_wchill(ds, time_dim):
     wchill = ds['AFWA_WCHILL'].to_dataset(name='wchill').drop_attrs()
     wchill['time'] = time_dim
     return [('wchill', '1hr', wchill)]
+
 
 # ---------------------------------------------------
 
@@ -584,9 +619,10 @@ _WBGT_WRF_VARS = ['T2', 'Q2', 'PSFC', 'U10', 'V10', 'COSZEN',
 
 
 def _vapor_pressure_from_q(q, P):
-    """Vapor pressure (Pa) from specific humidity (kg/kg) and pressure (Pa)."""
+    """Vapor pressure (Pa) from mixing ratio (kg/kg) and pressure (Pa)."""
+    hus = q / (1 + q)     # mixing ratio -> specific humidity
     eps = 0.62197
-    return q * P / (eps + q * (1.0 - eps))
+    return hus * P / (eps + hus * (1.0 - eps))
 
 
 def _dew_point_from_vapor_pressure(e):
@@ -602,7 +638,7 @@ def _compute_wbgt_utci_arrays(ds):
     Returns (wbgt, utci) as float32 arrays. MRT is computed once and shared
     between both indices to avoid redundant radiation processing.
     """
-    import thermofeel
+    import thermofeel as tf
 
     coszen = np.clip(ds['COSZEN'].values, 0.0, 1.0)
     SWDOWN = np.maximum(np.nan_to_num(ds['SWDOWN'].values, nan=0.0), 0.0)
@@ -622,53 +658,42 @@ def _compute_wbgt_utci_arrays(ds):
     strd = GLW
     strr = GLW - LWUPB
 
-    mrt = thermofeel.calculate_mean_radiant_temperature(
+    mrt = tf.calculate_mean_radiant_temperature(
         ssrd=ssrd, ssr=ssr, dsrp=SWDDNI,
         strd=strd, fdir=fdir, strr=strr,
         cossza=coszen,
     )
 
-    va = np.maximum(np.sqrt(U10**2 + V10**2), 0.5)
+    wspd = np.maximum(np.sqrt(U10**2 + V10**2), 0.5)
     Q2_safe = np.maximum(Q2, 0.0)
     e_a = _vapor_pressure_from_q(Q2_safe, PSFC)
-    td_k = _dew_point_from_vapor_pressure(e_a)
+    tdew = _dew_point_from_vapor_pressure(e_a)
 
-    t2_f64  = T2.astype(np.float64)
-    mrt_f64 = mrt.astype(np.float64)
-    va_f64  = va.astype(np.float64)
-    td_f64  = td_k.astype(np.float64)
-
-    wbgt = thermofeel.calculate_wbgt(
-        t2_k=t2_f64, mrt=mrt_f64, va=va_f64, td_k=td_f64,
-    )
-
-    utci = thermofeel.calculate_utci(
-        t2_k=t2_f64, va=va_f64, mrt=mrt_f64, td_k=td_f64,
-    )
+    wbgt = tf.calculate_wbgt(t2_k=T2, mrt=mrt, va=wspd, td_k=tdew,)
+    utci = tf.calculate_utci(t2_k=T2, va=wspd, mrt=mrt, td_k=tdew,)
 
     ta_c  = T2 - 273.15
     mrt_c = mrt - 273.15
     valid = (
         (ta_c >= -50) & (ta_c <= 50) &
-        (va <= 17) &
+        (wspd <= 17) &
         ((mrt_c - ta_c) >= -30) & ((mrt_c - ta_c) <= 70)
     )
-    utci = np.where(valid, utci, np.nan).astype(np.float32)
+    utci = np.where(valid, utci, np.nan)
 
-    return wbgt.astype(np.float32), utci
+    return wbgt.astype(np.float32), utci.astype(np.float32)
 
 
 def clean_wbgt_utci():
     """Compute WBGT and UTCI from hourly WRF output, one day at a time.
 
     Loads one file at a time to avoid accumulating a full year of arrays in
-    memory, writing output incrementally to NetCDF via netCDF4.  Returns an
+    memory, writing output incrementally via xarray append mode.  Returns an
     empty list so the call site has nothing further to do.
 
     MRT is computed once per day and shared between both indices.
     """
-    import netCDF4 as nc
-    import cftime as _cftime
+    import thermofeel as tf
 
     wbgt_fout = os.path.join(outdir, 'wbgt', make_fname('wbgt', '1hr'))
     utci_fout = os.path.join(outdir, 'utci', make_fname('utci', '1hr'))
@@ -676,56 +701,79 @@ def clean_wbgt_utci():
     os.makedirs(os.path.join(outdir, 'utci'), exist_ok=True)
 
     time_index = _build_time_dim(year, 1)
-    time_units = f'hours since {_epoch}'
-    time_vals  = _cftime.date2num(list(time_index), time_units, calendar=_cal)
+#    time_units = f'hours since {_epoch}'
+#    time_vals  = cf.date2num(list(time_index), time_units, calendar=_cal)
 
     hr_files = sorted(glob.glob(f'{wrfout_path}/{wrfout_hour_fname}{year}-*'))
     if not hr_files:
         raise FileNotFoundError(
             f'No hourly WRF files found for year {year} in {wrfout_path}')
 
-    t_written = 0
-    wbgt_nc = utci_nc = None
+#     t_written = 0
+#     wbgt_nc = utci_nc = None
+# 
+#     try:
+#         for i, fpath in enumerate(hr_files):
+#             ds = xr.open_dataset(fpath, engine='netcdf4')
+#             ds = ds[_WBGT_WRF_VARS]
+# 
+#             wbgt_day, utci_day = _compute_wbgt_utci_arrays(ds)
+#             nt_day = wbgt_day.shape[0]
+#             ds.close()
+# 
+#             if i == 0:
+#                 ny, nx = wbgt_day.shape[1], wbgt_day.shape[2]
+#                 wbgt_nc = nc.Dataset(wbgt_fout, 'w', format='NETCDF4')
+#                 utci_nc = nc.Dataset(utci_fout, 'w', format='NETCDF4')
+#                 for ds_nc, varname in [(wbgt_nc, 'wbgt'), (utci_nc, 'utci')]:
+#                     ds_nc.createDimension('time', None)
+#                     ds_nc.createDimension('y', ny)
+#                     ds_nc.createDimension('x', nx)
+#                     t_var = ds_nc.createVariable('time', 'f8', ('time',))
+#                     t_var.units    = time_units
+#                     t_var.calendar = _cal
+#                     ds_nc.createVariable(varname, 'f4', ('time', 'y', 'x'),
+#                                          fill_value=1.e20)
+# 
+#             wbgt_nc['time'][t_written:t_written + nt_day] = time_vals[t_written:t_written + nt_day]
+#             wbgt_nc['wbgt'][t_written:t_written + nt_day] = wbgt_day
+#             utci_nc['time'][t_written:t_written + nt_day] = time_vals[t_written:t_written + nt_day]
+#             utci_nc['utci'][t_written:t_written + nt_day] = utci_day
+#             t_written += nt_day
+# 
+#             if (i + 1) % 30 == 0:
+#                 wbgt_nc.sync()
+#                 utci_nc.sync()
+#                 print(f'  wbgt/utci: processed {i + 1}/{len(hr_files)} days')
+# 
+#     finally:
+#         if wbgt_nc: wbgt_nc.close()
+#         if utci_nc: utci_nc.close()
+    
+    for i, fpath in enumerate(hr_files):
+        ds = xr.open_dataset(fpath, engine='netcdf4')
+        ds = ds[_WBGT_WRF_VARS]
 
-    try:
-        for i, fpath in enumerate(hr_files):
-            ds = xr.open_dataset(fpath, engine='netcdf4')
-            ds = ds[_WBGT_WRF_VARS]
+        wbgt_day, utci_day = _compute_wbgt_utci_arrays(ds)
+        ds.close()
 
-            wbgt_day, utci_day = _compute_wbgt_utci_arrays(ds)
-            nt_day = wbgt_day.shape[0]
-            ds.close()
+        day_times = time_index[i * 24 : (i + 1)* 24]
+        mode = 'w' if i == 0 else 'a'
 
-            if i == 0:
-                ny, nx = wbgt_day.shape[1], wbgt_day.shape[2]
-                wbgt_nc = nc.Dataset(wbgt_fout, 'w', format='NETCDF4')
-                utci_nc = nc.Dataset(utci_fout, 'w', format='NETCDF4')
-                for ds_nc, varname in [(wbgt_nc, 'wbgt'), (utci_nc, 'utci')]:
-                    ds_nc.createDimension('time', None)
-                    ds_nc.createDimension('y', ny)
-                    ds_nc.createDimension('x', nx)
-                    t_var = ds_nc.createVariable('time', 'f8', ('time',))
-                    t_var.units    = time_units
-                    t_var.calendar = _cal
-                    ds_nc.createVariable(varname, 'f4', ('time', 'y', 'x'),
-                                         fill_value=1.e20)
+        xr.DataArray(wbgt_day, dims=['time', 'y', 'x'],
+                     coords={'time': day_times}) \
+          .to_dataset(name='wbgt') \
+          .to_netcdf(wbgt_fout, mode=mode, unlimited_dims=['time'])
 
-            wbgt_nc['time'][t_written:t_written + nt_day] = time_vals[t_written:t_written + nt_day]
-            wbgt_nc['wbgt'][t_written:t_written + nt_day] = wbgt_day
-            utci_nc['time'][t_written:t_written + nt_day] = time_vals[t_written:t_written + nt_day]
-            utci_nc['utci'][t_written:t_written + nt_day] = utci_day
-            t_written += nt_day
+        xr.DataArray(utci_day, dims=['time', 'y', 'x'],
+                     coords={'time': day_times}) \
+          .to_dataset(name='utci') \
+          .to_netcdf(utci_fout, mode=mode, unlimited_dims=['time'])
 
-            if (i + 1) % 30 == 0:
-                wbgt_nc.sync()
-                utci_nc.sync()
-                print(f'  wbgt/utci: processed {i + 1}/{len(hr_files)} days')
+        #if (i + 1) % 30 == 0:
+        #    print(f'  wbgt/utci: processed {i + 1}/{len(hr_files)} days')
 
-    finally:
-        if wbgt_nc: wbgt_nc.close()
-        if utci_nc: utci_nc.close()
-
-    print(f'  wbgt/utci: finished, {t_written} timesteps')
+    print(f'  wbgt/utci: finished')
     print(f'postproc time: {time.perf_counter() - t0:.1f} sec')
     mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     print(f'postproc max memory: {mem / (1024*1024):.1f} GB')
@@ -735,71 +783,18 @@ def clean_wbgt_utci():
 
 # Humidex
 # ---------------------------------------------------
-# Requires the thermofeel package (ECMWF).
-# Inputs: T2, Q2, PSFC. No radiation fields required.
-# Dewpoint is derived from specific humidity using the same helper functions
-# used by WBGT/UTCI. Processes one day at a time to limit memory use.
-#
-# References:
-#   Masterton & Richardson (1979), Humidex: a method of quantifying human
-#     discomfort due to excessive heat and humidity. Env. Canada CLI 1-79.
-#   thermofeel: Brimicombe et al. (2022), SoftwareX, 18, 101005
+def clean_humidex(ds, time_dim):
+    # T2 units: K, Q2 units: kg/kg (mixing ratio), PSFC units: Pa
+    # Humidex = T2 + 0.5555 * (e_hPa - 10.0)
+    # where e_hPa is vapor pressure in hPa
 
-_HUMIDEX_WRF_VARS = ['T2', 'Q2', 'PSFC']
+    e_hPa = _vapor_pressure_from_q(ds['Q2'], ds['PSFC']) / 100.0
+    humidex = ds['T2'] + 0.5555 * (e_hPa - 10.0)
+    humidex['time'] = time_dim
 
-def clean_humidex():
-    """Compute humidex from hourly WRF output, one day at a time.
+    humidex = humidex.to_dataset(name='humidex').drop_attrs()
+    return [('humidex', '1hr', humidex)]
 
-    Writes output incrementally via xarray append mode to avoid accumulating
-    a full year of arrays in memory. Returns an empty list so the call site
-    has nothing further to do.
-    """
-    import thermofeel
-
-    humidex_fout = os.path.join(outdir, 'humidex', make_fname('humidex', '1hr'))
-    os.makedirs(os.path.join(outdir, 'humidex'), exist_ok=True)
-
-    time_index = _build_time_dim(year, 1)
-
-    hr_files = sorted(glob.glob(f'{wrfout_path}/{wrfout_hour_fname}{year}-*'))
-    if not hr_files:
-        raise FileNotFoundError(
-            f'No hourly WRF files found for year {year} in {wrfout_path}')
-
-    for i, fpath in enumerate(hr_files):
-        ds = xr.open_dataset(fpath, engine='netcdf4')
-        ds = ds[_HUMIDEX_WRF_VARS]
-
-        T2   = ds['T2'].values
-        Q2   = np.maximum(ds['Q2'].values, 0.0)
-        PSFC = ds['PSFC'].values
-        ds.close()
-
-        e_a  = _vapor_pressure_from_q(Q2, PSFC)
-        td_k = _dew_point_from_vapor_pressure(e_a)
-
-        humidex = thermofeel.calculate_humidex(
-            t2_k=T2.astype(np.float64),
-            td_k=td_k.astype(np.float64),
-        ).astype(np.float32)
-
-        day_times = time_index[i * 24 : i * 24 + humidex.shape[0]]
-        mode = 'w' if i == 0 else 'a'
-
-        xr.DataArray(humidex, dims=['time', 'y', 'x'],
-                     coords={'time': day_times}) \
-          .to_dataset(name='humidex') \
-          .to_netcdf(humidex_fout, mode=mode, unlimited_dims=['time'])
-
-        if (i + 1) % 30 == 0:
-            print(f'  humidex: processed {i + 1}/{len(hr_files)} days')
-
-    print(f'  humidex: finished')
-    print(f'postproc time: {time.perf_counter() - t0:.1f} sec')
-    mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-    print(f'postproc max memory: {mem / (1024*1024):.1f} GB')
-
-    return []
 # ---------------------------------------------------
 
 
@@ -827,17 +822,19 @@ _CLEAN = {var: globals()[f'clean_{var}']
                       'hus700', 'hus500', 'hus250',
                       'ua50m', 'ua100m', 'ua150m',
                       'va50m', 'va100m', 'va150m',
-                      'cape', 'cin', 'prw', 'fzra', 'heatidx', 'wchill',
+                      'cape', 'cin', 'prw', 'fzra',
+                      'heatidx', 'wchill', 'humidex',
                       ]}
 
 _CLEAN['wbgt']    = clean_wbgt_utci
 _CLEAN['utci']    = clean_wbgt_utci
-_CLEAN['humidex'] = clean_humidex
+#_CLEAN['humidex'] = clean_humidex
 
 _OUTFREQ = defaultdict(lambda: '6hr',
                        wbgt='1hr', utci='1hr', humidex='1hr',
                        cape='1hr', cin='1hr', prw='1hr',
-                       fzra='1hr', heatidx='1hr', wchill='1hr')
+                       fzra='1hr', heatidx='1hr', wchill='1hr',
+                       )
 
 # (prefix, freq_hours, accumulated)
 _LOADER = defaultdict(lambda: (wrfout_6hr_fname, 6, False), {
@@ -871,10 +868,11 @@ _LOADER = defaultdict(lambda: (wrfout_6hr_fname, 6, False), {
     'fzra'   : (wrfout_afwa_fname, 1, True),
     'heatidx': (wrfout_afwa_fname, 1, False),
     'wchill' : (wrfout_afwa_fname, 1, False),
+    'humidex': (wrfout_hour_fname, 1, False),
 })
 
 # Special-case variables that load their own files one at a time
-_SELF_LOADING = {'wbgt', 'utci', 'humidex'}
+_SELF_LOADING = {'wbgt', 'utci'}
 
 
 # Call functions
@@ -894,7 +892,4 @@ else:
                 ds       = load_wrf(prefix, year, accumulated)
                 time_dim = _build_time_dim(year, freq_hours)
                 write_vars(clean_fn(ds, time_dim))
-
-print('Done')
-
-# Plotting is handled separately; see plot.postprocess.var.py
+                ds.close()
