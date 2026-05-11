@@ -3,11 +3,7 @@
 TODO items:
 
 
-    humidex is only saving 1 day of data
-    	    test fix
-	    test rewrites
-
-    need to make NA = 1e20 = missing universal (e.g., utci)
+    CIN: mask -9.999e+30 (missing)
 
     deal with 6-hourly data
         update aggregation
