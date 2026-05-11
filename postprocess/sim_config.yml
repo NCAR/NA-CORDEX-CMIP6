@@ -66,6 +66,7 @@ contact: "na-cordex-admin@ucar.edu"
 # ---------------------------------------------------------------------------
 
 activity_id: "DD"
+epoch: "1950-01-01 00:00:00"
 mip_era: "CMIP6"
 project_id: "CORDEX-CMIP6"
 product: "model-output"
@@ -78,7 +79,7 @@ references: "https://github.com/NCAR/NA-CORDEX-CMIP6 (code and documentation)"
 # ---------------------------------------------------------------------------
 
 # Directory containing a wrfinput_d01 file (used for orog and sftlf)
-wrfinput_path: "/glade/derecho/scratch/jsallen/NA-CORDEX-CMIP6/ERA5_HIST_E03/input_example"
+wrfinput_path: "/glade/derecho/scratch/jsallen/NA-CORDEX-CMIP6/ERA5_HIST_E03/input_example/"
 
 
 # ---------------------------------------------------------------------------

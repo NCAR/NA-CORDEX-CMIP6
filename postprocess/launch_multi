@@ -90,6 +90,9 @@ apply_workflow() {
             copyfiles+=(
                 "$scripts_dir/postprocess.core.variables.py"
                 "$scripts_dir/postprocess.hyd-atm.variables.py"
+                "$scripts_dir/postprocess.fx.py"
+                "$scripts_dir/postprocess.machinery.py"
+                "$scripts_dir/postprocess.variables.py"
                 "$scripts_dir/cmorize.sh"
                 "$scripts_dir/plot.postprocess.var.py"
             )

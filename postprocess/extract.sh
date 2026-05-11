@@ -4,66 +4,50 @@
 # from raw WRF output.  Designed for use with launch_multi and launch_cf,
 # matching the pattern established by aggregate.sh.
 #
-# Requires setup.sh to have been run first (OUTDIR must contain cached CMOR
-# JSON tables).
+# Requires setup.py to have been run first (SETUPDIR must contain sim.env
+# and cached CMOR JSON tables).
 #
-# Variables are routed to one of two worker scripts:
-#   postprocess.core.variables.py    - standard CORDEX core variables
-#   postprocess.hyd-atm.variables.py - supplemental hydro/atmo variables
-#                                      (AFWA diagnostics, pressure-level
-#                                      vars, height-AGL winds, etc.)
+# All variables are routed to postprocess.variables.py, except fx which
+# goes to postprocess.fx.py.
 
 set -euo pipefail
 
 # Default variable list for NA-CORDEX-CMIP6 postprocessing.
+#
+# wbgt and utci have been omitted from DEFAULT_VARS because they take
+# much longer to run (3 hour or more).  To process them, pass them
+# explicitly via --vars.
+#
+# Note: utci is produced automatically when wbgt runs; submitting utci as
+# a standalone job will cause a file conflict. Use --vars wbgt to get both.
 
-# wbgt and utci are intentionally NOT in DEFAULT_HYDATM_VARS because
-# they require signficantly longer (3+ hours) to calculate. Pass them
-# explicitly via --vars.  Note: utci is produced automatically when
-# wbgt runs; submitting utci as a standalone job will cause a file
-# conflict. Use --vars wbgt to get both.
 
-DEFAULT_CORE_VARS="fx,clt,evspsbl,hurs,huss,pr,ps,psl,rlds,rsds,sfcWind,tas,tasmax,tasmin,uas,vas"
-DEFAULT_HYDATM_VARS="cape,cin,prw,fzra,wchill,heatidx,humidex,\
-mrro,mrros,mrso,snw,snd,\
-rsus,rlus,hfls,hfss,snm,\
+DEFAULT_VARS="fx,tasmin,tasmax,pr,tas,\
+hurs,huss,ps,psl,rsds,sfcWind,uas,vas,\
+cape,cin,prw,fzra,wchill,heatidx,humidex,\
+evspsbl,mrro,mrros,mrso,snw,snd,snm\
+clt,hfls,hfss,rlds,rlus,rsus,\
 ua50m,va50m,ua100m,va100m,ua150m,va150m,\
-ta700,ta500,ta250,ua700,ua500,ua250,va700,va500,va250,\
-zg700,zg500,zg250,hus700,hus500,hus250"
-DEFAULT_VARS="${DEFAULT_CORE_VARS},${DEFAULT_HYDATM_VARS}"
-
-HYDATM_VARS="cape cin prw fzra wchill heatidx wbgt utci humidex
-mrro mrros mrso snw snd
-rsus rlus hfls hfss snm
-ua50m va50m ua100m va100m ua150m va150m
-ta700 ta500 ta250 ua700 ua500 ua250 va700 va500 va250
-zg700 zg500 zg250 hus700 hus500 hus250"
-
-script_for_var() {
-    local v="$1"
-    local hv
-    for hv in $HYDATM_VARS; do
-        [[ "$v" == "$hv" ]] && { echo "postprocess.hyd-atm.variables.py"; return; }
-    done
-    echo "postprocess.core.variables.py"
-}
+ua700,ua500,ua250,va700,va500,va250,\
+hus700,hus500,hus250,ta700,ta500,ta250,zg700,zg500,zg250"
 
 usage() {
     cat >&2 <<EOF
-Usage: $(basename "$0") [OPTIONS] WRFDIR OUTDIR YEARS [CMDDIR]
+Usage: $(basename "$0") [OPTIONS] WRFDIR SETUPDIR OUTDIR YEARS [CMDDIR]
 
 Generate commandfiles for extracting CMORized variables from WRF output.
 
 Arguments:
   WRFDIR    Top-level directory containing *_chunk/ simulation directories
+  SETUPDIR  Directory containing sim.env (produced by setup.py)
   OUTDIR    Output directory (variable subdirectories created here)
   YEARS     Year or year range (e.g., 1980 or 1980-2020, inclusive)
   CMDDIR    Directory for commandfiles (default: current directory)
 
 Options:
   --vars VAR[,VAR,...]  Comma-separated list of variables to process
-                        (default: all supported variables except wbgt;
-                         wbgt requires the thermofeel package)
+                        (default: all supported variables except wbgt/utci/
+                         humidex, which require the thermofeel package)
   --scripts PATH        Directory containing the postprocess scripts
                         (default: directory containing extract.sh)
   --force               Overwrite existing output (default: skip variables
@@ -100,15 +84,19 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-[[ $# -lt 3 ]] && usage
+[[ $# -lt 4 ]] && usage
 
 WRFDIR="$(realpath "$1")"
-mkdir -p $2
-OUTDIR="$(realpath "$2")"
-YEARS_ARG="$3"
-CMDDIR="${4:-.}"
-mkdir -p $CMDDIR
+mkdir -p "$2"
+SETUPDIR="$(realpath "$2")"
+mkdir -p "$3"
+OUTDIR="$(realpath "$3")"
+YEARS_ARG="$4"
+CMDDIR="${5:-.}"
+mkdir -p "$CMDDIR"
 CMDDIR="$(realpath "$CMDDIR")"
+
+SIM_ENV="$SETUPDIR/sim.env"
 
 # Parse year range
 if [[ "$YEARS_ARG" =~ ^([0-9]{4})-([0-9]{4})$ ]]; then
@@ -129,8 +117,9 @@ fi
 
 # Validate inputs
 [[ ! -d "$WRFDIR" ]] && { echo "Error: WRFDIR not found: $WRFDIR" >&2; exit 1; }
+[[ ! -f "$SIM_ENV" ]] && { echo "Error: sim.env not found: $SIM_ENV" >&2; exit 1; }
 
-for s in postprocess.core.variables.py postprocess.hyd-atm.variables.py; do
+for s in postprocess.machinery.py postprocess.fx.py; do
     [[ ! -f "$SCRIPTS_DIR/$s" ]] && {
         echo "Error: $s not found in $SCRIPTS_DIR" >&2
         exit 1
@@ -152,13 +141,8 @@ for (( year = START_YEAR; year <= END_YEAR; year++ )); do
     fi
 done
 
-mkdir -p "$OUTDIR" "$CMDDIR"
-
 # Split comma-separated var list into an array
 IFS=',' read -ra VARLIST <<< "$VARS"
-
-# Get the chunk path for the first year (used for fx)
-FIRST_CHUNK="$WRFDIR/$(chunk_dir_for_year "$START_YEAR")"
 
 # Generate one commandfile per variable
 generated_cmds=()
@@ -182,20 +166,17 @@ for var in "${VARLIST[@]}"; do
             continue
         fi
     fi
-    
+
     cmdfile="$CMDDIR/${var}.cmd"
     > "$cmdfile"
 
-    script="$(script_for_var "$var")"
-
     if [[ "$var" == "fx" ]]; then
-        # fx variables are time-invariant; generate a single command using
-        # the first year's chunk directory.  fx is always handled by core.
-        echo "python ./postprocess.core.variables.py $FIRST_CHUNK $START_YEAR fx $OUTDIR" >> "$cmdfile"
+        # fx variables are time-invariant; a single command suffices.
+        echo "python ./postprocess.fx.py $SIM_ENV $OUTDIR" >> "$cmdfile"
     else
         for (( year = START_YEAR; year <= END_YEAR; year++ )); do
             chunk="$WRFDIR/$(chunk_dir_for_year "$year")"
-            echo "python ./$script $chunk $year $var $OUTDIR" >> "$cmdfile"
+            echo "python ./postprocess.machinery.py $SIM_ENV $chunk $year $var $OUTDIR" >> "$cmdfile"
         done
     fi
 

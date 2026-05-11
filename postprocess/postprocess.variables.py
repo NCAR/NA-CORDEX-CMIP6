@@ -2,268 +2,287 @@
 
 # Purpose:
 # --------
-# This script extracts data for a single variable for 1 year from
-# daily WRF output files.  It handles unit conversion and variable
-# derivation (e.g. wind rotation, precipitation de-accumulation), but
-# further formatting and standards compliance (e.g. adding coordinates
-# and metadata) are handled downstream by cmorize.sh.
+# Extract function definitions for all NA-CORDEX-CMIP6 postprocessing
+# variables.  Each function receives a loaded dataset (ds) and a pre-built
+# time coordinate (time_dim), and returns a list of
+# (var, cmor_freq, dataset) tuples for write_vars.
+#
+# This file contains only function definitions.  All shared state
+# (ds_fx, dname_map_xy, wrfout_* filenames, etc.), dispatch tables,
+# and execution logic live in postprocess.machinery.py, which imports
+# this file and calls the functions.
 #
 # Variable metadata specifications are taken from:
 # https://github.com/WCRP-CORDEX/cordex-cmip6-cmor-tables
 
-# USAGE NOTES:
-# -----
 
-# 1. This script processes a single year of data for one variable,
-#    specified via commandline arguments.
+# Near-Surface Air Temperature
+# ---------------------------------------------------
+def extract_tas(ds, time_dim):
+    # T2 units : K
+    # T2 description : 2-meter temperature
 
-# argument 1 : Path to wrfoutput files (chunk directory)
-# argument 2 : Year (int)
-# argument 3 : Variable (CMORized var name)
-# argument 4 : Output directory (where variable subdirs are created)
+    tas = ds['T2']
+    tas['time'] = time_dim
 
-# 2. It creates variable subdirectories under OUTDIR (argument 4) and
-#    writes post-processed output there.  It does not change the
-#    working directory; all paths are handled explicitly.
+    tas = tas.to_dataset(name='tas').drop_attrs()
+    return [('tas', '1hr', tas)]
+# ---------------------------------------------------
 
-# 3. It is designed for command-file parallelism via launch_cf on
-#    Casper HPC at NCAR.  It requires both NCO and CDO; when running
-#    in parallel, they need to be made available via `module load`
-#    commands in config_env.sh
+# Daily maximum near-surface air temperature
+# ---------------------------------------------------
+def extract_tasmax(ds, time_dim):
+    # T2 units : K
+    # T2 description : 2-meter temperature
 
-# 4. 12-km WRF output is very large; be sure to request sufficient memory
-#    (~100GB)
+    tas = ds['T2']
+    tas['time'] = time_dim
 
-# Example execution:
-# ------------------------------------------------
-# $ python postprocess.hyd-atm.variables.py {wrfout_path} 1980 mrro {outdir}
-# ------------------------------------------------
+    tasmax = tas.groupby('time.dayofyear').max()
+    tasmax = tasmax.rename({'dayofyear': 'time'})
+    tasmax['time'] = _build_time_dim(year, 24)
 
-from collections import defaultdict
-import xarray as xr
-from xarray import ufuncs
-import numpy as np
-import glob
-import sys
-import os
-import time
-import resource
-import warnings
+    tasmax = tasmax.to_dataset(name='tasmax').drop_attrs()
+    return [('tasmax', 'day', tasmax)]
+# ---------------------------------------------------
 
-t0 = time.perf_counter()
+# Daily minimum near-surface air temperature
+# ---------------------------------------------------
+def extract_tasmin(ds, time_dim):
+    # T2 units : K
+    # T2 description : 2-meter temperature
 
-# -----------------
-# keyword arguments
+    tas = ds['T2']
+    tas['time'] = time_dim
 
-wrfout_path = sys.argv[1]  # path to wrf output
-year        = sys.argv[2]  # year
-variable    = sys.argv[3]  # variable (cmorized syntax)
-outdir      = sys.argv[4]  # output directory (variable subdirs created here)
+    tasmin = tas.groupby('time.dayofyear').min()
+    tasmin = tasmin.rename({'dayofyear': 'time'})
+    tasmin['time'] = _build_time_dim(year, 24)
 
-os.makedirs(outdir, exist_ok=True)
+    tasmin = tasmin.to_dataset(name='tasmin').drop_attrs()
+    return [('tasmin', 'day', tasmin)]
+# ---------------------------------------------------
 
-# -------------------------------
-# START OF USER DEFINED VARIABLES
-# -------------------------------
+# Hourly precipitation accumulation
+# ---------------------------------------------------
+def extract_pr(ds, time_dim):
+    # I_RAINC units : mm
+    # I_RAINC description: integer bucket variable for convective precipitation (tips at 100 mm)
+    # I_RAINNC units : mm
+    # I_RAINNC description: integer bucket variable for non-convective precipitation (tips at 100 mm)
+    # RAINC units : mm
+    # RAINC description : accumulated convective precipitation
+    # RAINNC units : mm
+    # RAINNC description : accumulated non-convective precipitation
 
-# Setting to True will overwrite all post-processed data: careful!
-do_overwrite_existing = True
+    da = ds[['I_RAINC', 'I_RAINNC', 'RAINC', 'RAINNC']]
 
-# The fixed / static variables orog & sftlf come from variables in a
-# WRF input file (HGT and LANDMASK in wrfinput_d01) rather than from
-# an output file; wrfinput_path is the authoritative source for these
-# input files for the NA-CORDEX simulations.
-wrfinput_path = "/glade/derecho/scratch/jsallen/NA-CORDEX-CMIP6/ERA5_HIST_E03/input_example/"
+    #  / 3600 : mm/hour --> mm/sec == kg s-1 m-2
+    tp = ( ((da['I_RAINC']*100.) + da['RAINC']) +
+           ((da['I_RAINNC']*100.) + da['RAINNC']) ) / 3600
+    pr = tp.diff(dim='time')
+    pr = pr.assign_coords(time=time_dim)
+    #pr['time'] = time_dim
 
-# filename prefixes for the different types of wrfout files
-wrfout_fx_fname   = "wrfout_5day_d01_"  # files that contain fixed vars
-wrfout_hour_fname = "wrfout_hour_d01_"  # hourly outputs
-wrfout_6hr_fname  = "wrfout_d01_"       # 6-hourly outputs
-wrfout_afwa_fname = "wrfout_afwa_d01_"  # AFWA diagnostics
-wrfout_pres_fname = "wrfout_pres_d01_"  # pressure-level outputs
-wrfout_zlev_fname = "wrfout_zlev_d01_"  # height-AGL outputs
+    pr = pr.to_dataset(name='pr').drop_attrs()
+    return [('pr', '1hr', pr)]
+# ---------------------------------------------------
 
-# Calendar and epoch are simulation-specific; both will eventually be read
-# from sim_config (future consolidation step).
-_cal   = 'standard'
-_epoch = '1950-01-01 00:00:00'
+# Evaporation including sublimation and transpiration
+# ---------------------------------------------------
+def extract_evspsbl(ds, time_dim):
+    # EDIR units : mm/s
+    # EDIR description : ground surface evaporation rate
+    # ETRAN units : mm/s
+    # ETRAN description : transpiration rate
 
-# -------------------------------
-# END OF USER DEFINED VARIABLES
-# -------------------------------
+    evspsbl = (ds['EDIR'] + ds['ETRAN'])
+    evspsbl['time'] = time_dim
 
-# Dimension renaming (specified by CORDEX)
-dname_map_t   = {'Time': 'time'}
-dname_map_xy  = {'west_east': 'x', 'south_north': 'y'}
-dname_map_xyt = dname_map_t | dname_map_xy
+    evspsbl = evspsbl.to_dataset(name='evspsbl').drop_attrs()
+    return [('evspsbl', '1hr', evspsbl)]
+# ---------------------------------------------------
 
-# 'rd1' chunking pattern (applied before dimension renaming)
-_CHUNKS = {'Time': 1, 'south_north': 337, 'west_east': 354}
+# Near surface specific humidity
+# ---------------------------------------------------
+def extract_huss(ds, time_dim):
+    # Q2 units: kg kg-1
+    # Q2 description: mixing ratio (QV) at 2 M
 
+    q2   = ds['Q2']
+    huss = (q2 / (1 + q2))  # mixing ratio -> specific humidity
+    huss['time'] = time_dim
 
-# File naming
-# -----------
-# See CORDEX-CMIP6 archiving specifications for file naming conventions.
+    huss = huss.to_dataset(name='huss').drop_attrs()
+    return [('huss', '1hr', huss)]
+# ---------------------------------------------------
 
-dom_id = 'NAM-12'       # domain_id: name assigned to cordex region
-drs_id = 'ERA5'         # driving_source_id: ID of driving GCM / reanalysis
-dre_id = 'evaluation'   # driving_experiment_id: "evaluation" for ERA5
-drv_id = 'r1i1p1f1'     # driving_variant_label: CMIP6 variant id (rxixpxfx)
-org_id = 'NCAR'         # institution_id
-src_id = 'WRF461S-SN'   # source_id: CORDEX RCM ID
-ver_id = 'v1-r1'        # v: version, r: RCM ensemble number
+# Near surface relative humidity
+# ---------------------------------------------------
+def extract_hurs(ds, time_dim):
+    # Q2 units: kg kg-1
+    # Q2 description: mixing ratio (QV) at 2 M
+    # T2 units: K
+    # T2 description: 2-meter temperature
+    # PSFC units: Pa
+    # PSFC description: Surface pressure
 
-# Base filename string (without leading var and trailing freq/timespan)
-fname_base = f'{dom_id}_{drs_id}_{dre_id}_{drv_id}_{org_id}_{src_id}_{ver_id}'
+    # https://glossary.ametsoc.org/wiki/Latent_heat
+    # Physical constants - Clausius-Clapeyron
+    epsilon = 0.622      # Molecular weight ratio of water/dry air
+    Lv = 2.5e6           # Latent heat of vaporization (J/kg)
+    Rv = 461.5           # Gas constant for water vapor (J/kg/K)
+    T0 = 273.15          # Reference temperature (K)
+    e0 = 611.2           # Reference saturation vapor pressure (Pa)
 
-def make_fname(var, cmor_freq):
-    """Construct the output filename for a variable at a given frequency.
-    For fx variables, appends .nc directly (no timespan component).
-    For all others, returns a complete filename with timespan."""
-    if cmor_freq == 'fx':
-        return f'{var}_{fname_base}_fx.nc'
-    elif cmor_freq == '1hr':
-        return f'{var}_{fname_base}_1hr_{year}010100-{year}123123.nc'
-    elif cmor_freq == '6hr':
-        return f'{var}_{fname_base}_6hr_{year}010100-{year}123118.nc'
-    elif cmor_freq == 'day':
-        return f'{var}_{fname_base}_day_{year}0101-{year}1231.nc'
-    elif cmor_freq == 'mon':
-        return f'{var}_{fname_base}_mon_{year}01-{year}12.nc'
+    # Actual vapor pressure from mixing ratio:
+    # e = r*P / (epsilon + r)
+    e = (ds['Q2'] * ds['PSFC']) / (epsilon + ds['Q2'])
 
+    # Saturation vapor pressure via Clausius-Clapeyron:
+    # e_s(T) = e0 * exp[(Lv/Rv)(1/T0 - 1/T)]
+    e_s = e0 * ufuncs.exp( (Lv/Rv) * ((1/T0) - (1 / ds['T2'])) )
 
-# Time coordinate construction
-# ----------------------------
+    hurs = (e / e_s) * 100
 
-# Calendar (_cal) is defined above in the user-defined variables
-# section.  Eventually it will come from sim_config.
+    # Sometimes model outputs result in values < 0 or > 100. hurs < 0
+    # is invalid; hurs > 100 is sometimes valid (supersaturation
+    # conditions at very low temperature), but nobody wants it, so clip.
+    hurs = hurs.clip(min=0, max=100)
+    hurs['time'] = time_dim
 
-def _build_time_dim(yr, freq_hours):
-    """CFTimeIndex at freq_hours intervals for yr."""
-    return xr.date_range(start=f'{yr}-01-01',
-                         end=f'{int(yr)+1}-01-01',
-                         freq=f'{freq_hours}h',
-                         inclusive='left',
-                         unit='s',
-                         calendar=_cal,
-                         use_cftime=True,
-                         )
+    hurs = hurs.to_dataset(name='hurs').drop_attrs()
+    return [('hurs', '1hr', hurs)]
+# ---------------------------------------------------
 
+# Surface pressure
+# ---------------------------------------------------
+def extract_ps(ds, time_dim):
+    # PSFC units: Pa
+    # PSFC description: Surface pressure
 
-# File loading
-# ------------
-# load_wrf is called at the dispatch site using parameters from _LOADER.
-# The day-before file is prepended for accumulated variables so that the
-# first diff gives the correct first-interval value.
-#
-# _day_before_file assumes Dec 31 exists in the prior year (which it
-# does in standard and no-leap calendars as represented by WRF).
+    ps = ds['PSFC']
+    ps['time'] = time_dim
 
-def _day_before_file(prefix, yr):
-    """Return list containing the Dec 31 file of the prior year for prefix."""
-    matches = sorted(glob.glob(f'{wrfout_path}/{prefix}{int(yr)-1}-12-31*'))
-    if not matches:
-        raise FileNotFoundError(
-            f'Day-before file not found for year {yr} '
-            f'(pattern: {wrfout_path}/{prefix}{int(yr)-1}-12-31*)')
-    return matches
+    ps = ps.to_dataset(name='ps').drop_attrs()
+    return [('ps', '1hr', ps)]
+# ---------------------------------------------------
 
-def load_wrf(prefix, yr, accumulated=False):
-    """Load WRF output files for the given year into a dataset.
+# Mean sea level pressure
+# ---------------------------------------------------
+def extract_psl(ds, time_dim):
+    # AFWA_MSLP units: Pa
+    # AFWA_MSLP description: Mean sea level pressure
 
-    Globs for files matching prefix+yr, sorts lexically, and prepends
-    the last timestep of the day-before file when accumulated=True.
-    Renames WRF dimensions to CORDEX conventions. """
-    files = sorted(glob.glob(f'{wrfout_path}/{prefix}{yr}-*'))
-    if not files:
-        raise FileNotFoundError(
-            f'No WRF files found for year {yr} '
-            f'(pattern: {wrfout_path}/{prefix}{yr}-*)')
+    psl = ds['AFWA_MSLP']
+    psl['time'] = time_dim
 
-    with warnings.catch_warnings():
-        warnings.filterwarnings('ignore', message='.*separate the stored chunks.*')
-        ds = xr.open_mfdataset(files,
-                               concat_dim='Time',
-                               combine='nested',
-                               chunks=_CHUNKS,
-                               mask_and_scale=False,
-                               decode_times=False,
-                               decode_coords=False,
-                               ).fillna(1.e20)
-        if accumulated:
-            prev_file = _day_before_file(prefix, yr)
-            prev_ds = xr.open_mfdataset(prev_file,
-                                        concat_dim='Time',
-                                        combine='nested',
-                                        chunks=_CHUNKS,
-                                        mask_and_scale=False,
-                                        decode_times=False,
-                                        decode_coords=False,
-                                        ).isel(Time=[-1]).fillna(1.e20)
-            # NB: list index [-1] prevents loss of time dim, which
-            # leads to unwanted dimension reordering on concatenation
-            ds = xr.concat([prev_ds, ds], dim='Time')
+    psl = psl.to_dataset(name='psl').drop_attrs()
+    return [('psl', '1hr', psl)]
+# ---------------------------------------------------
 
-    return ds.rename(dname_map_xyt)
+# Near-surface wind components and speed
+# ---------------------------------------------------
+# ds_fx is a module-level variable (loaded at startup by machinery).
+def _wind_components(ds):
+    """Shared helper: rotate U10/V10 to earth-relative coordinates.
+    Returns (uas, vas) as DataArrays."""
+    # U10/V10 units: m s-1
+    # U10/V10 description: U/V at 10 M
+    # Note: U10/V10 are diagnostic and on mass grid; no unstagger needed
 
-# # debugging function
-# def diagnose(d, tag):
-#     with warnings.catch_warnings():
-#         warnings.filterwarnings('ignore', category=FutureWarning)
-#         print(tag)
-#         print(d.sizes)
-#         print(d)
-#         print("------------------------")
+    da = ds[['U10', 'V10']]
 
+    cosa = ds_fx['COSALPHA'].mean(dim='Time').rename(dname_map_xy)
+    sina = ds_fx['SINALPHA'].mean(dim='Time').rename(dname_map_xy)
 
-# fx dataset: loaded once at startup since multiple clean functions use it
-fx_glob = f'{wrfout_path}/{wrfout_fx_fname}{year}*'
-if not (fx_matches := glob.glob(fx_glob)):
-    raise FileNotFoundError(f'No fx files found matching: {fx_glob}')
-ds_fx = xr.open_dataset(fx_matches[0])
+    # Rotate winds to earth relative (lat/lon) coordinates.
+    # NOTE: signs on sinalpha are correct as written; some sources
+    # have them reversed. Reference:
+    # https://www-k12.atmos.washington.edu/~ovens/wrfwinds.html
+    uas = (da['U10'] * cosa) - (da['V10'] * sina)
+    vas = (da['V10'] * cosa) + (da['U10'] * sina)
+    return uas, vas
 
+def extract_sfcWind(ds, time_dim):
+    uas, vas = _wind_components(ds)
+    sfcWind = xr.ufuncs.sqrt(uas**2 + vas**2)
+    sfcWind['time'] = time_dim
 
-# Output existence check
-# ----------------------
-def _output_needed(var, fout):
-    if os.path.exists(os.path.join(outdir, var, fout)) and not do_overwrite_existing:
-        print(f'{var}/{fout} EXISTS : Skipping')
-        return False
-    return True
+    sfcWind = sfcWind.to_dataset(name='sfcWind').drop_attrs()
+    return [('sfcWind', '1hr', sfcWind)]
 
+def extract_uas(ds, time_dim):
+    uas, _ = _wind_components(ds)
+    uas['time'] = time_dim
 
-# Write extracted variables
-# -------------------------
-# Writes raw extracted data to outdir/var/fname.nc.
-def write_vars(var_da_list):
-    for var, cmor_freq, da in var_da_list:
-        fout = make_fname(var, cmor_freq)
-        if not _output_needed(var, fout):
-            continue
+    uas = uas.to_dataset(name='uas').drop_attrs()
+    return [('uas', '1hr', uas)]
 
-        vardir = os.path.join(outdir, var)
-        os.makedirs(vardir, exist_ok=True)
-        outpath = os.path.join(vardir, fout)
+def extract_vas(ds, time_dim):
+    _, vas = _wind_components(ds)
+    vas['time'] = time_dim
 
-        da.astype(np.float32).to_netcdf(outpath)
+    vas = vas.to_dataset(name='vas').drop_attrs()
+    return [('vas', '1hr', vas)]
+# ---------------------------------------------------
 
-        print(f'postproc time: {time.perf_counter() - t0:.1f} sec')
-        mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-        print(f'postproc max memory: {mem / (1024*1024):.1f} GB')
+# Surface downwelling shortwave radiation
+# ---------------------------------------------------
+def extract_rsds(ds, time_dim):
+    # ACSWDNB/I_ACSWDNB units: J m-2
+    # ACSWDNB/I_ACSWDNB description: Accumulated downwelling shortwave flux at bottom
 
+    da = ds[['ACSWDNB', 'I_ACSWDNB']]
 
-# Clean functions
-# ---------------
-# Each receives a loaded dataset (ds) and a pre-built time coordinate
-# (time_dim), amd returns a list of (var, cmor_freq, dataset) tuples
-# for write_vars.
-#
-# wbgt, utci, and humidex are exceptions: they load one file at a time
-# for memory reasons and are called directly without ds or time_dim.
+    # accumulate J/hour/m-2 to W/m2
+    acc_rsds = ( (da['I_ACSWDNB'] * 1e9) + da['ACSWDNB'] ) / 3600
+    rsds = acc_rsds.diff(dim='time')
+    rsds = rsds.assign_coords(time=time_dim)
+    #rsds['time'] = time_dim
+
+    rsds = rsds.to_dataset(name='rsds').drop_attrs()
+    return [('rsds', '1hr', rsds)]
+# ---------------------------------------------------
+
+# Surface downwelling longwave radiation
+# ---------------------------------------------------
+def extract_rlds(ds, time_dim):
+    # ACLWDNB/I_ACLWDNB units: J m-2
+    # ACLWDNB/I_ACLWDNB description: Accumulated downwelling longwave flux at bottom
+
+    da = ds[['ACLWDNB', 'I_ACLWDNB']]
+
+    # accumulate J/hour/m-2 to W/m2
+    acc_rlds = ( (da['I_ACLWDNB'] * 1e9) + da['ACLWDNB'] ) / 3600
+    rlds = acc_rlds.diff(dim='time')
+    rlds = rlds.assign_coords(time=time_dim)
+    #rlds['time'] = time_dim
+
+    rlds = rlds.to_dataset(name='rlds').drop_attrs()
+    return [('rlds', '1hr', rlds)]
+# ---------------------------------------------------
+
+# Total cloud cover percentage
+# ---------------------------------------------------
+def extract_clt(ds, time_dim):
+    # CLDFRAC2D units: %
+    # CLDFRAC2D description: 2-D max cloud fraction
+
+    clt = (ds['CLDFRAC2D'] * 100)
+    clt['time'] = time_dim
+
+    # CLDFRAC2D is all-zero on the step after a restart; replace with missing
+    zero_timestep = (clt == 0).all(dim=['x', 'y'])
+    clt = clt.where(~zero_timestep).fillna(1.e20)
+
+    clt = clt.to_dataset(name='clt').drop_attrs()
+    return [('clt', '1hr', clt)]
+# ---------------------------------------------------
 
 # Snow water equivalent - surface snow amount
 # ---------------------------------------------------
-def clean_snw(ds, time_dim):
+def extract_snw(ds, time_dim):
     # SNOW units : kg m-2
     # SNOW description : SNOW WATER EQUIVALENT
 
@@ -277,7 +296,7 @@ def clean_snw(ds, time_dim):
 
 # Snow depth
 # ---------------------------------------------------
-def clean_snd(ds, time_dim):
+def extract_snd(ds, time_dim):
     # SNOWH units : m
     # SNOWH description : PHYSICAL SNOW DEPTH
 
@@ -290,7 +309,7 @@ def clean_snd(ds, time_dim):
 
 # Total soil moisture content
 # ---------------------------------------------------
-def clean_mrso(ds, time_dim):
+def extract_mrso(ds, time_dim):
     # SMOIS units: m3 m-3 (volumetric)
     # SMOIS description: SOIL MOISTURE
     # Noah-MP soil layer thicknesses (m): 0.10, 0.30, 0.60, 1.00
@@ -314,7 +333,7 @@ def clean_mrso(ds, time_dim):
 
 # Surface runoff
 # ---------------------------------------------------
-def clean_mrros(ds, time_dim):
+def extract_mrros(ds, time_dim):
     # SFROFF units : mm (accumulated)
     # SFROFF description : SURFACE RUNOFF
 
@@ -335,7 +354,7 @@ def clean_mrros(ds, time_dim):
 
 # Total runoff
 # ---------------------------------------------------
-def clean_mrro(ds, time_dim):
+def extract_mrro(ds, time_dim):
     # SFROFF units : mm (accumulated)
     # SFROFF description : SURFACE RUNOFF
     # UDROFF units : mm (accumulated)
@@ -355,7 +374,7 @@ def clean_mrro(ds, time_dim):
 
 # Surface upwelling shortwave radiation
 # ---------------------------------------------------
-def clean_rsus(ds, time_dim):
+def extract_rsus(ds, time_dim):
     # SWUPB units : W m-2
     # SWUPB description : INSTANTANEOUS UPWELLING SHORTWAVE FLUX AT BOTTOM
 
@@ -368,7 +387,7 @@ def clean_rsus(ds, time_dim):
 
 # Surface upwelling longwave radiation
 # ---------------------------------------------------
-def clean_rlus(ds, time_dim):
+def extract_rlus(ds, time_dim):
     # LWUPB units : W m-2
     # LWUPB description : INSTANTANEOUS UPWELLING LONGWAVE FLUX AT BOTTOM
 
@@ -381,7 +400,7 @@ def clean_rlus(ds, time_dim):
 
 # Surface upward latent heat flux
 # ---------------------------------------------------
-def clean_hfls(ds, time_dim):
+def extract_hfls(ds, time_dim):
     # LH units : W m-2
     # LH description : LATENT HEAT FLUX AT THE SURFACE
 
@@ -394,7 +413,7 @@ def clean_hfls(ds, time_dim):
 
 # Surface upward sensible heat flux
 # ---------------------------------------------------
-def clean_hfss(ds, time_dim):
+def extract_hfss(ds, time_dim):
     # HFX units : W m-2
     # HFX description : UPWARD HEAT FLUX AT THE SURFACE
 
@@ -407,7 +426,7 @@ def clean_hfss(ds, time_dim):
 
 # Surface snow melt
 # ---------------------------------------------------
-def clean_snm(ds, time_dim):
+def extract_snm(ds, time_dim):
     # ACSNOM units : kg m-2 (accumulated)
     # ACSNOM description : ACCUMULATED MELTED SNOW
 
@@ -433,32 +452,32 @@ _PRESS_LEVELS_PA = [100000, 92500, 85000, 75000, 70000, 60000, 50000,
 # Map level in hPa to dimension index
 _PLEV_INDEX = {lev // 100: i for i, lev in enumerate(_PRESS_LEVELS_PA)}
 
-# function factory for cleaning generic pressure-level variables
-def _make_pres_clean(outvar, wrf_var, level_hPa):
+# function factory for extracting generic pressure-level variables
+def _make_pres_extract(outvar, wrf_var, level_hPa):
     idx = _PLEV_INDEX[level_hPa]
-    def clean(ds, time_dim):
+    def extract(ds, time_dim):
         da = ds[wrf_var].isel(num_press_levels_stag=idx)
         da['time'] = time_dim
 
         da = da.to_dataset(name=outvar).drop_attrs()
         return [(outvar, '6hr', da)]
-    return clean
+    return extract
 
-# generate clean functions for zg & ta vars
+# generate extract functions for zg & ta vars
 for _var, _wrf, _levels in [
     ('ta',  'T_PL',   [700, 500, 250]),
     ('zg',  'GHT_PL', [700, 500, 250]),
 ]:
     for _lev in _levels:
         _name = f'{_var}{_lev}'
-        globals()[f'clean_{_name}'] = _make_pres_clean(_name, _wrf, _lev)
+        globals()[f'extract_{_name}'] = _make_pres_extract(_name, _wrf, _lev)
 
 
-# function factory for cleaning pressure-level winds
-def _make_pres_wind_clean(outvar, level_hPa, component):
+# function factory for extracting pressure-level winds
+def _make_pres_wind_extract(outvar, level_hPa, component):
     """component: 'u' or 'v'"""
     idx = _PLEV_INDEX[level_hPa]
-    def clean(ds, time_dim):
+    def extract(ds, time_dim):
         u = ds['U_PL'].isel(num_press_levels_stag=idx)
         v = ds['V_PL'].isel(num_press_levels_stag=idx)
 
@@ -473,18 +492,18 @@ def _make_pres_wind_clean(outvar, level_hPa, component):
 
         rotated = rotated.to_dataset(name=outvar).drop_attrs()
         return [(outvar, '6hr', rotated)]
-    return clean
+    return extract
 
-# generate clean functions for ua & va vars
+# generate extract functions for ua & va vars
 for _comp in ['ua', 'va']:
     for _lev in [700, 500, 250]:
         _name = f'{_comp}{_lev}'
-        globals()[f'clean_{_name}'] = _make_pres_wind_clean(_name, _lev, _comp[0])
+        globals()[f'extract_{_name}'] = _make_pres_wind_extract(_name, _lev, _comp[0])
 
-# function factory for cleaning specific humidity
-def _make_pres_hus_clean(outvar, level_hPa):
+# function factory for extracting specific humidity at pressure levels
+def _make_pres_hus_extract(outvar, level_hPa):
     idx = _PLEV_INDEX[level_hPa]
-    def clean(ds, time_dim):
+    def extract(ds, time_dim):
         q = ds['Q_PL'].isel(num_press_levels_stag=idx)
         # Convert mixing ratio (kg/kg) to specific humidity: hus = q / (1 + q)
         hus = (q / (1 + q))
@@ -492,12 +511,12 @@ def _make_pres_hus_clean(outvar, level_hPa):
 
         hus = hus.to_dataset(name=outvar).drop_attrs()
         return [(outvar, '6hr', hus)]
-    return clean
+    return extract
 
-# generate clean functions for hus vars
+# generate extract functions for hus vars
 for _lev in [700, 500, 250]:
     _name = f'hus{_lev}'
-    globals()[f'clean_{_name}'] = _make_pres_hus_clean(_name, _lev)
+    globals()[f'extract_{_name}'] = _make_pres_hus_extract(_name, _lev)
 
 # ---------------------------------------------------
 
@@ -507,10 +526,10 @@ for _lev in [700, 500, 250]:
 _Z_LEVELS_M = [50, 100, 150]
 _ZLEV_INDEX = {lev: i for i, lev in enumerate(_Z_LEVELS_M)}
 
-def _make_zlev_wind_clean(outvar, level_m, component):
+def _make_zlev_wind_extract(outvar, level_m, component):
     """component: 'u' or 'v'"""
     idx = _ZLEV_INDEX[level_m]
-    def clean(ds, time_dim):
+    def extract(ds, time_dim):
         u = ds['U_ZL'].isel(num_z_levels_stag=idx)
         v = ds['V_ZL'].isel(num_z_levels_stag=idx)
 
@@ -525,19 +544,19 @@ def _make_zlev_wind_clean(outvar, level_m, component):
 
         rotated = rotated.to_dataset(name=outvar).drop_attrs()
         return [(outvar, '6hr', rotated)]
-    return clean
+    return extract
 
 for _comp in ['ua', 'va']:
     for _lev in _Z_LEVELS_M:
         _name = f'{_comp}{_lev}m'
-        globals()[f'clean_{_name}'] = _make_zlev_wind_clean(_name, _lev, _comp[0])
+        globals()[f'extract_{_name}'] = _make_zlev_wind_extract(_name, _lev, _comp[0])
 
 # ---------------------------------------------------
 
 # AFWA diagnostic variables
 # ---------------------------------------------------
 
-def clean_cape(ds, time_dim):
+def extract_cape(ds, time_dim):
     # AFWA_CAPE units : J kg-1
     # AFWA_CAPE description : AFWA Diagnostic: Convective Avail Pot Energy
 
@@ -545,7 +564,7 @@ def clean_cape(ds, time_dim):
     cape['time'] = time_dim
     return [('cape', '1hr', cape)]
 
-def clean_cin(ds, time_dim):
+def extract_cin(ds, time_dim):
     # AFWA_CIN units : J kg-1
     # AFWA_CIN description : AFWA Diagnostic: Convective Inhibition
 
@@ -553,7 +572,7 @@ def clean_cin(ds, time_dim):
     cin['time'] = time_dim
     return [('cin', '1hr', cin)]
 
-def clean_prw(ds, time_dim):
+def extract_prw(ds, time_dim):
     # AFWA_PWAT units : kg m-2
     # AFWA_PWAT description : AFWA Diagnostic: Precipitable Water
 
@@ -561,19 +580,18 @@ def clean_prw(ds, time_dim):
     prw['time'] = time_dim
     return [('prw', '1hr', prw)]
 
-def clean_fzra(ds, time_dim):
+def extract_fzra(ds, time_dim):
     # AFWA_FZRA units : mm (accumulated)
     # AFWA_FZRA description : AFWA Diagnostic: Freezing rain fall
     # Convert to kg m-2 s-1 by differencing and dividing by 3600
 
     fzra = (ds['AFWA_FZRA'].diff(dim='time') / 3600.0)
-    fzra = fzra.assign_coords(time=time_dim) 
+    fzra = fzra.assign_coords(time=time_dim)
 
     fzra = fzra.to_dataset(name='fzra').drop_attrs()
-
     return [('fzra', '1hr', fzra)]
 
-def clean_heatidx(ds, time_dim):
+def extract_heatidx(ds, time_dim):
     # AFWA_HEATIDX units : K
     # AFWA_HEATIDX description : AFWA Diagnostic: Heat index
 
@@ -581,13 +599,13 @@ def clean_heatidx(ds, time_dim):
     heatidx['time'] = time_dim
     return [('heatidx', '1hr', heatidx)]
 
-def clean_wchill(ds, time_dim):
+def extract_wchill(ds, time_dim):
     # AFWA_WCHILL units : K
     # AFWA_WCHILL description : AFWA Diagnostic: Wind chill
+
     wchill = ds['AFWA_WCHILL'].to_dataset(name='wchill').drop_attrs()
     wchill['time'] = time_dim
     return [('wchill', '1hr', wchill)]
-
 
 # ---------------------------------------------------
 
@@ -601,8 +619,8 @@ def clean_wchill(ds, time_dim):
 #
 # Processes hourly files one day at a time to manage memory (11 input
 # variables at 12km hourly resolution), writing output incrementally to
-# NetCDF via netCDF4.  Both indices are computed together since they share
-# the expensive MRT calculation.
+# NetCDF via xarray append mode.  Both indices are computed together
+# since they share the expensive MRT calculation.
 #
 # These functions do not follow the standard (ds, time_dim) signature;
 # they are called directly from the dispatch site as special cases.
@@ -638,8 +656,6 @@ def _compute_wbgt_utci_arrays(ds):
     Returns (wbgt, utci) as float32 arrays. MRT is computed once and shared
     between both indices to avoid redundant radiation processing.
     """
-    import thermofeel as tf
-
     coszen = np.clip(ds['COSZEN'].values, 0.0, 1.0)
     SWDOWN = np.maximum(np.nan_to_num(ds['SWDOWN'].values, nan=0.0), 0.0)
     SWDDNI = np.maximum(np.nan_to_num(ds['SWDDNI'].values, nan=0.0), 0.0)
@@ -658,7 +674,7 @@ def _compute_wbgt_utci_arrays(ds):
     strd = GLW
     strr = GLW - LWUPB
 
-    mrt = tf.calculate_mean_radiant_temperature(
+    mrt = thermofeel.calculate_mean_radiant_temperature(
         ssrd=ssrd, ssr=ssr, dsrp=SWDDNI,
         strd=strd, fdir=fdir, strr=strr,
         cossza=coszen,
@@ -669,8 +685,8 @@ def _compute_wbgt_utci_arrays(ds):
     e_a = _vapor_pressure_from_q(Q2_safe, PSFC)
     tdew = _dew_point_from_vapor_pressure(e_a)
 
-    wbgt = tf.calculate_wbgt(t2_k=T2, mrt=mrt, va=wspd, td_k=tdew,)
-    utci = tf.calculate_utci(t2_k=T2, va=wspd, mrt=mrt, td_k=tdew,)
+    wbgt = thermofeel.calculate_wbgt(t2_k=T2, mrt=mrt, va=wspd, td_k=tdew,)
+    utci = thermofeel.calculate_utci(t2_k=T2, va=wspd, mrt=mrt, td_k=tdew,)
 
     ta_c  = T2 - 273.15
     mrt_c = mrt - 273.15
@@ -684,7 +700,7 @@ def _compute_wbgt_utci_arrays(ds):
     return wbgt.astype(np.float32), utci.astype(np.float32)
 
 
-def clean_wbgt_utci():
+def extract_wbgt_utci():
     """Compute WBGT and UTCI from hourly WRF output, one day at a time.
 
     Loads one file at a time to avoid accumulating a full year of arrays in
@@ -693,16 +709,12 @@ def clean_wbgt_utci():
 
     MRT is computed once per day and shared between both indices.
     """
-    import thermofeel as tf
-
     wbgt_fout = os.path.join(outdir, 'wbgt', make_fname('wbgt', '1hr'))
     utci_fout = os.path.join(outdir, 'utci', make_fname('utci', '1hr'))
     os.makedirs(os.path.join(outdir, 'wbgt'), exist_ok=True)
     os.makedirs(os.path.join(outdir, 'utci'), exist_ok=True)
 
     time_index = _build_time_dim(year, 1)
-#    time_units = f'hours since {_epoch}'
-#    time_vals  = cf.date2num(list(time_index), time_units, calendar=_cal)
 
     hr_files = sorted(glob.glob(f'{wrfout_path}/{wrfout_hour_fname}{year}-*'))
     if not hr_files:
@@ -711,16 +723,16 @@ def clean_wbgt_utci():
 
 #     t_written = 0
 #     wbgt_nc = utci_nc = None
-# 
+#
 #     try:
 #         for i, fpath in enumerate(hr_files):
 #             ds = xr.open_dataset(fpath, engine='netcdf4')
 #             ds = ds[_WBGT_WRF_VARS]
-# 
+#
 #             wbgt_day, utci_day = _compute_wbgt_utci_arrays(ds)
 #             nt_day = wbgt_day.shape[0]
 #             ds.close()
-# 
+#
 #             if i == 0:
 #                 ny, nx = wbgt_day.shape[1], wbgt_day.shape[2]
 #                 wbgt_nc = nc.Dataset(wbgt_fout, 'w', format='NETCDF4')
@@ -734,22 +746,22 @@ def clean_wbgt_utci():
 #                     t_var.calendar = _cal
 #                     ds_nc.createVariable(varname, 'f4', ('time', 'y', 'x'),
 #                                          fill_value=1.e20)
-# 
+#
 #             wbgt_nc['time'][t_written:t_written + nt_day] = time_vals[t_written:t_written + nt_day]
 #             wbgt_nc['wbgt'][t_written:t_written + nt_day] = wbgt_day
 #             utci_nc['time'][t_written:t_written + nt_day] = time_vals[t_written:t_written + nt_day]
 #             utci_nc['utci'][t_written:t_written + nt_day] = utci_day
 #             t_written += nt_day
-# 
+#
 #             if (i + 1) % 30 == 0:
 #                 wbgt_nc.sync()
 #                 utci_nc.sync()
 #                 print(f'  wbgt/utci: processed {i + 1}/{len(hr_files)} days')
-# 
+#
 #     finally:
 #         if wbgt_nc: wbgt_nc.close()
 #         if utci_nc: utci_nc.close()
-    
+
     for i, fpath in enumerate(hr_files):
         ds = xr.open_dataset(fpath, engine='netcdf4')
         ds = ds[_WBGT_WRF_VARS]
@@ -757,7 +769,7 @@ def clean_wbgt_utci():
         wbgt_day, utci_day = _compute_wbgt_utci_arrays(ds)
         ds.close()
 
-        day_times = time_index[i * 24 : (i + 1)* 24]
+        day_times = time_index[i * 24 : (i + 1) * 24]
         mode = 'w' if i == 0 else 'a'
 
         xr.DataArray(wbgt_day, dims=['time', 'y', 'x'],
@@ -770,9 +782,6 @@ def clean_wbgt_utci():
           .to_dataset(name='utci') \
           .to_netcdf(utci_fout, mode=mode, unlimited_dims=['time'])
 
-        #if (i + 1) % 30 == 0:
-        #    print(f'  wbgt/utci: processed {i + 1}/{len(hr_files)} days')
-
     print(f'  wbgt/utci: finished')
     print(f'postproc time: {time.perf_counter() - t0:.1f} sec')
     mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
@@ -783,7 +792,7 @@ def clean_wbgt_utci():
 
 # Humidex
 # ---------------------------------------------------
-def clean_humidex(ds, time_dim):
+def extract_humidex(ds, time_dim):
     # T2 units: K, Q2 units: kg/kg (mixing ratio), PSFC units: Pa
     # Humidex = T2 + 0.5555 * (e_hPa - 10.0)
     # where e_hPa is vapor pressure in hPa
@@ -794,102 +803,4 @@ def clean_humidex(ds, time_dim):
 
     humidex = humidex.to_dataset(name='humidex').drop_attrs()
     return [('humidex', '1hr', humidex)]
-
 # ---------------------------------------------------
-
-
-# Dispatch table
-# --------------
-# _CLEAN maps variable names to their clean function.
-# _LOADER maps variable names to (prefix, freq_hours, accumulated).
-# _OUTFREQ maps variable names to their output frequency (default '6hr').
-#
-# At the call site, load_wrf and _build_time_dim are called using _LOADER
-# parameters, then ds and time_dim are passed into clean_fn.
-#
-# wbgt and utci both resolve to the combined clean_wbgt_utci function and
-# are called directly as special cases (no ds or time_dim).  Submitting
-# utci as a standalone job would conflict with wbgt output; use --vars wbgt
-# to get both.
-
-_CLEAN = {var: globals()[f'clean_{var}']
-          for var in ['snw', 'snd', 'mrso', 'mrros', 'mrro',
-                      'rsus', 'rlus', 'hfls', 'hfss', 'snm',
-                      'ua700', 'ua500', 'ua250',
-                      'va700', 'va500', 'va250',
-                      'ta700', 'ta500', 'ta250',
-                      'zg700', 'zg500', 'zg250',
-                      'hus700', 'hus500', 'hus250',
-                      'ua50m', 'ua100m', 'ua150m',
-                      'va50m', 'va100m', 'va150m',
-                      'cape', 'cin', 'prw', 'fzra',
-                      'heatidx', 'wchill', 'humidex',
-                      ]}
-
-_CLEAN['wbgt']    = clean_wbgt_utci
-_CLEAN['utci']    = clean_wbgt_utci
-#_CLEAN['humidex'] = clean_humidex
-
-_OUTFREQ = defaultdict(lambda: '6hr',
-                       wbgt='1hr', utci='1hr', humidex='1hr',
-                       cape='1hr', cin='1hr', prw='1hr',
-                       fzra='1hr', heatidx='1hr', wchill='1hr',
-                       )
-
-# (prefix, freq_hours, accumulated)
-_LOADER = defaultdict(lambda: (wrfout_6hr_fname, 6, False), {
-    'mrro'   : (wrfout_6hr_fname,  6, True),
-    'mrros'  : (wrfout_6hr_fname,  6, True),
-    'snm'    : (wrfout_6hr_fname,  6, True),
-    'ua700'  : (wrfout_pres_fname, 6, False),
-    'ua500'  : (wrfout_pres_fname, 6, False),
-    'ua250'  : (wrfout_pres_fname, 6, False),
-    'va700'  : (wrfout_pres_fname, 6, False),
-    'va500'  : (wrfout_pres_fname, 6, False),
-    'va250'  : (wrfout_pres_fname, 6, False),
-    'ta700'  : (wrfout_pres_fname, 6, False),
-    'ta500'  : (wrfout_pres_fname, 6, False),
-    'ta250'  : (wrfout_pres_fname, 6, False),
-    'zg700'  : (wrfout_pres_fname, 6, False),
-    'zg500'  : (wrfout_pres_fname, 6, False),
-    'zg250'  : (wrfout_pres_fname, 6, False),
-    'hus700' : (wrfout_pres_fname, 6, False),
-    'hus500' : (wrfout_pres_fname, 6, False),
-    'hus250' : (wrfout_pres_fname, 6, False),
-    'ua50m'  : (wrfout_zlev_fname, 6, False),
-    'ua100m' : (wrfout_zlev_fname, 6, False),
-    'ua150m' : (wrfout_zlev_fname, 6, False),
-    'va50m'  : (wrfout_zlev_fname, 6, False),
-    'va100m' : (wrfout_zlev_fname, 6, False),
-    'va150m' : (wrfout_zlev_fname, 6, False),
-    'cape'   : (wrfout_afwa_fname, 1, False),
-    'cin'    : (wrfout_afwa_fname, 1, False),
-    'prw'    : (wrfout_afwa_fname, 1, False),
-    'fzra'   : (wrfout_afwa_fname, 1, True),
-    'heatidx': (wrfout_afwa_fname, 1, False),
-    'wchill' : (wrfout_afwa_fname, 1, False),
-    'humidex': (wrfout_hour_fname, 1, False),
-})
-
-# Special-case variables that load their own files one at a time
-_SELF_LOADING = {'wbgt', 'utci'}
-
-
-# Call functions
-# --------------
-if variable == 'fx':
-    pass  # fx variables are handled by postprocess.core.variables.py
-else:
-    clean_fn = _CLEAN.get(variable)
-    if clean_fn is None:
-        print(f'Warning: unknown variable {variable}')
-    else:
-        if _output_needed(variable, make_fname(variable, _OUTFREQ[variable])):
-            if variable in _SELF_LOADING:
-                write_vars(clean_fn())
-            else:
-                prefix, freq_hours, accumulated = _LOADER[variable]
-                ds       = load_wrf(prefix, year, accumulated)
-                time_dim = _build_time_dim(year, freq_hours)
-                write_vars(clean_fn(ds, time_dim))
-                ds.close()

@@ -45,7 +45,6 @@ tcsh
 
 conda activate nac6
 
-
 set raw = `realpath ~/image/collections/na-cordex-cmip6/raw/ERA5/eval/`
 set scratch = `realpath ~/glade-scratch/na-cordex/`
 set here = `realpath ~/work/cordex6`
@@ -53,6 +52,7 @@ set post = $here/NA-CORDEX-CMIP6/postprocess
 set topdir = $scratch/era5
 
 set sdir = $topdir/setup
+
 
 python $post/setup.py $raw $sdir
 
@@ -69,7 +69,7 @@ set outdir1 = $edir/data
 set cmddir1 = $edir/cmd
 set rundir1 = $edir/run
 
-$post/extract.sh $raw $outdir1 1980-2023 $cmddir1
+$post/extract.sh $raw $sdir $outdir1 1980-2023 $cmddir1
 
 $post/launch_multi --workflow cordex --run $rundir1 $cmddir1/*cmd
 
@@ -80,7 +80,7 @@ $post/launch_multi --workflow cordex --run $rundir1 $cmddir1/*cmd
 set cmdxtra = $edir/cmd.xtra
 set runxtra = $edir/run.xtra
 
-$post/extract.sh --vars wbgt,humidex $raw $outdir1 1980-2023 $cmdxtra
+$post/extract.sh --vars wbgt $raw $sdir $outdir1 1980-2023 $cmdxtra
 
 $post/launch_multi --workflow cordex --run $runxtra --wall 03:00:00 $cmdxtra/*cmd
 
