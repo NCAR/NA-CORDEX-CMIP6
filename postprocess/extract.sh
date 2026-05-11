@@ -16,13 +16,15 @@
 set -euo pipefail
 
 # Default variable list for NA-CORDEX-CMIP6 postprocessing.
-#
-# wbgt is intentionally NOT in DEFAULT_HYDATM_VARS because it requires the
-# thermofeel package, which is not in the standard npl conda env.  To process
-# wbgt, utci, and humidex are intentionally NOT in DEFAULT_HYDATM_VARS because
-# they require the thermofeel package...
+
+# wbgt and utci are intentionally NOT in DEFAULT_HYDATM_VARS because
+# they require signficantly longer (3+ hours) to calculate. Pass them
+# explicitly via --vars.  Note: utci is produced automatically when
+# wbgt runs; submitting utci as a standalone job will cause a file
+# conflict. Use --vars wbgt to get both.
+
 DEFAULT_CORE_VARS="fx,clt,evspsbl,hurs,huss,pr,ps,psl,rlds,rsds,sfcWind,tas,tasmax,tasmin,uas,vas"
-DEFAULT_HYDATM_VARS="cape,cin,prw,fzra,wchill,heatidx,\
+DEFAULT_HYDATM_VARS="cape,cin,prw,fzra,wchill,heatidx,humidex,\
 mrro,mrros,mrso,snw,snd,\
 rsus,rlus,hfls,hfss,snm,\
 ua50m,va50m,ua100m,va100m,ua150m,va150m,\
@@ -30,10 +32,6 @@ ta700,ta500,ta250,ua700,ua500,ua250,va700,va500,va250,\
 zg700,zg500,zg250,hus700,hus500,hus250"
 DEFAULT_VARS="${DEFAULT_CORE_VARS},${DEFAULT_HYDATM_VARS}"
 
-# wbgt, utci, and humidex are intentionally NOT in DEFAULT_HYDATM_VARS because
-# they require the thermofeel package. Pass them explicitly via --vars.
-# Note: utci is produced automatically when wbgt runs; submitting utci as a
-# standalone job will cause a file conflict. Use --vars wbgt to get both.
 HYDATM_VARS="cape cin prw fzra wchill heatidx wbgt utci humidex
 mrro mrros mrso snw snd
 rsus rlus hfls hfss snm
