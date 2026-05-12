@@ -4,15 +4,11 @@ TODO items:
 
 
     CIN: mask -9.999e+30 (missing)
+    mask *700 vars using PSFC
 
     deal with 6-hourly data
         update aggregation
-	updates to handle non-standard calendars while we're at it
-	    add calendar to sim-config
-	    swap cftime in for pandas
 	add time_bnds to "time: point" vars to fix CDO hack
-	simplify file globbing
-	make epoch parametric, not hard-coded
 	write correct time coordinates during extract, drop fixes from format
     
     fix time chunking post aggregate / pre compress
