@@ -5,7 +5,7 @@
 # matching the pattern established by aggregate.sh.
 #
 # Requires setup.py to have been run first (SETUPDIR must contain sim.env
-# and cached CMOR JSON tables).
+# and var_table.tsv).
 #
 # All variables are routed to postprocess.variables.py, except fx which
 # goes to postprocess.fx.py.
@@ -96,8 +96,6 @@ CMDDIR="${5:-.}"
 mkdir -p "$CMDDIR"
 CMDDIR="$(realpath "$CMDDIR")"
 
-SIM_ENV="$SETUPDIR/sim.env"
-
 # Parse year range
 if [[ "$YEARS_ARG" =~ ^([0-9]{4})-([0-9]{4})$ ]]; then
     START_YEAR="${BASH_REMATCH[1]}"
@@ -116,8 +114,10 @@ if [[ $START_YEAR -gt $END_YEAR ]]; then
 fi
 
 # Validate inputs
-[[ ! -d "$WRFDIR" ]] && { echo "Error: WRFDIR not found: $WRFDIR" >&2; exit 1; }
-[[ ! -f "$SIM_ENV" ]] && { echo "Error: sim.env not found: $SIM_ENV" >&2; exit 1; }
+[[ ! -d "$WRFDIR" ]]   && { echo "Error: WRFDIR not found: $WRFDIR" >&2; exit 1; }
+[[ ! -d "$SETUPDIR" ]] && { echo "Error: SETUPDIR not found: $SETUPDIR" >&2; exit 1; }
+[[ ! -f "$SETUPDIR/sim.env" ]] && { echo "Error: sim.env not found in $SETUPDIR" >&2; exit 1; }
+[[ ! -f "$SETUPDIR/var_table.tsv" ]] && { echo "Error: var_table.tsv not found in $SETUPDIR" >&2; exit 1; }
 
 for s in postprocess.machinery.py postprocess.fx.py; do
     [[ ! -f "$SCRIPTS_DIR/$s" ]] && {
@@ -172,11 +172,11 @@ for var in "${VARLIST[@]}"; do
 
     if [[ "$var" == "fx" ]]; then
         # fx variables are time-invariant; a single command suffices.
-        echo "python ./postprocess.fx.py $SIM_ENV $OUTDIR" >> "$cmdfile"
+        echo "python ./postprocess.fx.py $SETUPDIR $OUTDIR" >> "$cmdfile"
     else
         for (( year = START_YEAR; year <= END_YEAR; year++ )); do
             chunk="$WRFDIR/$(chunk_dir_for_year "$year")"
-            echo "python ./postprocess.machinery.py $SIM_ENV $chunk $year $var $OUTDIR" >> "$cmdfile"
+            echo "python ./postprocess.machinery.py $SETUPDIR $chunk $year $var $OUTDIR" >> "$cmdfile"
         done
     fi
 
