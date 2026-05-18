@@ -237,11 +237,10 @@ def load_wrf(prefix, yr, accumulated=False):
     return ds.rename(dname_map_xyt)
 
 
-# fx dataset: loaded once at startup since multiple extract functions use it
-fx_glob = f'{wrfout_path}/{wrfout_fx_fname}{year}*'
-if not (fx_matches := glob.glob(fx_glob)):
-    raise FileNotFoundError(f'No fx files found matching: {fx_glob}')
-ds_fx = xr.open_dataset(fx_matches[0])
+# fx dataset: loaded from wrf.fx.nc written by setup.py.
+# Contains LANDMASK, COSALPHA, SINALPHA with Time dimension already squeezed
+# and dimensions renamed to CORDEX conventions (x, y).
+ds_fx = xr.open_dataset(os.path.join(setupdir, 'wrf.fx.nc'))
 
 
 # Output existence check
@@ -256,6 +255,7 @@ def _output_needed(var, fout):
 # Write extracted variables
 # -------------------------
 # Writes raw extracted data to outdir/var/fname.nc.
+# _FillValue is set to 1e20 per CORDEX standard.
 def write_vars(var_da_list):
     for var, cmor_freq, da in var_da_list:
         fout = make_fname(var, cmor_freq)
@@ -266,7 +266,8 @@ def write_vars(var_da_list):
         os.makedirs(vardir, exist_ok=True)
         outpath = os.path.join(vardir, fout)
 
-        da.astype(np.float32).to_netcdf(outpath)
+        encoding = {var: {'_FillValue': np.float32(1.e20)}}
+        da.astype(np.float32).to_netcdf(outpath, encoding=encoding)
 
 
 # Import extract functions

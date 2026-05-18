@@ -181,31 +181,35 @@ def extract_psl(ds, time_dim):
     return [('psl', '1hr', psl)]
 # ---------------------------------------------------
 
-# Near-surface wind components and speed
+# Shared masking helpers
 # ---------------------------------------------------
-# ds_fx is a module-level variable (loaded at startup by machinery).
-def _wind_components(ds):
-    """Shared helper: rotate U10/V10 to earth-relative coordinates.
-    Returns (uas, vas) as DataArrays."""
-    # U10/V10 units: m s-1
-    # U10/V10 description: U/V at 10 M
-    # Note: U10/V10 are diagnostic and on mass grid; no unstagger needed
+# ds_fx is a module-level variable (loaded from wrf.fx.nc by machinery).
 
-    da = ds[['U10', 'V10']]
+def _apply_landmask(da):
+    """Mask ocean gridcells (LANDMASK == 0) to missing (1e20)."""
+    return da.where(ds_fx['LANDMASK'] == 1, 1.e20)
 
-    cosa = ds_fx['COSALPHA'].mean(dim='Time').rename(dname_map_xy)
-    sina = ds_fx['SINALPHA'].mean(dim='Time').rename(dname_map_xy)
+def _wind_components(u, v):
+    """Rotate grid-relative u/v wind components to earth-relative coordinates.
 
-    # Rotate winds to earth relative (lat/lon) coordinates.
-    # NOTE: signs on sinalpha are correct as written; some sources
-    # have them reversed. Reference:
-    # https://www-k12.atmos.washington.edu/~ovens/wrfwinds.html
-    uas = (da['U10'] * cosa) - (da['V10'] * sina)
-    vas = (da['V10'] * cosa) + (da['U10'] * sina)
+    Accepts DataArrays u and v on the mass grid (no unstaggering needed for
+    diagnostic wind variables).  Returns (uas, vas) as DataArrays.
+
+    NOTE: signs on sinalpha are correct as written; some sources have them
+    reversed. Reference: https://www-k12.atmos.washington.edu/~ovens/wrfwinds.html
+    """
+    cosa = ds_fx['COSALPHA']
+    sina = ds_fx['SINALPHA']
+    uas = (u * cosa) - (v * sina)
+    vas = (v * cosa) + (u * sina)
     return uas, vas
 
+# Near-surface wind components and speed
+# ---------------------------------------------------
 def extract_sfcWind(ds, time_dim):
-    uas, vas = _wind_components(ds)
+    # U10/V10 units: m s-1
+    # U10/V10 description: U/V at 10 M
+    uas, vas = _wind_components(ds['U10'], ds['V10'])
     sfcWind = xr.ufuncs.sqrt(uas**2 + vas**2)
     sfcWind['time'] = time_dim
 
@@ -213,14 +217,18 @@ def extract_sfcWind(ds, time_dim):
     return [('sfcWind', '1hr', sfcWind)]
 
 def extract_uas(ds, time_dim):
-    uas, _ = _wind_components(ds)
+    # U10/V10 units: m s-1
+    # U10/V10 description: U/V at 10 M
+    uas, _ = _wind_components(ds['U10'], ds['V10'])
     uas['time'] = time_dim
 
     uas = uas.to_dataset(name='uas').drop_attrs()
     return [('uas', '1hr', uas)]
 
 def extract_vas(ds, time_dim):
-    _, vas = _wind_components(ds)
+    # U10/V10 units: m s-1
+    # U10/V10 description: U/V at 10 M
+    _, vas = _wind_components(ds['U10'], ds['V10'])
     vas['time'] = time_dim
 
     vas = vas.to_dataset(name='vas').drop_attrs()
@@ -286,8 +294,7 @@ def extract_snw(ds, time_dim):
     # SNOW units : kg m-2
     # SNOW description : SNOW WATER EQUIVALENT
 
-    landmask = ds_fx['LANDMASK'].mean(dim='Time').rename(dname_map_xy)
-    snw = ds['SNOW'].where(landmask == 1, 1.e20)
+    snw = _apply_landmask(ds['SNOW'])
     snw['time'] = time_dim
 
     snw = snw.to_dataset(name='snw').drop_attrs()
@@ -323,8 +330,7 @@ def extract_mrso(ds, time_dim):
             da[:, 2] * 0.60 +
             da[:, 3] * 1.00) * 1000
 
-    landmask = ds_fx['LANDMASK'].mean(dim='Time').rename(dname_map_xy)
-    mrso = mrso.where(landmask == 1, 1.e20)
+    mrso = _apply_landmask(mrso)
     mrso['time'] = time_dim
 
     mrso = mrso.to_dataset(name='mrso').drop_attrs()
@@ -342,9 +348,7 @@ def extract_mrros(ds, time_dim):
     # Differentiate along time axis and convert to kg/m^2/s
     mrros = (da.diff(dim='time') / 21600.0)
 
-    # Mask out ocean
-    landmask = ds_fx['LANDMASK'].mean(dim='Time').rename(dname_map_xy)
-    mrros = mrros.where(landmask == 1, 1.e20)
+    mrros = _apply_landmask(mrros)
     mrros = mrros.assign_coords(time=time_dim)
     #mrros['time'] = time_dim
 
@@ -363,9 +367,7 @@ def extract_mrro(ds, time_dim):
     # Differentiate along time axis and convert to kg/m^2/s
     mrro = ((ds['SFROFF'] + ds['UDROFF']).diff(dim='time') / 21600.0)
 
-    # Mask out ocean
-    landmask = ds_fx['LANDMASK'].mean(dim='Time').rename(dname_map_xy)
-    mrro = mrro.where(landmask == 1, 1.e20)
+    mrro = _apply_landmask(mrro)
     mrro = mrro.assign_coords(time=time_dim)
 
     mrro = mrro.to_dataset(name='mrro').drop_attrs()
@@ -433,8 +435,7 @@ def extract_snm(ds, time_dim):
     # Convert to kg m-2 s-1 by differencing and dividing by 21600
     snm = (ds['ACSNOM'].diff(dim='time') / 21600.0)
 
-    landmask = ds_fx['LANDMASK'].mean(dim='Time').rename(dname_map_xy)
-    snm = snm.where(landmask == 1, 1.e20)
+    snm = _apply_landmask(snm)
     snm = snm.assign_coords(time=time_dim)
     #snm['time'] = time_dim
 
@@ -452,11 +453,57 @@ _PRESS_LEVELS_PA = [100000, 92500, 85000, 75000, 70000, 60000, 50000,
 # Map level in hPa to dimension index
 _PLEV_INDEX = {lev // 100: i for i, lev in enumerate(_PRESS_LEVELS_PA)}
 
+# Threshold below which surface pressure masking is applied (Pa).
+# Cells where PSFC <= this value are underground at that pressure level.
+# Only needed for 700 hPa; 500 hPa and 250 hPa are never underground
+# given the model domain's maximum elevation (~3000 m).
+_PSFC_MASK_THRESHOLD_700 = 70000.0  # Pa
+
+def _load_psfc(yr):
+    """Load surface pressure (PSFC, Pa) from wrfout_d01 files for yr.
+
+    wrfout_d01 is the 6-hourly file, matching the cadence of pressure-level
+    outputs.  Filenames correspond exactly to wrfout_pres_d01 except for
+    the prefix.
+    """
+    files = sorted(glob.glob(f'{wrfout_path}/{wrfout_6hr_fname}{yr}-*'))
+    if not files:
+        raise FileNotFoundError(
+            f'No wrfout_d01 files found for year {yr} '
+            f'(pattern: {wrfout_path}/{wrfout_6hr_fname}{yr}-*)')
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', message='.*separate the stored chunks.*')
+        ds_psfc = xr.open_mfdataset(files,
+                                    concat_dim='Time',
+                                    combine='nested',
+                                    chunks=_CHUNKS,
+                                    mask_and_scale=False,
+                                    decode_times=False,
+                                    decode_coords=False,
+                                    )['PSFC']
+    # Drop the time coordinate labels before returning. psfc is (time, y, x)
+    # and remains 3D after the drop -- only the coordinate values are removed,
+    # not the dimension itself.  This prevents the unlabelled time dimension on
+    # psfc from conflicting with the CFTimeIndex on the pressure-level data
+    # during .where().
+    return ds_psfc.rename(dname_map_xyt).drop_vars('time', errors='ignore')
+
+def _mask_underground_700(da, yr):
+    """Mask gridcells underground at 700 hPa using surface pressure.
+
+    Sets values to 1e20 where PSFC <= 70000 Pa (i.e., surface is at or
+    above 700 hPa).  Called only for 700-hPa variables.
+    """
+    psfc = _load_psfc(yr)
+    return da.where(psfc > _PSFC_MASK_THRESHOLD_700, 1.e20)
+
 # function factory for extracting generic pressure-level variables
 def _make_pres_extract(outvar, wrf_var, level_hPa):
     idx = _PLEV_INDEX[level_hPa]
     def extract(ds, time_dim):
         da = ds[wrf_var].isel(num_press_levels_stag=idx)
+        if level_hPa == 700:
+            da = _mask_underground_700(da, year)
         da['time'] = time_dim
 
         da = da.to_dataset(name=outvar).drop_attrs()
@@ -480,14 +527,10 @@ def _make_pres_wind_extract(outvar, level_hPa, component):
     def extract(ds, time_dim):
         u = ds['U_PL'].isel(num_press_levels_stag=idx)
         v = ds['V_PL'].isel(num_press_levels_stag=idx)
-
-        cosa = ds_fx['COSALPHA'].mean(dim='Time').rename(dname_map_xy)
-        sina = ds_fx['SINALPHA'].mean(dim='Time').rename(dname_map_xy)
-
-        if component == 'u':
-            rotated = (u * cosa) - (v * sina)
-        else:
-            rotated = (v * cosa) + (u * sina)
+        uas, vas = _wind_components(u, v)
+        rotated = uas if component == 'u' else vas
+        if level_hPa == 700:
+            rotated = _mask_underground_700(rotated, year)
         rotated['time'] = time_dim
 
         rotated = rotated.to_dataset(name=outvar).drop_attrs()
@@ -507,6 +550,8 @@ def _make_pres_hus_extract(outvar, level_hPa):
         q = ds['Q_PL'].isel(num_press_levels_stag=idx)
         # Convert mixing ratio (kg/kg) to specific humidity: hus = q / (1 + q)
         hus = (q / (1 + q))
+        if level_hPa == 700:
+            hus = _mask_underground_700(hus, year)
         hus['time'] = time_dim
 
         hus = hus.to_dataset(name=outvar).drop_attrs()
@@ -532,14 +577,8 @@ def _make_zlev_wind_extract(outvar, level_m, component):
     def extract(ds, time_dim):
         u = ds['U_ZL'].isel(num_z_levels_stag=idx)
         v = ds['V_ZL'].isel(num_z_levels_stag=idx)
-
-        cosa = ds_fx['COSALPHA'].mean(dim='Time').rename(dname_map_xy)
-        sina = ds_fx['SINALPHA'].mean(dim='Time').rename(dname_map_xy)
-
-        if component == 'u':
-            rotated = (u * cosa) - (v * sina)
-        else:
-            rotated = (v * cosa) + (u * sina)
+        uas, vas = _wind_components(u, v)
+        rotated = uas if component == 'u' else vas
         rotated['time'] = time_dim
 
         rotated = rotated.to_dataset(name=outvar).drop_attrs()
@@ -567,8 +606,11 @@ def extract_cape(ds, time_dim):
 def extract_cin(ds, time_dim):
     # AFWA_CIN units : J kg-1
     # AFWA_CIN description : AFWA Diagnostic: Convective Inhibition
+    # WRF uses -9.9999e+30 as a flag for "fully inhibited" CIN; mask
+    # everything below -1e30 as missing.
 
-    cin = ds['AFWA_CIN'].to_dataset(name='cin').drop_attrs()
+    cin = ds['AFWA_CIN'].where(ds['AFWA_CIN'] >= -1.e30, 1.e20)
+    cin = cin.to_dataset(name='cin').drop_attrs()
     cin['time'] = time_dim
     return [('cin', '1hr', cin)]
 

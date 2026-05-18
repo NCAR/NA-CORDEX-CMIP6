@@ -4,6 +4,7 @@ setup.py - One-time setup for NA-CORDEX-CMIP6 postprocessing workflow.
 
 Reads sim_config.yml and var_specs.yml, downloads/caches the CORDEX data
 request CSV and CMOR JSON tables, creates the WRF coordinate reference file,
+extracts fixed WRF fields (land mask, wind rotation angles) into wrf.fx.nc,
 and writes two flat files consumed by all downstream bash scripts:
 
   sim.env        Shell key=value pairs for all simulation metadata
@@ -34,6 +35,7 @@ import subprocess
 import sys
 import urllib.request
 
+import xarray as xr
 import yaml
 
 
@@ -447,7 +449,82 @@ def create_coord_file(wrfdir, setupdir, force):
 
 
 # ---------------------------------------------------------------------------
-# Step 5: Copy sim_config.yml into setupdir for provenance
+# Step 5: Extract fixed WRF fields into wrf.fx.nc
+# ---------------------------------------------------------------------------
+
+# Fields to extract from the fx file for use during postprocessing.
+# LANDMASK: land/sea mask (1=land, 0=ocean/water); used to mask land-only vars.
+# COSALPHA, SINALPHA: wind rotation angles; used to rotate U/V to earth-relative
+#   coordinates.  WRF outputs these with a singleton Time dimension; we squeeze
+#   it out here so downstream code doesn't need to.
+_FX_VARS = ['LANDMASK', 'COSALPHA', 'SINALPHA']
+
+# Filename prefix for WRF files containing fixed (time-invariant) fields.
+_WRF_FX_PREFIX = 'wrfout_5day_d01_'
+
+
+def create_fx_file(wrfdir, setupdir, force):
+    """Extract fixed WRF fields (LANDMASK, COSALPHA, SINALPHA) into wrf.fx.nc.
+
+    Reads from the first wrfout_5day_d01_* file in the first chunk directory.
+    Only the three needed fields are loaded (XLAT, XLONG, and all other WRF
+    variables are never read).  The singleton Time dimension is squeezed out,
+    WRF spatial dimensions are renamed to CORDEX conventions (x, y), all global
+    attributes and all per-variable attributes except 'description' are dropped,
+    and the result is written to setupdir/wrf.fx.nc.
+
+    Having these fields in setupdir means postprocessing has no run-time
+    dependency on wrfinput_path after setup completes.
+    """
+    outname = "wrf.fx.nc"
+    outpath = os.path.join(setupdir, outname)
+
+    if os.path.exists(outpath) and not force:
+        print(f"\n=== Fixed-field file {outname} already exists (skipping) ===")
+        return
+
+    chunk_dir = find_chunk_dir(wrfdir)
+    candidates = sorted(
+        f for f in os.listdir(chunk_dir) if f.startswith(_WRF_FX_PREFIX))
+    if not candidates:
+        sys.exit(f"Error: No {_WRF_FX_PREFIX}* files found in {chunk_dir}")
+    src = os.path.join(chunk_dir, candidates[0])
+
+    print(f"\n=== Generating fixed-field file {outname} ===")
+    vprint(f"  Source: {src}")
+    vprint(f"  Variables: {', '.join(_FX_VARS)}")
+
+    ds = xr.open_dataset(src)[_FX_VARS].squeeze('Time', drop=True)
+    ds = ds.rename({'south_north': 'y', 'west_east': 'x'})
+
+    # Strip all global attributes inherited from WRF
+    ds.attrs = {}
+
+    # Keep only the 'description' attribute on each variable; drop the rest
+    for var in ds.data_vars:
+        ds[var].attrs = {k: v for k, v in ds[var].attrs.items() if k == 'description'}
+
+    # Remove Time from dataset encoding: xarray carries it through from the
+    # source file even after squeeze, causing a spurious UserWarning on write.
+    ds.encoding.pop('unlimited_dims', None)
+
+    # Suppress _FillValue on fixed fields (no missing data; avoids xarray
+    # inserting a default fill value on write)
+    encoding = {var: {'_FillValue': None} for var in ds.data_vars}
+
+    ds.to_netcdf(outpath, encoding=encoding)
+    ds.close()
+
+    # Remove the 'coordinates' attribute that xarray writes on each variable
+    # referencing XLAT/XLONG/XTIME from the source file; these variables are
+    # not present in wrf.fx.nc and the attribute serves no purpose here.
+    run(f'ncatted -h -a coordinates,,d,, "{outpath}"')
+
+    print(f"  wrote {outpath}")
+
+
+# ---------------------------------------------------------------------------
+# Step 6: Copy sim_config.yml into setupdir for provenance
 # ---------------------------------------------------------------------------
 
 def copy_config(config_path, setupdir, force):
@@ -502,6 +579,8 @@ def main():
 
     create_coord_file(wrfdir, setupdir, force)
 
+    create_fx_file(wrfdir, setupdir, force)
+
     copy_config(config_path, setupdir, force)
 
     # Report creation_date prominently so the user can verify before proceeding
@@ -517,4 +596,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
