@@ -77,28 +77,39 @@ done
 
 mkdir -p "$OUTDIR" "$CMDDIR"
 
-# Build lookup: varname -> freq (to know which variables are in the data request)
-declare -A VAR_FREQ
-while IFS=$'\t' read -r var freq _rest; do
+# Build set of variables in var_table.tsv (where metadata info lives).
+# Note that the 'freq' column is the CORDEX requested frequency;
+# actual frequency depends on what we saved and is inferred from
+# subdirectory name
+declare -A VAR_KNOWN
+while IFS=$'\t' read -r var _rest; do
     [[ "$var" == "var" ]] && continue  # skip header
-    VAR_FREQ[$var]="$freq"
+    VAR_KNOWN[$var]=1
 done < "$SETUPDIR/var_table.tsv"
 
 echo "Scanning input directory: $INDIR"
 
 for vardir in "$INDIR"/*/; do
     [[ ! -d "$vardir" ]] && continue
-    varname="$(basename "$vardir")"
+    dirname="$(basename "$vardir")"
+
+    # Subdirectories are named <var>.<freq> (e.g. tas.1hr, orog.fx).
+    if [[ "$dirname" != *.* ]]; then
+        echo "  $dirname: not in var.freq format, skipping" >&2
+        continue
+    fi
+    varname="${dirname%.*}"
+    freq="${dirname##*.}"
 
     files=("$vardir"*.nc)
     [[ ! -f "${files[0]:-}" ]] && continue
 
-    [[ -z "${VAR_FREQ[$varname]:-}" ]] && {
-        echo "  $varname: not in var_table.tsv, skipping" >&2
+    [[ -z "${VAR_KNOWN[$varname]:-}" ]] && {
+        echo "  $dirname: $varname not in var_table.tsv, skipping" >&2
         continue
     }
 
-    cmdfile="$CMDDIR/${varname}.cmd"
+    cmdfile="$CMDDIR/${varname}.${freq}.cmd"
     > "$cmdfile"
     ncommands=0
     nskipped=0
@@ -106,7 +117,7 @@ for vardir in "$INDIR"/*/; do
     for infile in "${files[@]}"; do
         [[ ! -f "$infile" ]] && continue
         fname="$(basename "$infile")"
-        outfile="$OUTDIR/$varname/$fname"
+        outfile="$OUTDIR/$dirname/$fname"
 
         if [[ -f "$outfile" && $FORCE -eq 0 ]]; then
             (( nskipped++ )) || true
@@ -114,14 +125,14 @@ for vardir in "$INDIR"/*/; do
             continue
         fi
 
-        # cmorize.sh arguments: var infile outfile setupdir
-        # All metadata is read by cmorize.sh from sim.env and var_table.tsv in setupdir
-        echo "./cmorize.sh $varname $infile $outfile $SETUPDIR" >> "$cmdfile"
+        # cmorize.sh arguments: var freq infile outfile setupdir
+        # Per-variable metadata is read by cmorize.sh from var_table.tsv
+        echo "./cmorize.sh $varname $freq $infile $outfile $SETUPDIR" >> "$cmdfile"
         (( ncommands++ )) || true
     done
 
     ngenerated=$(( ncommands - nskipped ))
-    echo "  $varname: $ngenerated commands, skipped $nskipped/$ncommands existing"
+    echo "  $dirname: $ngenerated commands, skipped $nskipped/$ncommands existing"
 
     [[ ! -s "$cmdfile" ]] && rm "$cmdfile"
 done

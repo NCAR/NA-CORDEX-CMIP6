@@ -90,7 +90,7 @@ orog   = ds['HGT'].mean(dim='Time')
 
 for varname, da in [('sftlf', sftlf), ('orog', orog)]:
     fout = f'{varname}_{fname_base}_fx.nc'
-    vardir = os.path.join(outdir, varname)
+    vardir = os.path.join(outdir, f'{varname}.fx')
 
     if os.path.exists(os.path.join(vardir, fout)):
         print(f'fx: {varname} already exists, skipping')

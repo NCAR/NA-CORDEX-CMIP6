@@ -19,9 +19,10 @@
 #   5. Trimming the sponge zone and appending the data variable
 #   6. Writing all CF and CORDEX global and variable attributes
 #
-# Usage: cmorize.sh VAR INFILE OUTFILE SETUPDIR
+# Usage: cmorize.sh VAR FREQ INFILE OUTFILE SETUPDIR
 #
 #   VAR      CMORized variable name (e.g. tas, pr, sftlf)
+#   FREQ     Output frequency (1hr, 6hr, day, fx).
 #   INFILE   Input file from extract step
 #   OUTFILE  Full path to output file
 #   SETUPDIR Directory containing sim.env, var_table.tsv, wrf.xy.coords.nc
@@ -36,15 +37,16 @@ module load cdo
 # Arguments
 # ---------------------------------------------------------------------------
 
-[[ $# -ne 4 ]] && {
-    echo "Usage: $(basename "$0") VAR INFILE OUTFILE SETUPDIR" >&2
+[[ $# -ne 5 ]] && {
+    echo "Usage: $(basename "$0") VAR FREQ INFILE OUTFILE SETUPDIR" >&2
     exit 1
 }
 
 var="$1"
-infile="$2"
-outfile="$3"
-setupdir="$4"
+freq="$2"
+infile="$3"
+outfile="$4"
+setupdir="$5"
 
 # ---------------------------------------------------------------------------
 # Load simulation metadata from SETUPDIR
@@ -77,6 +79,9 @@ source "$sim_env"
 # ---------------------------------------------------------------------------
 # Columns: var, freq, units, cell_methods, positive, levels, refh, plev,
 #          quant, standard_name, long_name
+#
+# Note: freq (column 2) is CORDEX-requested frequency and is ignored,
+# because actual frequency may differ based on what was saved.
 
 var_row="$(awk -F'\t' -v v="$var" 'NR>1 && $1==v {print; exit}' "$var_table")"
 
@@ -85,7 +90,6 @@ var_row="$(awk -F'\t' -v v="$var" 'NR>1 && $1==v {print; exit}' "$var_table")"
     exit 1
 }
 
-freq=$(         echo "$var_row" | cut -f2)
 units=$(        echo "$var_row" | cut -f3)
 cell_methods=$( echo "$var_row" | cut -f4)
 positive=$(     echo "$var_row" | cut -f5)
