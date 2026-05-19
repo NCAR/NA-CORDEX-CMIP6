@@ -24,9 +24,9 @@
 # argument 4 : Variable (CMORized var name)
 # argument 5 : Output directory (where variable subdirs are created)
 
-# 2. It creates variable subdirectories under OUTDIR (argument 5) and
-#    writes post-processed output there.  It does not change the
-#    working directory; all paths are handled explicitly.
+# 2. It creates variable subdirectories under OUTDIR (argument 5) named
+#    <var>.<freq> and writes post-processed output there.  It does not
+#    change the working directory; all paths are handled explicitly.
 
 # 3. It is designed for command-file parallelism via launch_cf on
 #    Casper HPC at NCAR.  It requires both NCO and CDO; when running
@@ -58,6 +58,7 @@ import sys
 import os
 import time
 import resource
+import subprocess
 import warnings
 
 t0 = time.perf_counter()
@@ -245,29 +246,55 @@ ds_fx = xr.open_dataset(os.path.join(setupdir, 'wrf.fx.nc'))
 
 # Output existence check
 # ----------------------
-def _output_needed(var, fout):
-    if os.path.exists(os.path.join(outdir, var, fout)) and not do_overwrite_existing:
-        print(f'{var}/{fout} EXISTS : Skipping')
+def _output_needed(var, freq, fout):
+    if os.path.exists(os.path.join(outdir, f'{var}.{freq}', fout)) and not do_overwrite_existing:
+        print(f'{var}.{freq}/{fout} EXISTS : Skipping')
         return False
     return True
 
 
 # Write extracted variables
 # -------------------------
-# Writes raw extracted data to outdir/var/fname.nc.
+# Writes raw extracted data to outdir/<var>.<freq>/fname.nc.
 # _FillValue is set to 1e20 per CORDEX standard.
-def write_vars(var_da_list):
-    for var, cmor_freq, da in var_da_list:
-        fout = make_fname(var, cmor_freq)
-        if not _output_needed(var, fout):
+def write_vars(var_da_list, freq):
+    for var, da in var_da_list:
+        fout = make_fname(var, freq)
+        if not _output_needed(var, freq, fout):
             continue
 
-        vardir = os.path.join(outdir, var)
+        vardir = os.path.join(outdir, f'{var}.{freq}')
         os.makedirs(vardir, exist_ok=True)
         outpath = os.path.join(vardir, fout)
 
         encoding = {var: {'_FillValue': np.float32(1.e20)}}
         da.astype(np.float32).to_netcdf(outpath, encoding=encoding)
+
+
+# Derive daily min/max from hourly tas
+# ------------------------------------
+# Called after tas has been extracted and written.  Uses cdo daymin/daymax
+# on the existing tas file, then renames the variable inside.  Each runs
+# only if its target output doesn't already exist (or overwrite is enabled).
+
+def _derive_minmax(src_path, outvar, cdo_op):
+    """Run cdo {cdo_op} on src_path and rename the variable to outvar."""
+    out_fout = make_fname(outvar, 'day')
+    out_vardir = os.path.join(outdir, f'{outvar}.day')
+    out_path = os.path.join(out_vardir, out_fout)
+
+    if not _output_needed(outvar, 'day', out_fout):
+        return
+
+    os.makedirs(out_vardir, exist_ok=True)
+    subprocess.run(['cdo', '-O', cdo_op, src_path, out_path], check=True)
+    subprocess.run(['ncrename', '-h', '-v', f'tas,{outvar}', out_path], check=True)
+
+def derive_tasmin(tas_path):
+    _derive_minmax(tas_path, 'tasmin', 'daymin')
+
+def derive_tasmax(tas_path):
+    _derive_minmax(tas_path, 'tasmax', 'daymax')
 
 
 # Import extract functions
@@ -285,10 +312,6 @@ with open(_variables_path) as _f:
 
 # maps CMOR frequency strings to hours (for _build_time_dim).
 _FREQ_HOURS = {'1hr': 1, '6hr': 6, 'day': 24}
-
-# Variables whose input frequency differs from their output frequency.
-# All other variables are loaded at their output frequency.
-_INPUT_FREQ = {'tasmax': '1hr', 'tasmin': '1hr'}
 
 # Variables whose WRF fields are accumulated totals requiring
 # differencing; the day-before file is prepended before loading.
@@ -314,6 +337,20 @@ _VAR_PREFIX = {var: prefix
                for prefix, varset in _FILE_VARS.items()
                for var in varset}
 
+# Frequency of each wrfout file type.
+_PREFIX_FREQ = {
+    wrfout_hour_fname: '1hr',
+    wrfout_afwa_fname: '1hr',
+    wrfout_6hr_fname:  '6hr',
+    wrfout_pres_fname: '6hr',
+    wrfout_zlev_fname: '6hr',
+}
+
+# Variables derived from tas via cdo after extraction, rather than being
+# extracted directly.  Requesting them as standalone jobs is an error;
+# run tas instead.
+_DERIVED_FROM_TAS = {'tasmin', 'tasmax'}
+
 # wbgt and utci both resolve to extract_wbgt_utci, which loads its own
 # files one day at a time and writes output directly (returning an empty
 # list).  They are called without ds or time_dim arguments.  Submitting
@@ -324,9 +361,6 @@ _SELF_LOADING = {'wbgt', 'utci'}
 # Load var_table; index by 'var' column for fast lookup
 _var_table = pd.read_csv(os.path.join(setupdir, 'var_table.tsv'), sep='\t',
                          index_col='var')
-
-# _OUTFREQ: var -> CMOR frequency string, from var_table
-_OUTFREQ = _var_table['freq'].to_dict()
 
 # All non-fx variables we expect to produce (var_table excludes fx rows)
 _ALL_VARS = set(_var_table.index)
@@ -341,28 +375,45 @@ def get_extract_fn(var):
 def get_loader(var):
     """Return (prefix, freq_hours, accumulated) for var."""
     prefix      = _VAR_PREFIX.get(var, wrfout_hour_fname)
-    freq_hours  = _FREQ_HOURS[_INPUT_FREQ.get(var, _OUTFREQ[var])]
+    freq_hours  = _FREQ_HOURS[_PREFIX_FREQ[prefix]]
     accumulated = var in _ACCUMULATED
     return prefix, freq_hours, accumulated
 
 
 # Call functions
 # --------------
+if variable in _DERIVED_FROM_TAS:
+    print(f'{variable} is derived from tas; run tas instead.')
+    sys.exit(0)
+
 if variable not in _ALL_VARS:
     print(f'Error: {variable} not found in var_table')
 else:
     extract_fn = get_extract_fn(variable)
     if extract_fn is None:
         print(f'Warning: no extract function found for {variable}')
-    elif _output_needed(variable, make_fname(variable, _OUTFREQ[variable])):
-        if variable in _SELF_LOADING:
-            write_vars(extract_fn())
-        else:
-            prefix, freq_hours, accumulated = get_loader(variable)
-            ds       = load_wrf(prefix, year, accumulated)
-            time_dim = _build_time_dim(year, freq_hours)
-            write_vars(extract_fn(ds, time_dim))
-            ds.close()
+    else:
+        prefix    = _VAR_PREFIX.get(variable, wrfout_hour_fname)
+        freq      = _PREFIX_FREQ[prefix]
+        if _output_needed(variable, freq, make_fname(variable, freq)):
+            if variable in _SELF_LOADING:
+                write_vars(extract_fn(), freq)
+            else:
+                _, freq_hours, accumulated = get_loader(variable)
+                ds       = load_wrf(prefix, year, accumulated)
+                time_dim = _build_time_dim(year, freq_hours)
+                write_vars(extract_fn(ds, time_dim), freq)
+                ds.close()
+
+        # Derive tasmin/tasmax from the tas file.  Runs whether or not
+        # tas was just regenerated (each derive does its own existence
+        # check), so missing tasmin/tasmax can be filled in without
+        # forcing tas to be rebuilt.
+        if variable == 'tas':
+            tas_path = os.path.join(outdir, 'tas.1hr',
+                                    make_fname('tas', '1hr'))
+            derive_tasmin(tas_path)
+            derive_tasmax(tas_path)
 
 print(f'postproc time: {time.perf_counter() - t0:.1f} sec')
 mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss

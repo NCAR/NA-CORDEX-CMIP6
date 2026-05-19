@@ -20,12 +20,12 @@ set -euo pipefail
 #
 # Note: utci is produced automatically when wbgt runs; submitting utci as
 # a standalone job will cause a file conflict. Use --vars wbgt to get both.
+# Note also: tasmin & tasmax are produced automatically when tas is run.
 
-
-DEFAULT_VARS="fx,tasmin,tasmax,pr,tas,\
+DEFAULT_VARS="fx,pr,tas,\
 hurs,huss,ps,psl,rsds,sfcWind,uas,vas,\
 cape,cin,prw,fzra,wchill,heatidx,humidex,\
-evspsbl,mrro,mrros,mrso,snw,snd,snm\
+evspsbl,mrro,mrros,mrso,snw,snd,snm,\
 clt,hfls,hfss,rlds,rlus,rsus,\
 ua50m,va50m,ua100m,va100m,ua150m,va150m,\
 ua700,ua500,ua250,va700,va500,va250,\
