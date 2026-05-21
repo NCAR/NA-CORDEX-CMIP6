@@ -4,20 +4,6 @@ TODO items:
 
     deal with 6-hourly data
         update aggregation
-	X add time_bnds to "time: point" vars to fix CDO hack
-	write correct time coordinates during extract, drop fixes from format
-		wrap time_dim in DataArray
-	      	time = xr.DataArray(time_dim, dims='time', name='time')
-	      	time.encoding['units'] = f'days since {epoch}'
-	      	time.encoding['calendar'] = _cal
-	      	time.encoding['dtype'] = 'float64'
-	      	construct bounds (and time) from edges using np.stack
-	    		apply encoding after, slicing drops it
-	      		strip attributes from bounds in format
-	      	simpler & more robust fix to time coords is rounding
-	      	 	round to nearest day for bounds, half-day for coord
-	tasmax & tasmin: generate w/ CDO at end of extract_tas function
-		don't worry about time, fix with rounding
     
     fix time chunking post aggregate / pre compress
         I think the cleanest way to fix it is with an nccopy:

@@ -12,12 +12,9 @@
 # this script (copied there by launch_multi from the format/data directory).
 #
 # Creates output by:
-#   1. Extracting and reformatting the time coordinate
-#   2. Setting the reference epoch
-#   3. Adding time_bnds and ajusting time coordinates based on cell_methods
-#   4. Appending spatial coordinates from wrf.xy.coords.nc
-#   5. Trimming the sponge zone and appending the data variable
-#   6. Writing all CF and CORDEX global and variable attributes
+#   1. Trimming sponge zone from spatial coordinates in wrf.xy.coords.nc
+#   2. Appending the (trimmed) data variable from INFILE
+#   3. Writing all CF and CORDEX global and variable attributes
 #
 # Usage: cmorize.sh VAR FREQ INFILE OUTFILE SETUPDIR
 #
@@ -27,11 +24,16 @@
 #   OUTFILE  Full path to output file
 #   SETUPDIR Directory containing sim.env, var_table.tsv, wrf.xy.coords.nc
 #            (the SETUPDIR from setup.py)
+#
+# Note: FREQ is needed as an argument because the freq column in
+# var_table is the requested frequency, which may differ from actual.
 
 set -euo pipefail
 
 module load nco
 module load cdo
+
+padding="10000"  # 10 KB header padding reduces odds of file rewrites later
 
 # ---------------------------------------------------------------------------
 # Arguments
@@ -112,16 +114,6 @@ tracking_id="hdl:21.14103/$(uuidgen)"
 x_trim="${sponge_cells},-$((sponge_cells + 1))"
 y_trim="${sponge_cells},-$((sponge_cells + 1))"
 
-# Interval length in days for each output frequency.  Note: this gets
-# used in an ncap2 call, so express it precisely here and let ncap2
-# handle calculating it to avoid errors due to loss of precision.
-case "$freq" in
-    1hr) interval="(1/24.0)" ;;
-    6hr) interval="(6/24.0)" ;;
-    day) interval="1" ;;
-    *)   interval="" ;;
-esac
-
 # ---------------------------------------------------------------------------
 # write_attributes OUTFILE COORDS
 #
@@ -139,7 +131,7 @@ write_attributes() {
     local outfile="$1"
     local coords="$2"
 
-    # Clear existing global and variable-level attributes first
+    # Clear existing global and data-variable attributes first
     ncatted -h -a ,"$var",d,, -a ,global,d,, "$outfile"
 
     ncatted -h \
@@ -197,8 +189,8 @@ if [[ "$levels" == "fixed" ]]; then
 
     mkdir -p "$(dirname "$outfile")"
 
-    # Extract coordinates trimmed to interior domain, then append data variable
-    ncks -h -d x,$x_trim -d y,$y_trim "$coord_file" "$outfile"
+    # Extract coordinates trimmed to interior domain, then append data variable.
+    ncks -h -O --hdr_pad $padding -d x,$x_trim -d y,$y_trim "$coord_file" "$outfile"
     ncks -h -A -d x,$x_trim -d y,$y_trim -v "$var" "$infile" "$outfile"
 
     write_attributes "$outfile" "lat lon"
@@ -210,77 +202,21 @@ fi
 # ---------------------------------------------------------------------------
 # Single-level variables
 #
-# This approach is a bit roundabout to avoid rewriting the entire file
-# multiple times, which is very slow.  The CDO setreftime command
-# (which is the best option for this operation) requires separate
-# input and output files, so we process the time coordinate first,
-# using a tempfile.  Then we can add in coordinates, followed by data.
+# Time coordinate (including bounds for extensive variables) is written
+# correctly by postprocess.machinery.py, so no CDO reformatting is needed.
+# We start directly from the trimmed coord file and append the data variable.
 # ---------------------------------------------------------------------------
 
 mkdir -p "$(dirname "$outfile")"
 
-padding="10000"  # 10 KB header padding reduces odds of file rewrites later
-tempfile="${outfile}.cmortemp.nc"
 
-# Step 1: Extract time coordinate into a temporary file.
-# CDO will drop time if there's no data variable, so create a dummy one.
-ncks -h -O --hdr_pad $padding -v time "$infile" "$tempfile"
-ncatted -h -a history,global,d,, "$tempfile"
-ncap2 -h -A -s 'dummy[$time]=0.0f' "$tempfile" "$tempfile"
-ncap2 -h -O -s 'time=double(time)' "$tempfile" "$tempfile"
+# Step 1: Copy spatial coordinates trimmed to interior domain & pad header
+ncks -h -O --hdr_pad $padding -d x,$x_trim -d y,$y_trim "$coord_file" "$outfile"
 
-# Time attributes must be set before setreftime
-ncatted -h \
-	-a long_name,time,o,c,time \
-	-a standard_name,time,o,c,time \
-	-a axis,time,o,c,T \
-	"$tempfile"
-
-
-# Step 2: Set epoch & calendar and remove dummy variable. Calendar
-# (inherited from driver) is defined in sim_config.yml, $calendar is
-# set by sourcing sim.env.
-
-epoch="1950-01-01 00:00:00"  ## required by CORDEX spec
-
-cdo --no_history -setreftime,"${epoch/ /,/},1day" -setcalendar,"${calendar}" \
-    "$tempfile" "$outfile"
-ncatted -h \
-    -a units,time,o,c,"days since ${epoch}" \
-    -a calendar,time,o,c,"${calendar}" \
-    "$outfile"
-ncks -h -O -7 --no_alphabetize -x -v dummy "$outfile" "$outfile"
-
-
-# Step 3: Adjust time coordinate and add time_bnds
-# time-intensive (instantaneous) vars: time at beginning of interval
-# time-extensive (interval-stat) vars: time at midpoint of interval
-
-# Note: CF doesn't require time_bnds for instantaneous vars, but
-# providing it helps CDO get things right when aggregating later on
-
-ncap2 -h -A -s "defdim(\"bnds\",2); \
-      	       time_bnds[\$time,\$bnds]=0.0; \
-    	       time_bnds(:,0)=time; \
-    	       time_bnds(:,1)=time+${interval}; \
-      	       time@bounds=\"time_bnds\";" \
-      "$outfile" "$outfile"
-
-time_extensive='time: (mean|min|max)'
-if [[ "$cell_methods" =~ $time_extensive ]]; then
-    # shift time coordinate to the midpoint of the interval
-    ncap2 -h -O -s "time+=${interval}/2.0" "$outfile" "$outfile"
-fi
-
-
-# Step 4: Append spatial coordinates (trimmed to interior domain, excluding
-# the sponge zone).  Variable ordering is also established here.
-#
-# Vertical scalar coordinate (mutually exclusive options):
+# Add vertical scalar coordinate if appropriate (mutually exclusive options)
 #   levels=pressure : create plev scalar coord (Pa) from the plev column
 #   refh set        : create height scalar coord (m) above ground
 #   neither         : surface variable, coords are just "lat lon"
-ncks -h -A -d x,$x_trim -d y,$y_trim "$coord_file" "$outfile"
 
 if [[ "$levels" == "pressure" ]]; then
     [[ -z "$plev" || "$plev" == "--" ]] && {
@@ -311,14 +247,12 @@ else
     coords="lat lon"
 fi
 
-rm "$tempfile"
-
-# Step 5: Append data variable with sponge zone trimmed.
+# Step 2: Append data variable with sponge zone trimmed.
 # Chunking (--chunk_map rd1) is important for downstream CDO/NCO performance.
 ncks -h -A -C --chunk_map rd1 -d x,$x_trim -d y,$y_trim -v "$var" \
     "$infile" "$outfile"
 
-# Step 6: Write all CF and CORDEX attributes
+# Step 3: Write all CF and CORDEX attributes
 write_attributes "$outfile" "$coords"
 
 echo "Done"

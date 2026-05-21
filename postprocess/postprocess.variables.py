@@ -3,9 +3,8 @@
 # Purpose:
 # --------
 # Extract function definitions for all NA-CORDEX-CMIP6 postprocessing
-# variables.  Each function receives a loaded dataset (ds) and a pre-built
-# time coordinate (time_dim), and returns a list of (var, dataset) tuples
-# for write_vars.
+# variables.  Each function receives a loaded dataset (ds) and returns
+# a list of (var, dataset) tuples.
 #
 # This file contains only function definitions.  All shared state
 # (ds_fx, dname_map_xy, wrfout_* filenames, etc.), dispatch tables,
@@ -18,12 +17,11 @@
 
 # Near-Surface Air Temperature
 # ---------------------------------------------------
-def extract_tas(ds, time_dim):
+def extract_tas(ds):
     # T2 units : K
     # T2 description : 2-meter temperature
 
     tas = ds['T2']
-    tas['time'] = time_dim
 
     tas = tas.to_dataset(name='tas').drop_attrs()
     return [('tas', tas)]
@@ -35,7 +33,7 @@ def extract_tas(ds, time_dim):
 
 # Hourly precipitation accumulation
 # ---------------------------------------------------
-def extract_pr(ds, time_dim):
+def extract_pr(ds):
     # I_RAINC units : mm
     # I_RAINC description: integer bucket variable for convective precipitation (tips at 100 mm)
     # I_RAINNC units : mm
@@ -51,7 +49,6 @@ def extract_pr(ds, time_dim):
     tp = ( ((da['I_RAINC']*100.) + da['RAINC']) +
            ((da['I_RAINNC']*100.) + da['RAINNC']) ) / 3600
     pr = tp.diff(dim='time')
-    pr = pr.assign_coords(time=time_dim)
 
     pr = pr.to_dataset(name='pr').drop_attrs()
     return [('pr', pr)]
@@ -59,14 +56,13 @@ def extract_pr(ds, time_dim):
 
 # Evaporation including sublimation and transpiration
 # ---------------------------------------------------
-def extract_evspsbl(ds, time_dim):
+def extract_evspsbl(ds):
     # EDIR units : mm/s
     # EDIR description : ground surface evaporation rate
     # ETRAN units : mm/s
     # ETRAN description : transpiration rate
 
     evspsbl = (ds['EDIR'] + ds['ETRAN'])
-    evspsbl['time'] = time_dim
 
     evspsbl = evspsbl.to_dataset(name='evspsbl').drop_attrs()
     return [('evspsbl', evspsbl)]
@@ -74,13 +70,12 @@ def extract_evspsbl(ds, time_dim):
 
 # Near surface specific humidity
 # ---------------------------------------------------
-def extract_huss(ds, time_dim):
+def extract_huss(ds):
     # Q2 units: kg kg-1
     # Q2 description: mixing ratio (QV) at 2 M
 
     q2   = ds['Q2']
     huss = (q2 / (1 + q2))  # mixing ratio -> specific humidity
-    huss['time'] = time_dim
 
     huss = huss.to_dataset(name='huss').drop_attrs()
     return [('huss', huss)]
@@ -88,7 +83,7 @@ def extract_huss(ds, time_dim):
 
 # Near surface relative humidity
 # ---------------------------------------------------
-def extract_hurs(ds, time_dim):
+def extract_hurs(ds):
     # Q2 units: kg kg-1
     # Q2 description: mixing ratio (QV) at 2 M
     # T2 units: K
@@ -118,7 +113,6 @@ def extract_hurs(ds, time_dim):
     # is invalid; hurs > 100 is sometimes valid (supersaturation
     # conditions at very low temperature), but nobody wants it, so clip.
     hurs = hurs.clip(min=0, max=100)
-    hurs['time'] = time_dim
 
     hurs = hurs.to_dataset(name='hurs').drop_attrs()
     return [('hurs', hurs)]
@@ -126,12 +120,11 @@ def extract_hurs(ds, time_dim):
 
 # Surface pressure
 # ---------------------------------------------------
-def extract_ps(ds, time_dim):
+def extract_ps(ds):
     # PSFC units: Pa
     # PSFC description: Surface pressure
 
     ps = ds['PSFC']
-    ps['time'] = time_dim
 
     ps = ps.to_dataset(name='ps').drop_attrs()
     return [('ps', ps)]
@@ -139,12 +132,11 @@ def extract_ps(ds, time_dim):
 
 # Mean sea level pressure
 # ---------------------------------------------------
-def extract_psl(ds, time_dim):
+def extract_psl(ds):
     # AFWA_MSLP units: Pa
     # AFWA_MSLP description: Mean sea level pressure
 
     psl = ds['AFWA_MSLP']
-    psl['time'] = time_dim
 
     psl = psl.to_dataset(name='psl').drop_attrs()
     return [('psl', psl)]
@@ -175,30 +167,27 @@ def _wind_components(u, v):
 
 # Near-surface wind components and speed
 # ---------------------------------------------------
-def extract_sfcWind(ds, time_dim):
+def extract_sfcWind(ds):
     # U10/V10 units: m s-1
     # U10/V10 description: U/V at 10 M
     uas, vas = _wind_components(ds['U10'], ds['V10'])
     sfcWind = xr.ufuncs.sqrt(uas**2 + vas**2)
-    sfcWind['time'] = time_dim
 
     sfcWind = sfcWind.to_dataset(name='sfcWind').drop_attrs()
     return [('sfcWind', sfcWind)]
 
-def extract_uas(ds, time_dim):
+def extract_uas(ds):
     # U10/V10 units: m s-1
     # U10/V10 description: U/V at 10 M
     uas, _ = _wind_components(ds['U10'], ds['V10'])
-    uas['time'] = time_dim
 
     uas = uas.to_dataset(name='uas').drop_attrs()
     return [('uas', uas)]
 
-def extract_vas(ds, time_dim):
+def extract_vas(ds):
     # U10/V10 units: m s-1
     # U10/V10 description: U/V at 10 M
     _, vas = _wind_components(ds['U10'], ds['V10'])
-    vas['time'] = time_dim
 
     vas = vas.to_dataset(name='vas').drop_attrs()
     return [('vas', vas)]
@@ -206,7 +195,7 @@ def extract_vas(ds, time_dim):
 
 # Surface downwelling shortwave radiation
 # ---------------------------------------------------
-def extract_rsds(ds, time_dim):
+def extract_rsds(ds):
     # ACSWDNB/I_ACSWDNB units: J m-2
     # ACSWDNB/I_ACSWDNB description: Accumulated downwelling shortwave flux at bottom
 
@@ -215,7 +204,6 @@ def extract_rsds(ds, time_dim):
     # accumulate J/hour/m-2 to W/m2
     acc_rsds = ( (da['I_ACSWDNB'] * 1e9) + da['ACSWDNB'] ) / 3600
     rsds = acc_rsds.diff(dim='time')
-    rsds = rsds.assign_coords(time=time_dim)
 
     rsds = rsds.to_dataset(name='rsds').drop_attrs()
     return [('rsds', rsds)]
@@ -223,7 +211,7 @@ def extract_rsds(ds, time_dim):
 
 # Surface downwelling longwave radiation
 # ---------------------------------------------------
-def extract_rlds(ds, time_dim):
+def extract_rlds(ds):
     # ACLWDNB/I_ACLWDNB units: J m-2
     # ACLWDNB/I_ACLWDNB description: Accumulated downwelling longwave flux at bottom
 
@@ -232,7 +220,6 @@ def extract_rlds(ds, time_dim):
     # accumulate J/hour/m-2 to W/m2
     acc_rlds = ( (da['I_ACLWDNB'] * 1e9) + da['ACLWDNB'] ) / 3600
     rlds = acc_rlds.diff(dim='time')
-    rlds = rlds.assign_coords(time=time_dim)
 
     rlds = rlds.to_dataset(name='rlds').drop_attrs()
     return [('rlds', rlds)]
@@ -240,12 +227,11 @@ def extract_rlds(ds, time_dim):
 
 # Total cloud cover percentage
 # ---------------------------------------------------
-def extract_clt(ds, time_dim):
+def extract_clt(ds):
     # CLDFRAC2D units: %
     # CLDFRAC2D description: 2-D max cloud fraction
 
     clt = (ds['CLDFRAC2D'] * 100)
-    clt['time'] = time_dim
 
     # CLDFRAC2D is all-zero on the step after a restart; replace with missing
     zero_timestep = (clt == 0).all(dim=['x', 'y'])
@@ -257,12 +243,11 @@ def extract_clt(ds, time_dim):
 
 # Snow water equivalent - surface snow amount
 # ---------------------------------------------------
-def extract_snw(ds, time_dim):
+def extract_snw(ds):
     # SNOW units : kg m-2
     # SNOW description : SNOW WATER EQUIVALENT
 
     snw = _apply_landmask(ds['SNOW'])
-    snw['time'] = time_dim
 
     snw = snw.to_dataset(name='snw').drop_attrs()
     return [('snw', snw)]
@@ -270,12 +255,11 @@ def extract_snw(ds, time_dim):
 
 # Snow depth
 # ---------------------------------------------------
-def extract_snd(ds, time_dim):
+def extract_snd(ds):
     # SNOWH units : m
     # SNOWH description : PHYSICAL SNOW DEPTH
 
     snd = ds['SNOWH']
-    snd['time'] = time_dim
 
     snd = snd.to_dataset(name='snd').drop_attrs()
     return [('snd', snd)]
@@ -283,7 +267,7 @@ def extract_snd(ds, time_dim):
 
 # Total soil moisture content
 # ---------------------------------------------------
-def extract_mrso(ds, time_dim):
+def extract_mrso(ds):
     # SMOIS units: m3 m-3 (volumetric)
     # SMOIS description: SOIL MOISTURE
     # Noah-MP soil layer thicknesses (m): 0.10, 0.30, 0.60, 1.00
@@ -298,7 +282,6 @@ def extract_mrso(ds, time_dim):
             da[:, 3] * 1.00) * 1000
 
     mrso = _apply_landmask(mrso)
-    mrso['time'] = time_dim
 
     mrso = mrso.to_dataset(name='mrso').drop_attrs()
     return [('mrso', mrso)]
@@ -306,7 +289,7 @@ def extract_mrso(ds, time_dim):
 
 # Surface runoff
 # ---------------------------------------------------
-def extract_mrros(ds, time_dim):
+def extract_mrros(ds):
     # SFROFF units : mm (accumulated)
     # SFROFF description : SURFACE RUNOFF
 
@@ -316,7 +299,6 @@ def extract_mrros(ds, time_dim):
     mrros = (da.diff(dim='time') / 21600.0)
 
     mrros = _apply_landmask(mrros)
-    mrros = mrros.assign_coords(time=time_dim)
 
     mrros = mrros.to_dataset(name='mrros').drop_attrs()
     return [('mrros', mrros)]
@@ -324,7 +306,7 @@ def extract_mrros(ds, time_dim):
 
 # Total runoff
 # ---------------------------------------------------
-def extract_mrro(ds, time_dim):
+def extract_mrro(ds):
     # SFROFF units : mm (accumulated)
     # SFROFF description : SURFACE RUNOFF
     # UDROFF units : mm (accumulated)
@@ -334,7 +316,6 @@ def extract_mrro(ds, time_dim):
     mrro = ((ds['SFROFF'] + ds['UDROFF']).diff(dim='time') / 21600.0)
 
     mrro = _apply_landmask(mrro)
-    mrro = mrro.assign_coords(time=time_dim)
 
     mrro = mrro.to_dataset(name='mrro').drop_attrs()
     return [('mrro', mrro)]
@@ -342,12 +323,11 @@ def extract_mrro(ds, time_dim):
 
 # Surface upwelling shortwave radiation
 # ---------------------------------------------------
-def extract_rsus(ds, time_dim):
+def extract_rsus(ds):
     # SWUPB units : W m-2
     # SWUPB description : INSTANTANEOUS UPWELLING SHORTWAVE FLUX AT BOTTOM
 
     rsus = ds['SWUPB']
-    rsus['time'] = time_dim
 
     rsus = rsus.to_dataset(name='rsus').drop_attrs()
     return [('rsus', rsus)]
@@ -355,12 +335,11 @@ def extract_rsus(ds, time_dim):
 
 # Surface upwelling longwave radiation
 # ---------------------------------------------------
-def extract_rlus(ds, time_dim):
+def extract_rlus(ds):
     # LWUPB units : W m-2
     # LWUPB description : INSTANTANEOUS UPWELLING LONGWAVE FLUX AT BOTTOM
 
     rlus = ds['LWUPB']
-    rlus['time'] = time_dim
 
     rlus = rlus.to_dataset(name='rlus').drop_attrs()
     return [('rlus', rlus)]
@@ -368,12 +347,11 @@ def extract_rlus(ds, time_dim):
 
 # Surface upward latent heat flux
 # ---------------------------------------------------
-def extract_hfls(ds, time_dim):
+def extract_hfls(ds):
     # LH units : W m-2
     # LH description : LATENT HEAT FLUX AT THE SURFACE
 
     hfls = ds['LH']
-    hfls['time'] = time_dim
 
     hfls = hfls.to_dataset(name='hfls').drop_attrs()
     return [('hfls', hfls)]
@@ -381,12 +359,11 @@ def extract_hfls(ds, time_dim):
 
 # Surface upward sensible heat flux
 # ---------------------------------------------------
-def extract_hfss(ds, time_dim):
+def extract_hfss(ds):
     # HFX units : W m-2
     # HFX description : UPWARD HEAT FLUX AT THE SURFACE
 
     hfss = ds['HFX']
-    hfss['time'] = time_dim
 
     hfss = hfss.to_dataset(name='hfss').drop_attrs()
     return [('hfss', hfss)]
@@ -394,7 +371,7 @@ def extract_hfss(ds, time_dim):
 
 # Surface snow melt
 # ---------------------------------------------------
-def extract_snm(ds, time_dim):
+def extract_snm(ds):
     # ACSNOM units : kg m-2 (accumulated)
     # ACSNOM description : ACCUMULATED MELTED SNOW
 
@@ -402,12 +379,24 @@ def extract_snm(ds, time_dim):
     snm = (ds['ACSNOM'].diff(dim='time') / 21600.0)
 
     snm = _apply_landmask(snm)
-    snm = snm.assign_coords(time=time_dim)
 
     snm = snm.to_dataset(name='snm').drop_attrs()
     return [('snm', snm)]
 # ---------------------------------------------------
 
+# Humidex
+# ---------------------------------------------------
+def extract_humidex(ds):
+    # T2 units: K, Q2 units: kg/kg (mixing ratio), PSFC units: Pa
+    # Humidex = T2 + 0.5555 * (e_hPa - 10.0)
+    # where e_hPa is vapor pressure in hPa
+
+    e_hPa = _vapor_pressure_from_q(ds['Q2'], ds['PSFC']) / 100.0
+    humidex = ds['T2'] + 0.5555 * (e_hPa - 10.0)
+
+    humidex = humidex.to_dataset(name='humidex').drop_attrs()
+    return [('humidex', humidex)]
+# ---------------------------------------------------
 
 # Pressure level data
 # ---------------------------------------------------
@@ -472,11 +461,10 @@ def _mask_underground_700(da, yr):
 # function factory for extracting generic pressure-level variables
 def _make_pres_extract(outvar, wrf_var, level_hPa):
     idx = _PLEV_INDEX[level_hPa]
-    def extract(ds, time_dim):
+    def extract(ds):
         da = ds[wrf_var].isel(num_press_levels_stag=idx)
         if level_hPa == 700:
             da = _mask_underground_700(da, year)
-        da['time'] = time_dim
 
         da = da.to_dataset(name=outvar).drop_attrs()
         return [(outvar, da)]
@@ -496,14 +484,13 @@ for _var, _wrf, _levels in [
 def _make_pres_wind_extract(outvar, level_hPa, component):
     """component: 'u' or 'v'"""
     idx = _PLEV_INDEX[level_hPa]
-    def extract(ds, time_dim):
+    def extract(ds):
         u = ds['U_PL'].isel(num_press_levels_stag=idx)
         v = ds['V_PL'].isel(num_press_levels_stag=idx)
         uas, vas = _wind_components(u, v)
         rotated = uas if component == 'u' else vas
         if level_hPa == 700:
             rotated = _mask_underground_700(rotated, year)
-        rotated['time'] = time_dim
 
         rotated = rotated.to_dataset(name=outvar).drop_attrs()
         return [(outvar, rotated)]
@@ -518,13 +505,12 @@ for _comp in ['ua', 'va']:
 # function factory for extracting specific humidity at pressure levels
 def _make_pres_hus_extract(outvar, level_hPa):
     idx = _PLEV_INDEX[level_hPa]
-    def extract(ds, time_dim):
+    def extract(ds):
         q = ds['Q_PL'].isel(num_press_levels_stag=idx)
         # Convert mixing ratio (kg/kg) to specific humidity: hus = q / (1 + q)
         hus = (q / (1 + q))
         if level_hPa == 700:
             hus = _mask_underground_700(hus, year)
-        hus['time'] = time_dim
 
         hus = hus.to_dataset(name=outvar).drop_attrs()
         return [(outvar, hus)]
@@ -546,12 +532,11 @@ _ZLEV_INDEX = {lev: i for i, lev in enumerate(_Z_LEVELS_M)}
 def _make_zlev_wind_extract(outvar, level_m, component):
     """component: 'u' or 'v'"""
     idx = _ZLEV_INDEX[level_m]
-    def extract(ds, time_dim):
+    def extract(ds):
         u = ds['U_ZL'].isel(num_z_levels_stag=idx)
         v = ds['V_ZL'].isel(num_z_levels_stag=idx)
         uas, vas = _wind_components(u, v)
         rotated = uas if component == 'u' else vas
-        rotated['time'] = time_dim
 
         rotated = rotated.to_dataset(name=outvar).drop_attrs()
         return [(outvar, rotated)]
@@ -567,15 +552,14 @@ for _comp in ['ua', 'va']:
 # AFWA diagnostic variables
 # ---------------------------------------------------
 
-def extract_cape(ds, time_dim):
+def extract_cape(ds):
     # AFWA_CAPE units : J kg-1
     # AFWA_CAPE description : AFWA Diagnostic: Convective Avail Pot Energy
 
     cape = ds['AFWA_CAPE'].to_dataset(name='cape').drop_attrs()
-    cape['time'] = time_dim
     return [('cape', cape)]
 
-def extract_cin(ds, time_dim):
+def extract_cin(ds):
     # AFWA_CIN units : J kg-1
     # AFWA_CIN description : AFWA Diagnostic: Convective Inhibition
     # WRF uses -9.9999e+30 as a flag for "fully inhibited" CIN; mask
@@ -583,42 +567,37 @@ def extract_cin(ds, time_dim):
 
     cin = ds['AFWA_CIN'].where(ds['AFWA_CIN'] >= -1.e30, 1.e20)
     cin = cin.to_dataset(name='cin').drop_attrs()
-    cin['time'] = time_dim
     return [('cin', cin)]
 
-def extract_prw(ds, time_dim):
+def extract_prw(ds):
     # AFWA_PWAT units : kg m-2
     # AFWA_PWAT description : AFWA Diagnostic: Precipitable Water
 
     prw = ds['AFWA_PWAT'].to_dataset(name='prw').drop_attrs()
-    prw['time'] = time_dim
     return [('prw', prw)]
 
-def extract_fzra(ds, time_dim):
+def extract_fzra(ds):
     # AFWA_FZRA units : mm (accumulated)
     # AFWA_FZRA description : AFWA Diagnostic: Freezing rain fall
     # Convert to kg m-2 s-1 by differencing and dividing by 3600
 
     fzra = (ds['AFWA_FZRA'].diff(dim='time') / 3600.0)
-    fzra = fzra.assign_coords(time=time_dim)
 
     fzra = fzra.to_dataset(name='fzra').drop_attrs()
     return [('fzra', fzra)]
 
-def extract_heatidx(ds, time_dim):
+def extract_heatidx(ds):
     # AFWA_HEATIDX units : K
     # AFWA_HEATIDX description : AFWA Diagnostic: Heat index
 
     heatidx = ds['AFWA_HEATIDX'].to_dataset(name='heatidx').drop_attrs()
-    heatidx['time'] = time_dim
     return [('heatidx', heatidx)]
 
-def extract_wchill(ds, time_dim):
+def extract_wchill(ds):
     # AFWA_WCHILL units : K
     # AFWA_WCHILL description : AFWA Diagnostic: Wind chill
 
     wchill = ds['AFWA_WCHILL'].to_dataset(name='wchill').drop_attrs()
-    wchill['time'] = time_dim
     return [('wchill', wchill)]
 
 # ---------------------------------------------------
@@ -636,7 +615,7 @@ def extract_wchill(ds, time_dim):
 # NetCDF via xarray append mode.  Both indices are computed together
 # since they share the expensive MRT calculation.
 #
-# These functions do not follow the standard (ds, time_dim) signature;
+# These functions do not follow the standard (ds) signature;
 # they are called directly from the dispatch site as special cases.
 #
 # References:
@@ -728,7 +707,7 @@ def extract_wbgt_utci():
     os.makedirs(os.path.join(outdir, 'wbgt.1hr'), exist_ok=True)
     os.makedirs(os.path.join(outdir, 'utci.1hr'), exist_ok=True)
 
-    time_index = _build_time_dim(year, 1)
+    time_index, _ = _build_time_coord(year, 1, 'time: point')
 
     hr_files = sorted(glob.glob(f'{wrfout_path}/{wrfout_hour_fname}{year}-*'))
     if not hr_files:
@@ -761,19 +740,4 @@ def extract_wbgt_utci():
     print(f'postproc max memory: {mem / (1024*1024):.1f} GB')
 
     return []
-# ---------------------------------------------------
-
-# Humidex
-# ---------------------------------------------------
-def extract_humidex(ds, time_dim):
-    # T2 units: K, Q2 units: kg/kg (mixing ratio), PSFC units: Pa
-    # Humidex = T2 + 0.5555 * (e_hPa - 10.0)
-    # where e_hPa is vapor pressure in hPa
-
-    e_hPa = _vapor_pressure_from_q(ds['Q2'], ds['PSFC']) / 100.0
-    humidex = ds['T2'] + 0.5555 * (e_hPa - 10.0)
-    humidex['time'] = time_dim
-
-    humidex = humidex.to_dataset(name='humidex').drop_attrs()
-    return [('humidex', humidex)]
 # ---------------------------------------------------

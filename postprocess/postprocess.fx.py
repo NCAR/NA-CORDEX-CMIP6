@@ -56,8 +56,6 @@ def load_sim_env(path):
 
 _cfg = load_sim_env(os.path.join(setupdir, 'sim.env'))
 
-wrfinput_path = _cfg['wrfinput_path']
-
 _dom = _cfg['domain_id']
 _drs = _cfg['driving_source_id']
 _dre = _cfg['driving_experiment_id']
@@ -79,7 +77,7 @@ dname_map_xy = {'west_east': 'x', 'south_north': 'y'}
 # sftlf is the land fraction excluding sea ice (LANDMASK - SEAICE).
 # orog is the surface altitude (HGT).
 
-infile = os.path.join(wrfinput_path, 'wrfinput_d01')
+infile = os.path.join(_cfg['wrfinput_path'], 'wrfinput_d01')
 ds = xr.open_dataset(infile, decode_times=False) \
        .rename(dname_map_xy) \
        .fillna(1.e20)

@@ -277,6 +277,7 @@ SIM_ENV_KEYS = [
     "driving_institution_id",
     "driving_source_id",
     "driving_variant_label",
+    "epoch",
     "grid",
     "institution",
     "institution_id",
