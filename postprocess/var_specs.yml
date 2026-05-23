@@ -10,19 +10,20 @@
 #           single-level vars at a fixed height above ground, e.g. tas at 2m,
 #           sfcWind at 10m, ua100m at 100m)
 #   plev:   pressure level in Pa (required for levels: pressure)
-#   quant:  quantization level for lossy compression (omit for fx variables)
+#   quant:  quantization level for lossy compression via NCO --ppc (DSD
+#           notation, e.g. .2 = 2 decimal significant digits); omit for fx
+#           variables
 #
 # YAML anchors (&name) and aliases (*name) are used to express shared specs
 # explicitly.  Defaults are defined once and overridden where needed.
 _defaults: &defaults
   levels: single
-  quant: 5
+  quant: '.2'
 
 # --- 2-meter temperature variables (shared specs) ---
 tas: &tas_specs
   <<: *defaults
   refh: 2
-  quant: 3
 tasmax:
   <<: *tas_specs
 tasmin:
@@ -32,7 +33,6 @@ tasmin:
 sfcWind: &wind_specs
   <<: *defaults
   refh: 10
-  quant: 3
 uas:
   <<: *wind_specs
 vas:
@@ -42,99 +42,108 @@ vas:
 hurs:
   <<: *defaults
   refh: 2
-  quant: 3
 
 huss:
   <<: *defaults
   refh: 2
+  quant: '.6'
 
 ps:
   <<: *defaults
-  quant: 3
+  quant: '.0'
 
 clt:
   <<: *defaults
-  quant: 3
 
 pr:
   <<: *defaults
+  quant: '.6'
 
 evspsbl:
   <<: *defaults
+  quant: '.6'
 
 psl:
   <<: *defaults
+  quant: '.0'
 
 rsds:
   <<: *defaults
+  quant: '.1'
 
 rlds:
   <<: *defaults
+  quant: '.1'
 
 # --- AFWA diagnostic variables (supplemental, local CMOR table) ---
 cape:
   <<: *defaults
-  quant: 3
+  quant: '.1'
 cin:
   <<: *defaults
-  quant: 3
+  quant: '.1'
 prw:
   <<: *defaults
-  quant: 3
+  quant: '.1'
 fzra:
   <<: *defaults
+  quant: '.6'
 wchill:
   <<: *defaults
   refh: 2
-  quant: 3
 heatidx:
   <<: *defaults
   refh: 2
-  quant: 3
 
 # --- Derived thermal comfort variable (supplemental, local CMOR table) ---
 wbgt:
   <<: *defaults
   refh: 2
-  quant: 3
 utci:
   <<: *defaults
   refh: 2
-  quant: 3
 humidex:
   <<: *defaults
   refh: 2
-  quant: 3
 
 # --- Hydrology / soil / snow variables (6-hourly) ---
 mrro:
   <<: *defaults
+  quant: '.6'
 mrros:
   <<: *defaults
+  quant: '.6'
 mrso:
   <<: *defaults
+  quant: '.1'
 snw:
   <<: *defaults
+  quant: '.1'
 snd:
   <<: *defaults
+  quant: '.3'
 snm:
   <<: *defaults
+  quant: '.6'
 
 # --- Surface radiation and heat flux variables (6-hourly) ---
 rsus:
   <<: *defaults
+  quant: '.1'
 rlus:
   <<: *defaults
+  quant: '.1'
 hfls:
   <<: *defaults
+  quant: '.1'
 hfss:
   <<: *defaults
+  quant: '.1'
 
 # --- Height-AGL wind variables (6-hourly, supplemental local CMOR table) ---
 ua50m: &zlev_specs
   <<: *defaults
   refh: 50
-  quant: 3
 va50m:
   <<: *zlev_specs
 ua100m:
@@ -157,7 +166,6 @@ ta700: &pres_specs
   <<: *defaults
   levels: pressure
   plev: 70000
-  quant: 3
 ta500:
   <<: *pres_specs
   plev: 50000
@@ -185,21 +193,27 @@ va250:
 
 zg700:
   <<: *pres_specs
+  quant: '.0'
 zg500:
   <<: *pres_specs
   plev: 50000
+  quant: '.0'
 zg250:
   <<: *pres_specs
   plev: 25000
+  quant: '.0'
 
 hus700:
   <<: *pres_specs
+  quant: '.6'
 hus500:
   <<: *pres_specs
   plev: 50000
+  quant: '.6'
 hus250:
   <<: *pres_specs
   plev: 25000
+  quant: '.6'
 
 # --- Time-invariant variables (no compression) ---
 sftlf:

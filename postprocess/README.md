@@ -138,8 +138,35 @@ needed.  Files are organized by variable and frequency.
 ### `compress.sh`
 
 Generates commandfiles that apply lossy compression to data using
-`ncks -L1 --ppc`.  Level of compression is defined as number of decimal
-significant digits (DSD) in `var_specs.yml`.
+`ncks -L1 --ppc`.  Level of compression is defined in `var_specs.yml`.
+Variables are compressed using decimal significant digits (DSD); e.g.,
+`-ppc tas=.2` means round to the nearest 0.01 K.
+
+```
+type		units	rounded	DSD	vars
+temperature	K	0.01	.2	tas* wchill humidex utci wbgt
+winds		m s-1	0.01	.2	uas* vas* sfcWind
+humidity	(kg/kg)	1e-6	.6	hus*
+radiation	W m-2	0.1	.1	r??s hf?s 
+pressure	Pa	1	.0	ps psl
+geopotential	m	1	.0	zg*
+percentage	%	0.1	.1	clt, hurs
+convection	J kg-1	0.1	.1	cape cin
+hydro flux	kg/m2/s	1e-6	.6	pr fzra snm mrr* evspsbl
+column water	kg/m2	0.1	.1	prw snw mrso
+snow depth	m	0.001	.3	snd
+static		*	--	N/A	orog sftlf
+
+prw,swe,mrso	kg m-2	0.1	.1		= 0.1 mm
+snd		m  	0.001	.3		= 1 mm (sub-mm not meaningful)
+
+hus		kg/kg		.6	2?	= 0.1% at low (1e-4) values
+pr,fzra		kg/m2/s		.6	2?	~= 0.1 mm/day, NSD=2 @low
+snm,mrr*,evs*	kg/m2/s		.6	2?	(same as precip)
+
+```
+DSD for hydro flux and column water variables is based on an
+observational floor of 0.1 mm = trace precip.
 
 
 ### `plot.sh`

@@ -8,9 +8,9 @@ TODO items:
     fix time chunking post aggregate / pre compress
         I think the cleanest way to fix it is with an nccopy:
 	e.g., nccopy -c time:366 -c time_bnds:366,2
+	check out https://github.com/WCRP-CORDEX/ncrepack-cordex
 
     change compression to DSD instead of NSD
-    	merge in changes from gdex_data branch
 
     change creation_date to `date`?
     	-> wrfdir no longer needed by setup.py
@@ -29,6 +29,11 @@ TODO items:
       
     
     deferred:
+
+	change var_specs from yml to tsv
+	       specify what kind of file var lives in here
+	       	       instead of hard-coding in postproc.machinery
+
 	move clean_fx into setup
 
 	setup: drop looking for dreq CSV in ~/work/cordex6
