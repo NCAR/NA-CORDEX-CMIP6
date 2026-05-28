@@ -129,29 +129,17 @@ set adir = $topdir/aggregate
 
 set indir3  = $outdir2
 set outdir3 = $adir/data
-set cmddir3a = $adir/cmd1
-set cmddir3b = $adir/cmd2
-set rundir3a = $adir/run1
-set rundir3b = $adir/run2
 
+set tmpdir3 = $adir/tmp
+set cmddir3 = $adir/cmd
+set rundir3 = $adir/run
 
-$post/aggregate.sh $indir3 $sdir $outdir3 $cmddir3a
-
-$post/launch_multi --workflow cordex --run $rundir3a $cmddir3a/*cmd
-
-# wait 'til it finishes, then do it again to generate monthly files
-
-$post/aggregate.sh $indir3 $sdir $outdir3 $cmddir3b
-
-$post/launch_multi --workflow cordex --run $rundir3b $cmddir3b/*cmd
+$post/agg2.sh $indir3 $sdir $tmpdir3 $outdir3 $cmddir3
 
 
 ################
 ## wait until it finishes, check everything ran correctly
-cd $rundir3a
-wc */stdout*/* | tail -1
-tail -q -n 1 */*.o* | cut -f 1 -d : | sort | uniq -c
-cd $rundir3b
+cd $rundir3
 wc */stdout*/* | tail -1
 tail -q -n 1 */*.o* | cut -f 1 -d : | sort | uniq -c
 cd $topdir

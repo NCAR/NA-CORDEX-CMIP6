@@ -30,6 +30,8 @@ TODO items:
     
     deferred:
 
+	group aggregate commandfiles by variable *and* step
+
 	change var_specs from yml to tsv
 	       specify what kind of file var lives in here
 	       	       instead of hard-coding in postproc.machinery
