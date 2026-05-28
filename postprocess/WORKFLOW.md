@@ -234,7 +234,7 @@ foreach freq  (fx mon)
   echo esgqa -o $outdir7/$freq $tests $indir7/$freq >> $cmdfile
 end
 
-foreach freq  (day 1hr)
+foreach freq  (day 1hr 6hr)
   foreach var (`/bin/ls -1 $indir7/$freq`)
     rm -rf $outdir7/$freq/$var
     mkdir -p $outdir7/$freq/$var
