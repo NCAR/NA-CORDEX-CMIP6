@@ -190,7 +190,8 @@ if [[ "$levels" == "fixed" ]]; then
     mkdir -p "$(dirname "$outfile")"
 
     # Extract coordinates trimmed to interior domain, then append data variable.
-    ncks -h -O --hdr_pad $padding -d x,$x_trim -d y,$y_trim "$coord_file" "$outfile"
+    ncks -h -O -7 --hdr_pad $padding -d x,$x_trim -d y,$y_trim \
+	 "$coord_file" "$outfile"
     ncks -h -A -d x,$x_trim -d y,$y_trim -v "$var" "$infile" "$outfile"
 
     write_attributes "$outfile" "lat lon"
@@ -211,7 +212,8 @@ mkdir -p "$(dirname "$outfile")"
 
 
 # Step 1: Copy spatial coordinates trimmed to interior domain & pad header
-ncks -h -O --hdr_pad $padding -d x,$x_trim -d y,$y_trim "$coord_file" "$outfile"
+ncks -h -O -7 --hdr_pad $padding -d x,$x_trim -d y,$y_trim \
+     "$coord_file" "$outfile"
 
 # Add vertical scalar coordinate if appropriate (mutually exclusive options)
 #   levels=pressure : create plev scalar coord (Pa) from the plev column
@@ -249,7 +251,8 @@ fi
 
 # Step 2: Append data variable with sponge zone trimmed.
 # Chunking (--chunk_map rd1) is important for downstream CDO/NCO performance.
-ncks -h -A -C --chunk_map rd1 -d x,$x_trim -d y,$y_trim -v "$var" \
+ncks -h -A --mk_rec_dmn time --chunk_map rd1 \
+     -d x,$x_trim -d y,$y_trim -v "$var" \
     "$infile" "$outfile"
 
 # Step 3: Write all CF and CORDEX attributes
