@@ -70,7 +70,7 @@ mkdir -p "$OUTDIR" "$CMDDIR"
 # var_table.tsv columns: var, freq, units, cell_methods, positive,
 #                        levels, refh, quant, standard_name, long_name
 declare -A VAR_QUANT
-while IFS=$'\t' read -r var freq units cell_methods positive levels refh quant _rest; do
+while IFS=$'\t' read -r var freq units cell_methods positive levels refh plev quant _rest; do
     [[ "$var" == "var" ]] && continue  # skip header
     VAR_QUANT[$var]="$quant"
 done < "$VAR_TABLE"
