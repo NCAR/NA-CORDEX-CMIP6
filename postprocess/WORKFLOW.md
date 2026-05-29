@@ -248,7 +248,7 @@ mkdir -p $outdir8 $cmddir8 $rundir8
 set cmdfile = $cmddir8/qa.cmd
 rm -f $cmdfile; touch $cmdfile
 
-set tests = " -t wcrp_cordex_cmip6:latest -t cf:1.9"
+set tests = " -t wcrp_cordex_cmip6:1.0 -t cf:1.9"
 
 # Note: output dirctories must be empty
 
@@ -256,7 +256,7 @@ set tests = " -t wcrp_cordex_cmip6:latest -t cf:1.9"
 foreach freq  (fx mon)
   rm -rf $outdir8/$freq
   mkdir -p $outdir8/$freq
-  echo esgqa -o $outdir8/$freq $tests $indir8/$freq >> $cmdfile
+  echo esgqa -P 1 -o $outdir8/$freq $tests $indir8/$freq >> $cmdfile
 end
 
 foreach freq  (day 1hr 6hr)
@@ -267,6 +267,7 @@ foreach freq  (day 1hr 6hr)
   end
 end
 
+# $sdir/ncrepack-cordex-check all files, too
 
 cd $rundir8
 cp $cmdfile .

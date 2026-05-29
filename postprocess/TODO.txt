@@ -3,12 +3,12 @@
 TODO items:
 
     fix time chunking
-        add cmip7-repack to nac6 environment
-	install https://wcrp-cordex.github.io/ncrepack-cordex/ to setupdir
-	run ncrepack-cordex as the final step in compress
+    	have ncrepack-cordex use the filename-based time-dim chunking
 	
     change creation_date to `date` (format YYYYMMDD-HH:MM:SSZ)
     	-> wrfdir no longer needed by setup.py
+	setup doesn't need to know about creation_date at all,
+	cmorize can call `date` when it runs    
 
     pull static vars & coords from geo_em.d01.nc instead
     	 lives in collections/.../CMIP6/ERA5/aer/
