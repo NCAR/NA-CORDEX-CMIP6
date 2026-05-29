@@ -2,28 +2,20 @@
 ===========
 TODO items:
 
-    deal with 6-hourly data
-        update aggregation
-    
-    fix time chunking post aggregate / pre compress
-        I think the cleanest way to fix it is with an nccopy:
-	e.g., nccopy -c time:366 -c time_bnds:366,2
-	check out https://github.com/WCRP-CORDEX/ncrepack-cordex
-
-    change compression to DSD instead of NSD
-
-    change creation_date to `date`?
+    fix time chunking
+        add cmip7-repack to nac6 environment
+	install https://wcrp-cordex.github.io/ncrepack-cordex/ to setupdir
+	run ncrepack-cordex as the final step in compress
+	
+    change creation_date to `date` (format YYYYMMDD-HH:MM:SSZ)
     	-> wrfdir no longer needed by setup.py
-	pull static vars & coords from geo_em.d01.nc instead?
-	     lives in collections/.../CMIP6/ERA5/aer/
-	     (checked: identical for all simulations)
-	also pull gridcell corners for setup/wrf.xy.coords
+
+    pull static vars & coords from geo_em.d01.nc instead
+    	 lives in collections/.../CMIP6/ERA5/aer/
+    also pull gridcell corners for setup/wrf.xy.coords
 	
 
     run new vars through remainder of postprocessing steps
-      aggregate
-      compess
-      plot
       relocate
       qa
       
