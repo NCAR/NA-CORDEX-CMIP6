@@ -525,7 +525,28 @@ def create_fx_file(wrfdir, setupdir, force):
 
 
 # ---------------------------------------------------------------------------
-# Step 6: Copy sim_config.yml into setupdir for provenance
+# Step 6: Download ncrepack-cordex scripts into setupdir
+# ---------------------------------------------------------------------------
+
+# Scripts to download from the ncrepack-cordex release page.
+_REPACK_BASE_URL = "https://wcrp-cordex.github.io/ncrepack-cordex"
+_REPACK_SCRIPTS  = ["ncrepack-cordex", "ncrepack-cordex-check"]
+
+
+def install_repack_scripts(setupdir, force):
+    """Download ncrepack-cordex and ncrepack-cordex-check into setupdir
+    and make them executable."""
+    print(f"\n=== Installing ncrepack-cordex scripts ===")
+    for name in _REPACK_SCRIPTS:
+        dest = os.path.join(setupdir, name)
+        download(f"{_REPACK_BASE_URL}/{name}", dest, force=force)
+        current = os.stat(dest).st_mode
+        os.chmod(dest, current | 0o111)
+        vprint(f"  chmod +x {dest}")
+
+
+# ---------------------------------------------------------------------------
+# Step 7: Copy sim_config.yml into setupdir for provenance
 # ---------------------------------------------------------------------------
 
 def copy_config(config_path, setupdir, force):
@@ -581,6 +602,8 @@ def main():
     create_coord_file(wrfdir, setupdir, force)
 
     create_fx_file(wrfdir, setupdir, force)
+
+    install_repack_scripts(setupdir, force)
 
     copy_config(config_path, setupdir, force)
 

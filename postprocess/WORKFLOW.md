@@ -169,23 +169,47 @@ cd $topdir
 
 
 ################
-# Step 5: plot
+# Step 5: repack
 
-set pdir = $topdir/plot
+set rdir = $topdir/repack
 
 set indir5  = $outdir4
-set outdir5 = $pdir/figs
-set cmddir5 = $pdir/cmd
-set rundir5 = $pdir/run
+set outdir5 = $rdir/data
+set cmddir5 = $rdir/cmd
+set rundir5 = $rdir/run
 
-
-$post/plot.sh $indir5 $outdir5 $cmddir5
+$post/repack.sh $indir5 $sdir $outdir5 $cmddir5
 
 $post/launch_multi --workflow cordex --run $rundir5 $cmddir5/*cmd
 
 
 ## wait until it finishes, check everything ran correctly
+## symlinks indicate files that ncrepack-cordex did not overwrite (failures)
 cd $rundir5
+wc */stdout*/*
+tail -q -n 1 */*.o* | cut -f 1 -d : | uniq -c
+find $outdir5 -type l
+cd $topdir
+
+
+################
+# Step 6: plot
+
+set pdir = $topdir/plot
+
+set indir6  = $outdir5
+set outdir6 = $pdir/figs
+set cmddir6 = $pdir/cmd
+set rundir6 = $pdir/run
+
+
+$post/plot.sh $indir6 $outdir6 $cmddir6
+
+$post/launch_multi --workflow cordex --run $rundir6 $cmddir6/*cmd
+
+
+## wait until it finishes, check everything ran correctly
+cd $rundir6
 wc */stdout*/*
 tail -q -n 1 */*.o* | cut -f 1 -d : | uniq -c
 cd $topdir
@@ -193,34 +217,34 @@ cd $topdir
 
 ## viewing all the plots is probably easier if you download them
 
-echo "scp -r casper.hpc.ucar.edu:$outdir5 cordex-plots"
+echo "scp -r casper.hpc.ucar.edu:$outdir6 cordex-plots"
 
 
 
 ################
-# Step 6: relocate into DRS tree
+# Step 7: relocate into DRS tree
 
-set indir6 = $outdir4
-set outdir6 = .
+set indir7 = $outdir5
+set outdir7 = .
 
-$post/relocate.sh --dry-run $indir6 $sdir $outdir6 | tail
+$post/relocate.sh --dry-run $indir7 $sdir $outdir7 | tail
 
-$post/relocate.sh $indir6 $sdir $outdir6
+$post/relocate.sh $indir7 $sdir $outdir7
 
 
 ################
-# Step 7: QA
+# Step 8: QA
 
 set qdir = $topdir/qa
 
-set indir7  = `find $topdir/CORDEX-CMIP6 -type d -name v1-r1`
-set outdir7 = $qdir/qa
-set cmddir7 = $qdir/cmd
-set rundir7 = $qdir/run
+set indir8  = `find $topdir/CORDEX-CMIP6 -type d -name v1-r1`
+set outdir8 = $qdir/qa
+set cmddir8 = $qdir/cmd
+set rundir8 = $qdir/run
 
-mkdir -p $outdir7 $cmddir7 $rundir7
+mkdir -p $outdir8 $cmddir8 $rundir8
 
-set cmdfile = $cmddir7/qa.cmd
+set cmdfile = $cmddir8/qa.cmd
 rm -f $cmdfile; touch $cmdfile
 
 set tests = " -t wcrp_cordex_cmip6:latest -t cf:1.9"
@@ -229,21 +253,21 @@ set tests = " -t wcrp_cordex_cmip6:latest -t cf:1.9"
 
 
 foreach freq  (fx mon)
-  rm -rf $outdir7/$freq
-  mkdir -p $outdir7/$freq
-  echo esgqa -o $outdir7/$freq $tests $indir7/$freq >> $cmdfile
+  rm -rf $outdir8/$freq
+  mkdir -p $outdir8/$freq
+  echo esgqa -o $outdir8/$freq $tests $indir8/$freq >> $cmdfile
 end
 
 foreach freq  (day 1hr 6hr)
-  foreach var (`/bin/ls -1 $indir7/$freq`)
-    rm -rf $outdir7/$freq/$var
-    mkdir -p $outdir7/$freq/$var
-    echo esgqa -o $outdir7/$freq/$var $tests $indir7/$freq/$var >> $cmdfile
+  foreach var (`/bin/ls -1 $indir8/$freq`)
+    rm -rf $outdir8/$freq/$var
+    mkdir -p $outdir8/$freq/$var
+    echo esgqa -o $outdir8/$freq/$var $tests $indir8/$freq/$var >> $cmdfile
   end
 end
 
 
-cd $rundir7
+cd $rundir8
 cp $cmdfile .
 echo module restore default > config_env.sh
 echo conda activate nac6 >> config_env.sh
@@ -252,7 +276,7 @@ launch_cf -A $PROJECT -l walltime=00:05:00 -q casper -j oe -N esgf_qa $cmdfile
 
 
 ## wait until it finishes, check everything ran correctly
-cd $rundir7
+cd $rundir8
 wc stdout*/*
 tail -q -n 1 *.o* | cut -f 1 -d : | uniq -c
 cd $topdir
@@ -268,7 +292,7 @@ https://cmiphub.dkrz.de/info/display_qc_results.html
 
 
 ################
-# Step 8: use globus to move final results from scratch to campaign
+# Step 9: use globus to move final results from scratch to campaign
 
 # login to globus & transfer files using the web interface
 
@@ -276,28 +300,28 @@ chmod -R ug+rwX o+rX
 
 
 ################
-# Step 9: generate climate indexes for GIS
+# Step 10: generate climate indexes for GIS
 
 set idir = $topdir/index
 
-set indir9  = $outdir4
-set outdir9 = $idir/data
-set cmddir9 = $idir/cmd
-set rundir9 = $idir/run
+set indir10  = $outdir5
+set outdir10 = $idir/data
+set cmddir10 = $idir/cmd
+set rundir10 = $idir/run
 
-python $post/index.py $indir9 $outdir9 $cmddir9
+python $post/index.py $indir10 $outdir10 $cmddir10
 
 
 # launch jobs as dependent chain
 
-$post/launch_multi --chain --run $rundir9 --wall 00:30:00 --mem 50GB\
-		   $cmddir9/concat.cmd $cmddir9/minmax.cmd \
-		   $cmddir9/pctile.cmd  $cmddir9/indices.cmd \
-		   $cmddir9/annual.cmd $cmddir9/merge.cmd
+$post/launch_multi --chain --run $rundir10 --wall 00:30:00 --mem 50GB\
+		   $cmddir10/concat.cmd $cmddir10/minmax.cmd \
+		   $cmddir10/pctile.cmd  $cmddir10/indices.cmd \
+		   $cmddir10/annual.cmd $cmddir10/merge.cmd
 
 ## check everything ran correctly
 
-cd $rundir9
+cd $rundir10
 
 foreach i (*)
   echo =====================

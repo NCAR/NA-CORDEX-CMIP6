@@ -12,6 +12,7 @@ dependencies:
     - pyyaml=6.0.3
     - ruff=0.15.11
     - xarray=2026.4.0
+    - cmip7-repack
     - pip=26.0.1
     - pip:
         - thermofeel==2.1.7
