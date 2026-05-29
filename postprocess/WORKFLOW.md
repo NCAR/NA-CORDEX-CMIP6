@@ -30,10 +30,11 @@ The workflow steps are:
 2. Format
 3. Aggregate
 4. Compress
-5. Plot
-6. Relocate
-7. QA
-8. Move
+5. Repack
+6. Plot
+7. Relocate
+8. QA
+9. Move
 
 ___
 
@@ -180,7 +181,7 @@ set rundir5 = $rdir/run
 
 $post/repack.sh $indir5 $sdir $outdir5 $cmddir5
 
-$post/launch_multi --workflow cordex --run $rundir5 $cmddir5/*cmd
+$post/launch_multi --workflow cordex --run $rundir5 $cmddir5/repack.cmd
 
 
 ## wait until it finishes, check everything ran correctly

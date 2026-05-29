@@ -1,4 +1,5 @@
 #!/bin/bash
+
 # repack.sh - Generate commandfile for the ncrepack-cordex repack step.
 #
 # For each .nc file in INDIR, creates a symlink in the mirrored OUTDIR tree,
@@ -7,51 +8,84 @@
 # breaking the link.  Any file that remains a symlink after the step failed.
 #
 # Usage:
-#   repack.sh INDIR SETUPDIR OUTDIR CMDDIR
+#   repack.sh INDIR SETUPDIR OUTDIR [CMDDIR]
 #
 # INDIR    compress/data tree (read-only input)
 # SETUPDIR setup directory (contains ncrepack-cordex script)
 # OUTDIR   repack/data tree (created; initially populated with symlinks)
-# CMDDIR   directory for generated commandfile(s) (created if needed)
+# CMDDIR   directory for generated commandfile(s) (default: current directory)
 
 set -euo pipefail
 
-if [ $# -ne 4 ]; then
-    echo "Usage: $0 INDIR SETUPDIR OUTDIR CMDDIR" >&2
+usage() {
+    cat >&2 <<USAGE
+Usage: $(basename "$0") INDIR SETUPDIR OUTDIR [CMDDIR]
+
+Generate a commandfile for repacking compressed CORDEX-CMIP6 NetCDF files
+using ncrepack-cordex.
+
+Arguments:
+  INDIR    Output directory from compress.sh (contains variable subdirectories)
+  SETUPDIR Output directory from setup.py (contains ncrepack-cordex script)
+  OUTDIR   Output directory for repacked files
+  CMDDIR   Directory for commandfile (default: current directory)
+USAGE
     exit 1
-fi
+}
 
-indir=$(realpath "$1")
-sdir=$(realpath "$2")
-outdir=$(realpath "$3")
-cmddir=$(realpath "$4")
+[[ $# -lt 3 ]] && usage
 
-repack_cmd="$sdir/ncrepack-cordex"
+INDIR=$(realpath "$1")
+SDIR=$(realpath "$2")
+mkdir -p "$3"
+OUTDIR=$(realpath "$3")
+CMDDIR="${4:-.}"
+mkdir -p "$CMDDIR"
+CMDDIR=$(realpath "$CMDDIR")
 
-if [ ! -x "$repack_cmd" ]; then
+[[ ! -d "$INDIR" ]] && { echo "Error: INDIR not found: $INDIR" >&2; exit 1; }
+[[ ! -d "$SDIR"  ]] && { echo "Error: SETUPDIR not found: $SDIR" >&2; exit 1; }
+
+repack_cmd="$SDIR/ncrepack-cordex"
+[[ ! -x "$repack_cmd" ]] && {
     echo "Error: ncrepack-cordex not found or not executable: $repack_cmd" >&2
     exit 1
-fi
+}
 
-mkdir -p "$outdir" "$cmddir"
+cmdfile="$CMDDIR/repack.cmd"
+> "$cmdfile"
+ncommands=0
 
-cmdfile="$cmddir/repack.cmd"
-rm -f "$cmdfile"
+echo "Scanning input directory: $INDIR"
 
-# Mirror directory structure with symlinks, one command per file
-find "$indir" -name '*.nc' | sort | while read -r src; do
-    # Reproduce the subdirectory path under outdir
-    rel="${src#$indir/}"
-    dest="$outdir/$rel"
-    mkdir -p "$(dirname "$dest")"
+for dir in "$INDIR"/*/; do
+    [[ ! -d "$dir" ]] && continue
+    dirname="$(basename "$dir")"
 
-    # Create symlink only if not already present (supports re-runs)
-    if [ ! -e "$dest" ]; then
-        ln -s "$src" "$dest"
-    fi
+    files=("$dir"*.nc)
+    [[ ! -f "${files[0]:-}" ]] && continue
 
-    echo "$repack_cmd -o $dest" >> "$cmdfile"
+    outdir_var="$OUTDIR/$dirname"
+    mkdir -p "$outdir_var"
+
+    for infile in "${files[@]}"; do
+        [[ ! -f "$infile" ]] && continue
+        dest="$outdir_var/$(basename "$infile")"
+
+        # Create symlink only if not already present (supports re-runs)
+        [[ ! -e "$dest" ]] && ln -s "$infile" "$dest"
+
+        echo "$repack_cmd -o $dest" >> "$cmdfile"
+        (( ncommands++ )) || true
+    done
+
+    echo "  $dirname: $ncommands commands"
 done
 
-n=$(wc -l < "$cmdfile")
-echo "repack.sh: wrote $n commands to $cmdfile"
+[[ ! -s "$cmdfile" ]] && rm "$cmdfile"
+
+echo ""
+echo "Commandfile written to: $cmdfile"
+echo ""
+echo "To run with launch_multi:"
+echo "  launch_multi --run RUNDIR ${cmdfile}"
