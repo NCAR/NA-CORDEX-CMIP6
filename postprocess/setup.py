@@ -294,54 +294,17 @@ SIM_ENV_KEYS = [
     "wrfinput_path",
 ]
 
-CREATION_DATE_PLACEHOLDER = "YYYY-MM-DD"
 
-
-def derive_creation_date(wrfdir):
-    """
-    Derive simulation completion date from the most recent wrfout file
-    timestamp across all <YYYY>_chunk subdirectories of wrfdir.
-    Returns a YYYY-MM-DD string, or None if no files are found.
-    """
-
-    print(f"  Deriving creation date from wrfout modtimes")
-
-    candidates = glob.glob(os.path.join(wrfdir, "*_chunk", "wrfout*"))
-    if not candidates:
-        return None
-    latest_mtime = max(os.path.getmtime(f) for f in candidates)
-    return datetime.date.fromtimestamp(latest_mtime).strftime("%Y-%m-%d")
-
-
-def write_sim_env(cfg, wrfdir, outpath):
+def write_sim_env(cfg, outpath):
     """Write sim.env to define simulation metadata:
     one shell variable assignment per line.
-
-    Attempts to auto-derive creation_date from wrfout file timestamps if the
-    config still contains the placeholder value.  Stores the resolved value
-    and its source back into cfg for reporting at the end of main().
     """
-    
     print(f"\n=== Recording simulation metadata ===")
 
-    # Resolve creation_date; store source tag back into cfg for end-of-run report
-    creation_date = str(cfg.get("creation_date", CREATION_DATE_PLACEHOLDER))
-    if creation_date == CREATION_DATE_PLACEHOLDER:
-        derived = derive_creation_date(wrfdir)
-        if derived:
-            creation_date = derived
-            cfg["_creation_date_source"] = "auto-derived from wrfout timestamps"
-            print(f"    result: {creation_date}")
-        else:
-            sys.exit(
-                f"Error: creation_date is not set in sim_config.yml\n"
-                f"  and could not be derived from wrfout files under\n"
-                f"  {wrfdir}/*_chunk.\n"
-                f"  Set creation_date manually in sim_config.yml and re-run."
-            )
-    else:
-        cfg["_creation_date_source"] = "sim_config.yml"
-    cfg["creation_date"] = creation_date
+    # Per spec, creation_date is now @ UTC, format YYYY-MM-DDTHH:MM:SSZ
+    # (Use the same date for the entire dataset)
+    creation_date = datetime.datetime.now(datetime.timezone.utc)
+    cfg["creation_date"] = creation_date.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     print(f"  writing sim.env")
 
@@ -597,7 +560,7 @@ def main():
         var_specs_path, dreq_path, setupdir, cfg["cmor_table_freqs"], scripts_dir)
     write_var_table(var_rows, os.path.join(setupdir, "var_table.tsv"))
 
-    write_sim_env(cfg, wrfdir, os.path.join(setupdir, "sim.env"))
+    write_sim_env(cfg, os.path.join(setupdir, "sim.env"))
 
     create_coord_file(wrfdir, setupdir, force)
 
@@ -607,16 +570,10 @@ def main():
 
     copy_config(config_path, setupdir, force)
 
-    # Report creation_date prominently so the user can verify before proceeding
-    creation_date        = cfg.get("creation_date", "unknown")
-    creation_date_source = cfg.get("_creation_date_source", "")
-
     print(f"\n=== Setup complete ===")
     print(f"  Outputs in: {setupdir}")
     print(f"\n  Next step:")
     print(f"    extract.sh WRFDIR SETUPDIR YEARS [CMDDIR]")
-    print(f"\n  creation_date: {creation_date}  ({creation_date_source})")
-    print(f"  *** verify before proceeding ***\n")
 
 if __name__ == "__main__":
     main()

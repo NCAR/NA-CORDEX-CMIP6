@@ -2,18 +2,10 @@
 ===========
 TODO items:
 
-    fix time chunking
-    	have ncrepack-cordex use the filename-based time-dim chunking
-	
-    change creation_date to `date` (format YYYYMMDD-HH:MM:SSZ)
-    	-> wrfdir no longer needed by setup.py
-	setup doesn't need to know about creation_date at all,
-	cmorize can call `date` when it runs    
-
     pull static vars & coords from geo_em.d01.nc instead
     	 lives in collections/.../CMIP6/ERA5/aer/
     also pull gridcell corners for setup/wrf.xy.coords
-	
+    	 Does setup still need WRFDIR?  
 
     run new vars through remainder of postprocessing steps
       relocate
@@ -28,11 +20,13 @@ TODO items:
 	       specify what kind of file var lives in here
 	       	       instead of hard-coding in postproc.machinery
 
-	move clean_fx into setup
+	? move clean_fx into setup
 
 	setup: drop looking for dreq CSV in ~/work/cordex6
 
 	get rid of exec(compile( shenanigans in postprocess.machinery
+
+	cleanup rechunk.sh messages
 
 ---
 

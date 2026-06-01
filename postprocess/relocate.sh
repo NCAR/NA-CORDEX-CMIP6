@@ -80,8 +80,8 @@ else
         echo "Run setup.py before relocate.sh, or use --version to override." >&2
         exit 1
     }
-    # Extract creation_date and convert YYYY-MM-DD -> vYYYYMMDD
-    creation_date="$(grep '^creation_date=' "$SIM_ENV" | cut -d= -f2 | tr -d '"')"
+    # Extract creation_date and convert YYYY-MM-DDTHH:MM:SSZ -> vYYYYMMDD
+    creation_date="$(grep '^creation_date=' "$SIM_ENV" | cut -d= -f2 | cut -dT -f1)"
     [[ -z "$creation_date" ]] && {
         echo "Error: creation_date not found in $SIM_ENV" >&2
         exit 1
