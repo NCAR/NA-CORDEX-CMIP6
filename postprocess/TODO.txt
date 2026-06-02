@@ -2,11 +2,6 @@
 ===========
 TODO items:
 
-    pull static vars & coords from geo_em.d01.nc instead
-    	 lives in collections/.../CMIP6/ERA5/aer/
-    also pull gridcell corners for setup/wrf.xy.coords
-    	 Does setup still need WRFDIR?  
-
     run new vars through remainder of postprocessing steps
       relocate
       qa
@@ -25,6 +20,7 @@ TODO items:
 	setup: drop looking for dreq CSV in ~/work/cordex6
 
 	get rid of exec(compile( shenanigans in postprocess.machinery
+	    use importlib instead?
 
 	cleanup rechunk.sh messages
 

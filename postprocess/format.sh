@@ -8,7 +8,7 @@
 # cmorize.sh commands, writing output to OUTDIR.  One commandfile per variable.
 #
 # Requires setup.py to have been run first: SETUPDIR must contain
-#   wrf.xy.coords.nc   - coordinate reference file
+#   xy.coords.nc   - coordinate reference file
 #   sim.env            - simulation metadata (shell key=value pairs)
 #   var_table.tsv      - per-variable specs (tab-separated)
 
@@ -62,7 +62,7 @@ CMDDIR="$(realpath "$CMDDIR")"
 [[ ! -d "$SETUPDIR" ]] && { echo "Error: SETUPDIR not found: $SETUPDIR" >&2; exit 1; }
 
 # Check that ancillary files from setup.py exist in SETUPDIR
-for f in wrf.xy.coords.nc sim.env var_table.tsv; do
+for f in xy.coords.nc sim.env var_table.tsv; do
     [[ ! -f "$SETUPDIR/$f" ]] && {
         echo "Error: Required file not found: $SETUPDIR/$f" >&2
         echo "Run setup.py before format.sh." >&2

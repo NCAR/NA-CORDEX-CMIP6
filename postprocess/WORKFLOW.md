@@ -55,7 +55,7 @@ set topdir = $scratch/era5
 set sdir = $topdir/setup
 
 
-python $post/setup.py $raw $sdir
+python $post/setup.py $sdir
 
 
 ################

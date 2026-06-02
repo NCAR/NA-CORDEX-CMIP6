@@ -12,7 +12,7 @@
 # this script (copied there by launch_multi from the format/data directory).
 #
 # Creates output by:
-#   1. Trimming sponge zone from spatial coordinates in wrf.xy.coords.nc
+#   1. Trimming sponge zone from spatial coordinates in xy.coords.nc
 #   2. Appending the (trimmed) data variable from INFILE
 #   3. Writing all CF and CORDEX global and variable attributes
 #
@@ -22,7 +22,7 @@
 #   FREQ     Output frequency (1hr, 6hr, day, fx).
 #   INFILE   Input file from extract step
 #   OUTFILE  Full path to output file
-#   SETUPDIR Directory containing sim.env, var_table.tsv, wrf.xy.coords.nc
+#   SETUPDIR Directory containing sim.env, var_table.tsv, xy.coords.nc
 #            (the SETUPDIR from setup.py)
 #
 # Note: FREQ is needed as an argument because the freq column in
@@ -56,7 +56,7 @@ setupdir="$5"
 
 sim_env="$setupdir/sim.env"
 var_table="$setupdir/var_table.tsv"
-coord_file="$setupdir/wrf.xy.coords.nc"
+coord_file="$setupdir/xy.coords.nc"
 
 [[ ! -f "$sim_env" ]] && {
     echo "Error: sim.env not found: $sim_env" >&2
@@ -68,7 +68,7 @@ coord_file="$setupdir/wrf.xy.coords.nc"
     exit 1
 }
 [[ ! -f "$coord_file" ]] && {
-    echo "Error: wrf.xy.coords.nc not found: $coord_file" >&2
+    echo "Error: xy.coords.nc not found: $coord_file" >&2
     echo "Run setup.py before cmorize.sh." >&2
     exit 1
 }

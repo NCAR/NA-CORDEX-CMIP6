@@ -2,26 +2,31 @@
 """
 setup.py - One-time setup for NA-CORDEX-CMIP6 postprocessing workflow.
 
-Reads sim_config.yml and var_specs.yml, downloads/caches the CORDEX data
-request CSV and CMOR JSON tables, creates the WRF coordinate reference file,
-extracts fixed WRF fields (land mask, wind rotation angles) into wrf.fx.nc,
-and writes two flat files consumed by all downstream bash scripts:
+Reads sim_config.yml and var_specs.yml, downloads/caches the CORDEX
+data request CSV and CMOR JSON tables, and collates the data into two
+flat files consumed by downstream bash scripts:
 
   sim.env        Shell key=value pairs for all simulation metadata
   var_table.tsv  Per-variable specs (one row per variable, tab-separated)
 
-Run once before extract.sh / format.sh.  All outputs go to SETUPDIR.
+Also uses code in generate_aux.py to pull data from the wrfinput_path
+file in sim_config to create two auxiliary files used downstream:
+
+  wrf.fx.nc     fixed fields used in postprocessing
+  xy.coords.nc  aux & regular coordinate vars added during format
+
+Run once at beginning of workflow.  All outputs go to SETUPDIR.
 
 Usage:
-  python setup.py WRFDIR SETUPDIR [SIM_CONFIG] [--scripts SCRIPTS_DIR]
+  python setup.py SETUPDIR [SIM_CONFIG] [--scripts SCRIPTS_DIR]
 
-  WRFDIR      Parent directory containing <YYYY>_chunk/ simulation directories
   SETUPDIR    Output directory (created if needed); use the same directory
               for extract.sh OUTDIR so coordinate files are found alongside data
   SIM_CONFIG  Path to sim_config.yml (default: SCRIPTS_DIR/sim_config.yml)
   --scripts   Directory containing var_specs.yml (default: directory of this script)
   --force     Recreate outputs even if they already exist
   -v/--verbose  Print detailed output (file contents, NCO/CDO commands)
+
 """
 
 import argparse
@@ -35,7 +40,8 @@ import subprocess
 import sys
 import urllib.request
 
-import xarray as xr
+import importlib.util
+
 import yaml
 
 
@@ -46,8 +52,6 @@ import yaml
 def parse_args():
     p = argparse.ArgumentParser(
         description="One-time setup for NA-CORDEX-CMIP6 postprocessing workflow.")
-    p.add_argument("wrfdir",     metavar="WRFDIR",
-                   help="Parent directory containing <YYYY>_chunk/ simulation directories")
     p.add_argument("setupdir",   metavar="SETUPDIR",
                    help="Output directory for all setup products")
     p.add_argument("sim_config", metavar="SIM_CONFIG", nargs="?",
@@ -323,172 +327,22 @@ def write_sim_env(cfg, outpath):
 
 
 # ---------------------------------------------------------------------------
-# Step 4: Create WRF coordinate reference file
+# Step 4: Generate coordinate and fixed-field auxiliary files
 # ---------------------------------------------------------------------------
 
-def find_chunk_dir(wrfdir):
-    """Return the path to the first *_chunk subdirectory found in wrfdir."""
-    chunks = sorted(
-        os.path.join(wrfdir, d)
-        for d in os.listdir(wrfdir)
-        if d.endswith("_chunk") and os.path.isdir(os.path.join(wrfdir, d))
-    )
-    if not chunks:
-        sys.exit(f"Error: No *_chunk directories found in {wrfdir}")
-    return chunks[0]
-
-
-def create_coord_file(wrfdir, setupdir, force):
-    """
-    Create wrf.xy.coords.nc from the first wrfout_d01_* file found in the
-    first *_chunk subdirectory of wrfdir.
-    """
-    outname = "wrf.xy.coords.nc"
-    outpath = os.path.join(setupdir, outname)
-
-    if os.path.exists(outpath) and not force:
-        print(f"\n=== Coordinate file {outname} already exists (skipping) ===")
-        return
-
-    chunk_dir = find_chunk_dir(wrfdir)
-    candidates = sorted(f for f in os.listdir(chunk_dir) if f.startswith("wrfout_d01_"))
-    if not candidates:
-        sys.exit(f"Error: No wrfout_d01_* files found in {chunk_dir}")
-    coord_ref = os.path.join(chunk_dir, candidates[0])
-
-    print(f"\n=== Generating coordinate file {outname} ===")
-    vprint(f"  Source: {coord_ref}")
-
-    # Extract lat/lon from first timestep, averaging over Time dimension
-    run(f'ncwa -h -3 -a Time -C -v XLAT,XLONG "{coord_ref}" "{outpath}"')
-
-    # Remove all existing variable and global attributes inherited from WRF,
-    # then rename dimensions and variables to CF conventions
-    run(f'ncatted -h '
-        f'-a ,XLONG,d,, -a ,XLAT,d,, '
-        f'-a \'^[A-Z0-9_-]+$\',global,d,, '
-        f'-a stagger,,d,, -a coordinates,,d,, "{outpath}"')
-    run(f'ncrename -h -d south_north,y -d west_east,x "{outpath}"')
-    run(f'ncrename -h -v XLAT,lat -v XLONG,lon "{outpath}"')
-
-    # Longitude monotonicity fix (NAM-12 domain specific: WRF outputs negative
-    # longitudes west of the prime meridian; shift to 0-360 for monotonicity)
-    run(f'ncap2 -h -O -s \'where(lon < 0) lon = lon + 360\' "{outpath}" "{outpath}"')
-
-    # Add projection variable with all CRS attributes in one call
-    run(f'ncap2 -h -A -s "crs=-9999" "{outpath}"')
-    run(f'ncatted -h '
-        f'-a long_name,crs,o,c,"coordinate reference system" '
-        f'-a grid_mapping_name,crs,o,c,lambert_conformal_conic '
-        f'-a standard_parallel,crs,o,f,"35.,60." '
-        f'-a longitude_of_central_meridian,crs,o,f,-97. '
-        f'-a latitude_of_projection_origin,crs,o,f,46. '
-        f'-a semi_major_axis,crs,o,f,6370000. '
-        f'-a semi_minor_axis,crs,o,f,6370000. '
-        f'-a false_easting,crs,o,f,0. '
-        f'-a false_northing,crs,o,f,0. '
-        f'-a units,crs,o,c,"m" "{outpath}"')
-
-    # Create x/y coordinate arrays (12 km grid spacing, centred on domain)
-    run(f'ncap2 -h -A -s '
-        f'\'x=array(-(($x.size-1)/2)*12000.,12000.,$x); '
-        f'y=array(-(($y.size-1)/2)*12000.,12000.,$y)\' "{outpath}"')
-    run(f'ncatted -h '
-        f'-a units,x,o,c,m -a units,y,o,c,m '
-        f'-a long_name,x,o,c,"x-coordinate in Cartesian system" '
-        f'-a long_name,y,o,c,"y coordinate in Cartesian system" '
-        f'-a standard_name,x,o,c,projection_x_coordinate '
-        f'-a standard_name,y,o,c,projection_y_coordinate '
-        f'-a axis,x,o,c,X -a axis,y,o,c,Y "{outpath}"')
-
-    # Convert lat/lon to double precision and add CF metadata in one pass
-    run(f'ncap2 -h -O -s \'lon=double(lon); lat=double(lat)\' "{outpath}" "{outpath}"')
-    run(f'ncatted -h '
-        f'-a units,lat,o,c,degrees_north '
-        f'-a units,lon,o,c,degrees_east '
-        f'-a long_name,lat,o,c,latitude '
-        f'-a long_name,lon,o,c,longitude '
-        f'-a standard_name,lat,o,c,latitude '
-        f'-a standard_name,lon,o,c,longitude "{outpath}"')
+def load_auxgen_module(scripts_dir):
+    """Load generate_aux.py as a module from scripts_dir."""
+    path = os.path.join(scripts_dir, "generate_aux.py")
+    if not os.path.exists(path):
+        sys.exit(f"Error: generate_aux.py not found in {scripts_dir}")
+    spec = importlib.util.spec_from_file_location("generate_aux", path)
+    mod  = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 # ---------------------------------------------------------------------------
-# Step 5: Extract fixed WRF fields into wrf.fx.nc
-# ---------------------------------------------------------------------------
-
-# Fields to extract from the fx file for use during postprocessing.
-# LANDMASK: land/sea mask (1=land, 0=ocean/water); used to mask land-only vars.
-# COSALPHA, SINALPHA: wind rotation angles; used to rotate U/V to earth-relative
-#   coordinates.  WRF outputs these with a singleton Time dimension; we squeeze
-#   it out here so downstream code doesn't need to.
-_FX_VARS = ['LANDMASK', 'COSALPHA', 'SINALPHA']
-
-# Filename prefix for WRF files containing fixed (time-invariant) fields.
-_WRF_FX_PREFIX = 'wrfout_5day_d01_'
-
-
-def create_fx_file(wrfdir, setupdir, force):
-    """Extract fixed WRF fields (LANDMASK, COSALPHA, SINALPHA) into wrf.fx.nc.
-
-    Reads from the first wrfout_5day_d01_* file in the first chunk directory.
-    Only the three needed fields are loaded (XLAT, XLONG, and all other WRF
-    variables are never read).  The singleton Time dimension is squeezed out,
-    WRF spatial dimensions are renamed to CORDEX conventions (x, y), all global
-    attributes and all per-variable attributes except 'description' are dropped,
-    and the result is written to setupdir/wrf.fx.nc.
-
-    Having these fields in setupdir means postprocessing has no run-time
-    dependency on wrfinput_path after setup completes.
-    """
-    outname = "wrf.fx.nc"
-    outpath = os.path.join(setupdir, outname)
-
-    if os.path.exists(outpath) and not force:
-        print(f"\n=== Fixed-field file {outname} already exists (skipping) ===")
-        return
-
-    chunk_dir = find_chunk_dir(wrfdir)
-    candidates = sorted(
-        f for f in os.listdir(chunk_dir) if f.startswith(_WRF_FX_PREFIX))
-    if not candidates:
-        sys.exit(f"Error: No {_WRF_FX_PREFIX}* files found in {chunk_dir}")
-    src = os.path.join(chunk_dir, candidates[0])
-
-    print(f"\n=== Generating fixed-field file {outname} ===")
-    vprint(f"  Source: {src}")
-    vprint(f"  Variables: {', '.join(_FX_VARS)}")
-
-    ds = xr.open_dataset(src)[_FX_VARS].squeeze('Time', drop=True)
-    ds = ds.rename({'south_north': 'y', 'west_east': 'x'})
-
-    # Strip all global attributes inherited from WRF
-    ds.attrs = {}
-
-    # Keep only the 'description' attribute on each variable; drop the rest
-    for var in ds.data_vars:
-        ds[var].attrs = {k: v for k, v in ds[var].attrs.items() if k == 'description'}
-
-    # Remove Time from dataset encoding: xarray carries it through from the
-    # source file even after squeeze, causing a spurious UserWarning on write.
-    ds.encoding.pop('unlimited_dims', None)
-
-    # Suppress _FillValue on fixed fields (no missing data; avoids xarray
-    # inserting a default fill value on write)
-    encoding = {var: {'_FillValue': None} for var in ds.data_vars}
-
-    ds.to_netcdf(outpath, encoding=encoding)
-    ds.close()
-
-    # Remove the 'coordinates' attribute that xarray writes on each variable
-    # referencing XLAT/XLONG/XTIME from the source file; these variables are
-    # not present in wrf.fx.nc and the attribute serves no purpose here.
-    run(f'ncatted -h -a coordinates,,d,, "{outpath}"')
-
-    print(f"  wrote {outpath}")
-
-
-# ---------------------------------------------------------------------------
-# Step 6: Download ncrepack-cordex scripts into setupdir
+# Step 5: Download ncrepack-cordex scripts into setupdir
 # ---------------------------------------------------------------------------
 
 # Scripts to download from the ncrepack-cordex release page.
@@ -509,7 +363,7 @@ def install_repack_scripts(setupdir, force):
 
 
 # ---------------------------------------------------------------------------
-# Step 7: Copy sim_config.yml into setupdir for provenance
+# Step 6: Copy sim_config.yml into setupdir for provenance
 # ---------------------------------------------------------------------------
 
 def copy_config(config_path, setupdir, force):
@@ -532,14 +386,10 @@ def main():
     _verbose = args.verbose
 
     scripts_dir = args.scripts or os.path.dirname(os.path.realpath(__file__))
-    wrfdir      = os.path.realpath(args.wrfdir)
     setupdir    = os.path.realpath(args.setupdir)
     force       = args.force
 
     os.makedirs(setupdir, exist_ok=True)
-
-    if not os.path.isdir(wrfdir):
-        sys.exit(f"Error: WRFDIR not found: {wrfdir}")
 
     # Locate config files
     config_path    = args.sim_config or os.path.join(scripts_dir, "sim_config.yml")
@@ -553,21 +403,33 @@ def main():
     with open(config_path) as f:
         cfg = yaml.safe_load(f)
 
-    # Run setup steps
+    # 1: download & cache spec files
     dreq_path = fetch_upstream(cfg, setupdir, force)
 
+    # 2: generate var_table.tsv
     var_rows = build_var_table(
         var_specs_path, dreq_path, setupdir, cfg["cmor_table_freqs"], scripts_dir)
     write_var_table(var_rows, os.path.join(setupdir, "var_table.tsv"))
 
+    # 3: generate sim.env
     write_sim_env(cfg, os.path.join(setupdir, "sim.env"))
 
-    create_coord_file(wrfdir, setupdir, force)
+    # 4: generate aux files
+    wrfinput_path = cfg.get("wrfinput_path", "")
+    if not wrfinput_path:
+        sys.exit("Error: 'wrfinput_path' not set in sim_config.yml")
+    if not os.path.isfile(wrfinput_path):
+        sys.exit(f"Error: wrfinput_path not found: {wrfinput_path}")
 
-    create_fx_file(wrfdir, setupdir, force)
+    auxgen = load_auxgen_module(scripts_dir)
+    auxgen.verbose = _verbose
+    auxgen.create_coord_file(wrfinput_path, setupdir, force)
+    auxgen.create_fx_file(wrfinput_path, setupdir, force)
 
+    # 5: install ncrepack-cordex scripts
     install_repack_scripts(setupdir, force)
 
+    # 6: copy sim_config into setup
     copy_config(config_path, setupdir, force)
 
     print(f"\n=== Setup complete ===")

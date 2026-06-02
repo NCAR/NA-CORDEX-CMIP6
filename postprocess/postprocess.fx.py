@@ -71,20 +71,18 @@ dname_map_xy = {'west_east': 'x', 'south_north': 'y'}
 
 # Time invariant variables (orog and sftlf)
 # ---------------------------------------------------
-# orog & sftlf must be produced from a WRF *input* file rather than an output
-# file; note they have no time dimension.
+# orog & sftlf are produced from a geo_em.d01.nc file; they have no time dimension.
 #
-# sftlf is the land fraction excluding sea ice (LANDMASK - SEAICE).
-# orog is the surface altitude (HGT).
+# sftlf is the land fraction (LANDMASK * 100) (no SEAICE is included)
+# orog is the surface altitude (HGT_M).
 
-infile = os.path.join(_cfg['wrfinput_path'], 'wrfinput_d01')
+infile = _cfg['wrfinput_path']
 ds = xr.open_dataset(infile, decode_times=False) \
        .rename(dname_map_xy) \
        .fillna(1.e20)
 
-seaice = ds['SEAICE'].mean(dim='Time')
-sftlf  = (ds['LANDMASK'].mean(dim='Time') - xr.where(seaice != 0, 1, 0)) * 100
-orog   = ds['HGT'].mean(dim='Time')
+sftlf = ds['LANDMASK'].squeeze('Time', drop=True) * 100
+orog  = ds['HGT_M'].squeeze('Time', drop=True)
 
 for varname, da in [('sftlf', sftlf), ('orog', orog)]:
     fout = f'{varname}_{fname_base}_fx.nc'
