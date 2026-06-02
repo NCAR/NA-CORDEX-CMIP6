@@ -74,7 +74,7 @@ references: "https://github.com/NCAR/NA-CORDEX-CMIP6 (code and documentation)"
 # ---------------------------------------------------------------------------
 
 # Directory containing a wrfinput_d01 file (used for orog and sftlf)
-wrfinput_path: "/glade/derecho/scratch/jsallen/NA-CORDEX-CMIP6/ERA5_HIST_E03/input_example/"
+wrfinput_path: "/glade/campaign/ral/risc/collections/na-cordex-cmip6/CMIP6/ERA5/aer/geo_em.d01.nc"
 
 
 # ---------------------------------------------------------------------------
