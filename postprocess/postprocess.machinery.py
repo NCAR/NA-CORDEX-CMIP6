@@ -48,7 +48,6 @@
 # ------------------------------------------------
 
 import thermofeel
-from collections import defaultdict
 import xarray as xr
 from xarray import ufuncs
 import numpy as np

@@ -9,18 +9,20 @@ TODO items:
     
     deferred:
 
+	check wbgt, get it working if broken
+
 	group aggregate commandfiles by variable *and* step
 
 	change var_specs from yml to tsv
 	       specify what kind of file var lives in here
 	       	       instead of hard-coding in postproc.machinery
 
-	? move clean_fx into setup
-
 	setup: drop looking for dreq CSV in ~/work/cordex6
 
 	get rid of exec(compile( shenanigans in postprocess.machinery
 	    use importlib instead?
+
+	rename postprocess.variables etc to postproc_vars etc
 
 	cleanup rechunk.sh messages
 
