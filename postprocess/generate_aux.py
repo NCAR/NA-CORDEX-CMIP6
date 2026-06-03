@@ -139,6 +139,10 @@ def create_coord_file(wrfinput_path, setupdir, force):
     x_coords = (np.arange(nx) - (nx - 1) / 2.0) * 12000.0
     y_coords = (np.arange(ny) - (ny - 1) / 2.0) * 12000.0
 
+    # x/y bounds: 6 km on either side of each cell center
+    x_bnds = np.stack([x_coords - 6000.0, x_coords + 6000.0], axis=-1)
+    y_bnds = np.stack([y_coords - 6000.0, y_coords + 6000.0], axis=-1)
+
     # CRS: Lambert conformal conic (NA-CORDEX parameters)
     # Stored as a scalar integer variable; all projection info is in attributes.
     crs_var = xr.DataArray(
@@ -177,10 +181,10 @@ def create_coord_file(wrfinput_path, setupdir, force):
                 }),
             'lat_bnds': xr.DataArray(
                 lat_bnds.astype(np.float64), dims=['y', 'x', 'nv'],
-                attrs={'long_name': 'latitude bounds'}),
+                attrs={}),
             'lon_bnds': xr.DataArray(
                 lon_bnds.astype(np.float64), dims=['y', 'x', 'nv'],
-                attrs={'long_name': 'longitude bounds'}),
+                attrs={}),
             'crs': crs_var,
             'x': xr.DataArray(
                 x_coords, dims=['x'],
@@ -189,6 +193,7 @@ def create_coord_file(wrfinput_path, setupdir, force):
                     'long_name':     'x-coordinate in Cartesian system',
                     'standard_name': 'projection_x_coordinate',
                     'axis':          'X',
+                    'bounds':        'x_bnds',
                 }),
             'y': xr.DataArray(
                 y_coords, dims=['y'],
@@ -197,7 +202,14 @@ def create_coord_file(wrfinput_path, setupdir, force):
                     'long_name':     'y-coordinate in Cartesian system',
                     'standard_name': 'projection_y_coordinate',
                     'axis':          'Y',
+                    'bounds':        'y_bnds',
                 }),
+            'x_bnds': xr.DataArray(
+                x_bnds, dims=['x', 'nb'],
+                attrs={}),
+            'y_bnds': xr.DataArray(
+                y_bnds, dims=['y', 'nb'],
+                attrs={}),
         }
     )
     out.attrs = {}
