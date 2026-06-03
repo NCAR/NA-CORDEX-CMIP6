@@ -2,20 +2,19 @@
 ===========
 TODO items:
 
-    run new vars through remainder of postprocessing steps
-      relocate
-      qa
-      
+    merge extract branch into main
     
+
     deferred:
 
-	check wbgt, get it working if broken
+	wbgt - parallelize by running each day separately
+	     then concatenate to yearly & discard dailies
 
 	group aggregate commandfiles by variable *and* step
 
 	change var_specs from yml to tsv
-	       specify what kind of file var lives in here
-	       	       instead of hard-coding in postproc.machinery
+	       specify what kind of file each var lives in here,
+	       	 instead of hard-coding in postproc.machinery
 
 	setup: drop looking for dreq CSV in ~/work/cordex6
 
@@ -25,6 +24,7 @@ TODO items:
 	rename postprocess.variables etc to postproc_vars etc
 
 	cleanup rechunk.sh messages
+	make "next step" messages more useful
 
 ---
 

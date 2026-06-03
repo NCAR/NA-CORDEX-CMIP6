@@ -31,10 +31,11 @@ The workflow steps are:
 3. Aggregate
 4. Compress
 5. Repack
-6. Plot
-7. Relocate
-8. QA
+6. Relocate
+7. QA
+8. Plot
 9. Move
+10. Index
 
 ___
 
@@ -199,7 +200,7 @@ cd $topdir
 # Step 6: relocate into DRS tree
 
 set indir6 = $outdir5
-set outdir6 = .
+set outdir6 = $topdir
 
 $post/relocate.sh --dry-run $indir6 $sdir $outdir6 | tail
 
@@ -211,61 +212,49 @@ $post/relocate.sh $indir6 $sdir $outdir6
 
 set qdir = $topdir/qa
 
-set indir7  = `find $topdir/CORDEX-CMIP6 -type d -name v1-r1`
+set indir7drs = `find $topdir/CORDEX-CMIP6 -type d -name v1-r1`
+set indir7flat = $outdir5
 set outdir7 = $qdir/qa
 set cmddir7 = $qdir/cmd
 set rundir7 = $qdir/run
 
-mkdir -p $outdir7 $cmddir7 $rundir7
+$post/qa.sh $indir7drs $indir7flat $sdir $outdir7 $cmddir7
 
-set cmdfile = $cmddir7/qa.cmd
-rm -f $cmdfile; touch $cmdfile
-
-set tests = " -t wcrp_cordex_cmip6:1.0 -t cf:1.9"
-
-# Note: output dirctories must be empty
-
-
-foreach freq  (fx mon)
-  rm -rf $outdir7/$freq
-  mkdir -p $outdir7/$freq
-  echo esgqa -P 1 -o $outdir7/$freq $tests $indir7/$freq >> $cmdfile
-end
-
-foreach freq  (day 1hr 6hr)
-  foreach var (`/bin/ls -1 $indir8/$freq`)
-    rm -rf $outdir7/$freq/$var
-    mkdir -p $outdir7/$freq/$var
-    echo esgqa -o $outdir7/$freq/$var $tests $indir8/$freq/$var >> $cmdfile
-  end
-end
-
-# $sdir/ncrepack-cordex-check all files, too
-
-cd $rundir7
-cp $cmdfile .
-echo module restore default > config_env.sh
-echo conda activate nac6 >> config_env.sh
-
-launch_cf -A $PROJECT -l walltime=00:05:00 -q casper -j oe -N esgf_qa $cmdfile
+$post/launch_multi --workflow cordex --run $rundir7 $cmddir7/*.cmd
 
 
 ## wait until it finishes, check everything ran correctly
 cd $rundir7
-wc stdout*/*
-tail -q -n 1 *.o* | cut -f 1 -d : | uniq -c
+foreach i (nccheck*)
+  echo $i
+  wc $i/stdout*/* | tail -1
+  tail -q -n 1 $i/*.o* | cut -f 1 -d : | uniq -c
+end
+
+tail -q -n 1 esgqa/*.o* | cut -f 1 -d : | uniq -c
+bash -c 'for f in esgqa/stdout*/*; do tac "$f" | sed "/###/q" | tac; done' |   cut -f1 -d: | sort | uniq -c
+
+## examine QA results
+
+cd $outdir7/ncrepack-check
+foreach i (*)
+  echo $i
+  cat $i/*/* | cut -f1 -d: | sort | uniq -c
+end
+
+## day files get a WARN for chunksize 1 along time, which is necessary
+## b/c leap years + xarray can't handle different chunk sizes in a dataset
+
 cd $topdir
 
-# merge cluster.json files so you only need to upload one
+## merge cluster.json files so you only need to upload one
 set simname = `basename $topdir`
 python $post/merge-qa.py $qdir/$simname.qa.merged.json --find $qdir/qa
 echo "scp casper.hpc.ucar.edu:$qdir/$simname.qa.merged.json ."
 
-
-# download results, then check the cluster.json file at:
+## download results, then check the cluster.json file at:
 https://cmiphub.dkrz.de/info/display_qc_results.html
 
-## need to add ncrepack-cordex-check to this step
 
 
 ################
