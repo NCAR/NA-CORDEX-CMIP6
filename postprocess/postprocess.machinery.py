@@ -145,9 +145,9 @@ _CHUNKS = {'Time': 1, 'south_north': 337, 'west_east': 354}
 def make_fname(var, cmor_freq):
     """Construct the output filename for a variable at a given frequency."""
     if cmor_freq == '1hr':
-        return f'{var}_{fname_base}_1hr_{year}010100-{year}123123.nc'
+        return f'{var}_{fname_base}_1hr_{year}01010000-{year}12312300.nc'
     elif cmor_freq == '6hr':
-        return f'{var}_{fname_base}_6hr_{year}010100-{year}123118.nc'
+        return f'{var}_{fname_base}_6hr_{year}01010000-{year}12311800.nc'
     elif cmor_freq == 'day':
         return f'{var}_{fname_base}_day_{year}0101-{year}1231.nc'
     elif cmor_freq == 'mon':

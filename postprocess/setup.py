@@ -291,6 +291,7 @@ SIM_ENV_KEYS = [
     "project_id",
     "references",
     "source",
+    "source_abbrev",
     "source_id",
     "source_type",
     "sponge_cells",

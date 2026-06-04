@@ -131,8 +131,13 @@ write_attributes() {
     local outfile="$1"
     local coords="$2"
 
+    local title="${source_abbrev} downscaling"
+    title+=" of ${driving_source_id} ${driving_experiment_id}"
+    title+=" for ${project_id} ${domain_id}"
+
     # Clear existing global and data-variable attributes first
     ncatted -h -a ,"$var",d,, -a ,global,d,, "$outfile"
+    ncatted -h -a _FillValue,'^time*',d,, "$outfile"
 
     ncatted -h \
         -a Conventions,global,o,c,"CF-1.11" \
@@ -158,6 +163,7 @@ write_attributes() {
         -a source,global,o,c,"${source}" \
         -a source_id,global,o,c,"${source_id}" \
         -a source_type,global,o,c,"${source_type}" \
+        -a title,global,o,c,"${title}" \
         -a tracking_id,global,o,c,"${tracking_id}" \
         -a variable_id,global,o,c,"${var}" \
         -a version_realization,global,o,c,"${version_realization}" \
@@ -191,7 +197,7 @@ if [[ "$levels" == "fixed" ]]; then
 
     # Extract coordinates trimmed to interior domain, then append data variable.
     ncks -h -O -7 --hdr_pad $padding -d x,$x_trim -d y,$y_trim \
-	 "$coord_file" "$outfile"
+         "$coord_file" "$outfile"
     ncks -h -A -d x,$x_trim -d y,$y_trim -v "$var" "$infile" "$outfile"
 
     write_attributes "$outfile" "lat lon"

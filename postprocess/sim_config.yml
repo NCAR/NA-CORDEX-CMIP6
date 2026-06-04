@@ -36,6 +36,7 @@ calendar: "standard"
 # ---------------------------------------------------------------------------
 
 source: "Weather Research and Forecasting model version 4.6.1, CORDEX WRF Community configuration S"
+source_abbrev: "WRF"
 source_id: "WRF461S-SN"
 source_type: "ARCM"
 version_realization: "v1-r1"

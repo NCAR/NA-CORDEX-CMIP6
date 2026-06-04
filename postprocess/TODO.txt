@@ -2,14 +2,6 @@
 ===========
 TODO items:
 
-    sub-daily filename times need DDhhmm, not just DDhh
-         set in extract
-    time & time_bnds must not have _FillValue
-    	 added in extract, could be removed in format
-    global att title
-         in format
-
-
     note which esgqa FAIL checks to ignore in WORKFLOW
 
     apply workflow updates to env.sh
