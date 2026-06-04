@@ -137,7 +137,9 @@ write_attributes() {
 
     # Clear existing global and data-variable attributes first
     ncatted -h -a ,"$var",d,, -a ,global,d,, "$outfile"
-    ncatted -h -a _FillValue,'^time*',d,, "$outfile"
+
+    # Delete the _FillValue xarray puts on on time coordinates
+    ncatted -h -a _FillValue,'^time.*',d,, "$outfile" 2>/dev/null || true
 
     ncatted -h \
         -a Conventions,global,o,c,"CF-1.11" \
