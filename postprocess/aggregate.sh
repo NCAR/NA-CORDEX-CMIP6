@@ -346,7 +346,7 @@ for vardir in "$INDIR"/*/; do
             # ncrcat -p sets the input path so only filenames are listed.
             # --cnk_dmn time,1 chunks the time coordinate variable as a
             # single chunk for efficient CDO/NCO access.
-            echo "ncrcat -7 --cnk_dmn time,1 -p $src_dir ${infiles[*]} $chunk_out" >> "$cat_cmd"
+            echo "ncrcat -h -7 --cnk_dmn time,1 -p $src_dir ${infiles[*]} $chunk_out" >> "$cat_cmd"
         done
     done
 
