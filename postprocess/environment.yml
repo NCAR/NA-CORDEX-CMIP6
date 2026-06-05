@@ -14,6 +14,7 @@ dependencies:
     - xarray=2026.4.0
     - cmip7-repack
     - pip=26.0.1
+    - datamash=1.9
     - pip:
         - thermofeel==2.1.7
         - esgf-qa

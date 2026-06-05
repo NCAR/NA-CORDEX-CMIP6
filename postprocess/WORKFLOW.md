@@ -88,17 +88,21 @@ $post/launch_multi --workflow cordex --run $runxtra --wall 03:00:00 $cmdxtra/*cm
 
 
 ## wait until it finishes, check everything ran correctly
+
+## this is ridiculous, but it works
+alias pad 'awk '"'"'{ for (i=1; i<=NF; i++) printf "%10s", $i; print ""}'"'"''
+
 cd $rundir1
 foreach i (*)
-echo $i
-cat $i/stdout*/* | sort
-tail -q -n 1 $i/*.o* | cut -f 1 -d : | uniq -c
-echo ------------
+echo -n $i"\t"
+printf "%s\t" `tail -q -n 1 $i/*.o* | cut -f 1 -d : | sort | uniq -c`
+printf "%s\t" `cat $i/stdout*/* | grep mem | datamash -sWR 2 min 4 mean 4 max 4 | pad`
+cat $i/stdout*/* | grep time | datamash -sWR 2 min 3 mean 3 max 3 | pad
 end
+
 cd $topdir
 
-
-#chmod -R -w $outdir1
+# chmod -R -w $outdir1
 
 ################
 # Step 2: format
@@ -167,8 +171,8 @@ $post/launch_multi --workflow cordex --run $rundir4 $cmddir4/*cmd
 
 ## wait until it finishes, check everything ran correctly
 cd $rundir4
-wc */stdout*/*
-tail -q -n 1 */*.o* | cut -f 1 -d : | uniq -c
+wc */stdout*/* | tail -1
+tail -q -n 1 */*.o* | cut -f 1 -d : | sort | uniq -c
 cd $topdir
 
 
@@ -242,9 +246,6 @@ foreach i (*)
   cat $i/*/* | cut -f1 -d: | sort | uniq -c
 end
 
-## day files get a WARN for chunksize 1 along time, which is necessary
-## b/c leap years + xarray can't handle different chunk sizes in a dataset
-
 cd $topdir
 
 ## merge cluster.json files so you only need to upload one
@@ -255,6 +256,23 @@ echo "scp casper.hpc.ucar.edu:$qdir/$simname.qa.merged.json ."
 ## download results, then check the cluster.json file at:
 https://cmiphub.dkrz.de/info/display_qc_results.html
 
+## ERRORs and WARNs to ignore:
+
+## day files get a WARN for chunksize 1 along time, which is necessary
+## b/c leap years + xarray can't handle different chunk sizes in a dataset
+
+## Some of the variables in the NCAR-CORDEX-CMIP6_1hr.json files (fzra
+## heatidz humidex wchill) aren't in the controlled vocabulary CMOR
+## tables, which means that the CORDEX-CMIP6 plugin can't identify the
+## main variable, which gives FAILs for [CDXT001] Time Chunking and
+## [FILE003] Compression.
+
+## We also get [CDXT001] Time Chunking FAILs for the variables that we
+## are providing 6-hourly but are requested 1-hourly (hfls hfss rlus
+## fsus [ua,va][50,100,150]m), because it can't find an entry for that
+## var+freq in the CMOR tables.
+
+## fzra & humidex don't have a CF standard_name (yet)
 
 
 ################

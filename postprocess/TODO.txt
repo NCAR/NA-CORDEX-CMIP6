@@ -2,11 +2,21 @@
 ===========
 TODO items:
 
-    note which esgqa FAIL checks to ignore in WORKFLOW
+     add -h flag to repack operations
+     set history to "" at end of compress step
 
-    apply workflow updates to env.sh
+     filenames: sub-daily var start & end times are 00:30 to 23:30,
+     not 00:00 to 23:00, so filenames need to be adjusted.
 
-    merge extract branch into main
+     stdnames:
+     wchill:	wind_chill_of_air_temperature
+     heatidx:	heat_index_of_air_temperature
+
+     parallel wbgt is MUCH faster
+
+     apply workflow updates to env.sh
+
+     merge extract branch into main
     
 
     deferred:
