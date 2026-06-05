@@ -2,12 +2,6 @@
 ===========
 TODO items:
 
-     add -h flag to repack operations
-     set history to "" at end of compress step
-
-     filenames: sub-daily var start & end times are 00:30 to 23:30,
-     not 00:00 to 23:00, so filenames need to be adjusted.
-
      stdnames:
      wchill:	wind_chill_of_air_temperature
      heatidx:	heat_index_of_air_temperature
@@ -15,6 +9,9 @@ TODO items:
      parallel wbgt is MUCH faster
 
      apply workflow updates to env.sh
+
+     plot errors on static files (line 66, looking for 'time')
+     rename plot.postprocess.vars.py to shorter & snake
 
      merge extract branch into main
     

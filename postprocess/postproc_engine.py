@@ -142,12 +142,21 @@ _CHUNKS = {'Time': 1, 'south_north': 337, 'west_east': 354}
 
 # File naming
 # -----------
-def make_fname(var, cmor_freq):
-    """Construct the output filename for a variable at a given frequency."""
+def is_extensive(cell_methods):
+    """Return True if cell_methods indicates an extensive variable
+    (time: mean/min/max), which has time coordinates at interval midpoints."""
+    return bool(re.search(r'time:\s*(mean|min|max)', cell_methods or ''))
+
+def make_fname(var, cmor_freq, extensive=False):
+    """Construct the output filename for a variable at a given frequency.
+    Note extensive vars have time coordinates at midpoints of intervals.
+    """
     if cmor_freq == '1hr':
-        return f'{var}_{fname_base}_1hr_{year}01010000-{year}12312300.nc'
+        t0, t1 = ('0030', '2330') if extensive else ('0000', '2300')
+        return f'{var}_{fname_base}_1hr_{year}0101{t0}-{year}1231{t1}.nc'
     elif cmor_freq == '6hr':
-        return f'{var}_{fname_base}_6hr_{year}01010000-{year}12311800.nc'
+        t0, t1 = ('0300', '2100') if extensive else ('0000', '1800')
+        return f'{var}_{fname_base}_6hr_{year}0101{t0}-{year}1231{t1}.nc'
     elif cmor_freq == 'day':
         return f'{var}_{fname_base}_day_{year}0101-{year}1231.nc'
     elif cmor_freq == 'mon':
@@ -185,14 +194,12 @@ def _build_time_coord(yr, freq_hours, cell_methods):
         unit='s',
     )
 
-    extensive = bool(re.search(r'time:\s*(mean|min|max)', cell_methods or ''))
-
     t_encoding = {'units': _cfg['time_units'],
                   'calendar': _cfg['calendar'],
                   'dtype': np.float64
                   }
 
-    if extensive:
+    if is_extensive(cell_methods):
         t_values = starts + interval / 2
         ends     = starts + interval
         bnds_da  = xr.DataArray(
@@ -299,9 +306,9 @@ def _output_needed(var, freq, fout):
 # Writes extracted data to outdir/<var>.<freq>/fname.nc.
 # Attaches the time coordinate (and time_bnds for extensive variables)
 # before writing.  _FillValue is set to 1e20 per CORDEX standard.
-def write_vars(var_da_list, freq, time_da, bnds_da):
+def write_vars(var_da_list, freq, time_da, bnds_da, extensive=False):
     for var, da in var_da_list:
-        fout = make_fname(var, freq)
+        fout = make_fname(var, freq, extensive)
         if not _output_needed(var, freq, fout):
             continue
 
@@ -448,15 +455,16 @@ else:
     else:
         prefix    = _VAR_PREFIX.get(variable, wrfout_hour_fname)
         freq      = _PREFIX_FREQ[prefix]
-        if _output_needed(variable, freq, make_fname(variable, freq)):
+        cm  = _var_table.loc[variable, 'cell_methods'] if variable not in _SELF_LOADING else None
+        ext = is_extensive(cm)
+        if _output_needed(variable, freq, make_fname(variable, freq, ext)):
             if variable in _SELF_LOADING:
                 write_vars(extract_fn(), freq, None, None)
             else:
                 _, freq_hours, accumulated = get_loader(variable)
-                cm       = _var_table.loc[variable, 'cell_methods']
                 ds       = load_wrf(prefix, year, accumulated)
                 time_da, bnds_da = _build_time_coord(year, freq_hours, cm)
-                write_vars(extract_fn(ds), freq, time_da, bnds_da)
+                write_vars(extract_fn(ds), freq, time_da, bnds_da, ext)
                 ds.close()
 
         # Derive tasmin/tasmax from the tas file.  Runs whether or not
@@ -465,7 +473,7 @@ else:
         # forcing tas to be rebuilt.
         if variable == 'tas':
             tas_path = os.path.join(outdir, 'tas.1hr',
-                                    make_fname('tas', '1hr'))
+                                    make_fname('tas', '1hr', ext))
             derive_tasmin(tas_path)
             derive_tasmax(tas_path)
 
