@@ -293,7 +293,7 @@ $post/launch_multi --workflow cordex --run $rundir8 $cmddir8/*cmd
 
 ## wait until it finishes, check everything ran correctly
 cd $rundir8
-wc */stdout*/*
+tail -q -n 1 */stdout*/* | cut -f 1 -d : | uniq -c
 tail -q -n 1 */*.o* | cut -f 1 -d : | uniq -c
 cd $topdir
 
