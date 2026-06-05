@@ -435,8 +435,6 @@ def main():
 
     print(f"\n=== Setup complete ===")
     print(f"  Outputs in: {setupdir}")
-    print(f"\n  Next step:")
-    print(f"    extract.sh WRFDIR SETUPDIR YEARS [CMDDIR]")
 
 if __name__ == "__main__":
     main()

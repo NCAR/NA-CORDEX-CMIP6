@@ -103,6 +103,3 @@ done
 
 echo ""
 echo "Commandfiles written to: $CMDDIR"
-echo ""
-echo "To run with launch_multi:"
-echo "  launch_multi --run RUNDIR ${CMDDIR}/*.cmd"

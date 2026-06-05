@@ -79,13 +79,12 @@ for dir in "$INDIR"/*/; do
         (( ncommands++ )) || true
     done
 
-    echo "  $dirname: $ncommands commands"
+    echo -n "$dirname "
 done
 
 [[ ! -s "$cmdfile" ]] && rm "$cmdfile"
 
 echo ""
-echo "Commandfile written to: $cmdfile"
 echo ""
-echo "To run with launch_multi:"
-echo "  launch_multi --run RUNDIR ${cmdfile}"
+echo "$ncommands Commands written to: $cmdfile"
+

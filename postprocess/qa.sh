@@ -192,7 +192,3 @@ done
 # -----------------------------------------------------------------------
 echo ""
 echo "Commandfiles written to: $CMDDIR"
-echo ""
-echo "To run with launch_multi (run esgqa and nccheck independently):"
-echo "  launch_multi --workflow cordex --run RUNDIR/esgqa  ${CMDDIR}/esgqa.cmd"
-echo "  launch_multi --workflow cordex --run RUNDIR/nccheck ${CMDDIR}/nccheck.*.cmd"
