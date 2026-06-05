@@ -4,7 +4,7 @@
 # --------
 # This script extracts the time-invariant (fx) variables orog and sftlf
 # from a WRF input file.  It is a standalone script that does not depend
-# on postprocess.machinery.py.
+# on postproc_engine.py.
 #
 # Unlike the time-varying variables, fx variables come from a WRF *input*
 # file (wrfinput_d01) rather than an output file, using the path recorded
@@ -20,7 +20,7 @@
 
 # Example execution:
 # ------------------------------------------------
-# $ python postprocess.fx.py {setupdir} {outdir}
+# $ python postproc_fx.py {setupdir} {outdir}
 # ------------------------------------------------
 
 import xarray as xr

@@ -88,9 +88,9 @@ apply_workflow() {
             config="$scripts_dir/config_env.sh"
             config_specified=1
             copyfiles+=(
-                "$scripts_dir/postprocess.fx.py"
-                "$scripts_dir/postprocess.machinery.py"
-                "$scripts_dir/postprocess.variables.py"
+                "$scripts_dir/postproc_fx.py"
+                "$scripts_dir/postproc_engine.py"
+                "$scripts_dir/postproc_vars.py"
                 "$scripts_dir/cmorize.sh"
                 "$scripts_dir/plot.postprocess.var.py"
             )

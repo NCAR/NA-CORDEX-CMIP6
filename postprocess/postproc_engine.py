@@ -4,7 +4,7 @@
 # --------
 # Entry point for NA-CORDEX-CMIP6 variable extraction.  Handles argument
 # parsing, simulation metadata, file loading, output writing, and dispatch.
-# Extract functions for individual variables live in postprocess.variables.py,
+# Extract functions for individual variables live in postproc_vars.py,
 # which is imported after shared state is set up so the functions can close
 # over names defined here.
 #
@@ -44,7 +44,7 @@
 
 # Example execution:
 # ------------------------------------------------
-# $ python postprocess.machinery.py {setupdir} {wrfout_path} 1980 tas {outdir}
+# $ python postproc_engine.py {setupdir} {wrfout_path} 1980 tas {outdir}
 # ------------------------------------------------
 
 import thermofeel
@@ -355,7 +355,7 @@ def derive_tasmax(tas_path):
 # All shared state above is now defined; importing variables.py here allows
 # its functions to close over names in this module's global namespace.
 _variables_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                               'postprocess.variables.py')
+                               'postproc_vars.py')
 with open(_variables_path) as _f:
     exec(compile(_f.read(), _variables_path, 'exec'), globals())
 

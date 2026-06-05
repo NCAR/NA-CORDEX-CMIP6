@@ -7,8 +7,8 @@
 # Requires setup.py to have been run first (SETUPDIR must contain sim.env
 # and var_table.tsv).
 #
-# All variables are routed to postprocess.variables.py, except fx which
-# goes to postprocess.fx.py.
+# All variables are routed to postproc_vars.py, except fx which
+# goes to postproc_fx.py.
 
 set -euo pipefail
 
@@ -119,7 +119,7 @@ fi
 [[ ! -f "$SETUPDIR/sim.env" ]] && { echo "Error: sim.env not found in $SETUPDIR" >&2; exit 1; }
 [[ ! -f "$SETUPDIR/var_table.tsv" ]] && { echo "Error: var_table.tsv not found in $SETUPDIR" >&2; exit 1; }
 
-for s in postprocess.machinery.py postprocess.fx.py; do
+for s in postproc_engine.py postproc_vars.py postproc_fx.py; do
     [[ ! -f "$SCRIPTS_DIR/$s" ]] && {
         echo "Error: $s not found in $SCRIPTS_DIR" >&2
         exit 1
@@ -172,11 +172,11 @@ for var in "${VARLIST[@]}"; do
 
     if [[ "$var" == "fx" ]]; then
         # fx variables are time-invariant; a single command suffices.
-        echo "python ./postprocess.fx.py $SETUPDIR $OUTDIR" >> "$cmdfile"
+        echo "python ./postproc_fx.py $SETUPDIR $OUTDIR" >> "$cmdfile"
     else
         for (( year = START_YEAR; year <= END_YEAR; year++ )); do
             chunk="$WRFDIR/$(chunk_dir_for_year "$year")"
-            echo "python ./postprocess.machinery.py $SETUPDIR $chunk $year $var $OUTDIR" >> "$cmdfile"
+            echo "python ./postproc_engine.py $SETUPDIR $chunk $year $var $OUTDIR" >> "$cmdfile"
         done
     fi
 

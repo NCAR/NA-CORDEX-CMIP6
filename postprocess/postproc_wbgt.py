@@ -6,12 +6,12 @@
 # Both indices are computed together since they share the expensive
 # MRT calculation.
 #
-# This is a standalone script; it does not import postprocess.machinery.py
-# or postprocess.variables.py.  Shared physics (_vapor_pressure_from_q)
+# This is a standalone script; it does not import postproc_engine.py
+# or postproc_vars.py.  Shared physics (_vapor_pressure_from_q)
 # is duplicated here intentionally; consolidate if the two diverge.
 #
 # USAGE:
-#   python postprocess.wbgt.py SETUPDIR INFILE OUTDIR
+#   python postproc_wbgt.py SETUPDIR INFILE OUTDIR
 #
 #   SETUPDIR  Directory containing sim.env (produced by setup.py)
 #   INFILE    Single WRF hourly file: wrfout_hour_d01_YYYY-MM-DD_HH:MM:SS

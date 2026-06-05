@@ -8,7 +8,7 @@
 #
 # This file contains only function definitions.  All shared state
 # (ds_fx, dname_map_xy, wrfout_* filenames, etc.), dispatch tables,
-# and execution logic live in postprocess.machinery.py, which imports
+# and execution logic live in postproc_engine.py, which imports
 # this file and calls the functions.
 #
 # Variable metadata specifications are taken from:
@@ -28,7 +28,7 @@ def extract_tas(ds):
 # ---------------------------------------------------
 
 # tasmin and tasmax are derived from tas after extraction (see
-# derive_tasmin / derive_tasmax in postprocess.machinery.py), not
+# derive_tasmin / derive_tasmax in postproc_engine.py), not
 # extracted directly.
 
 # Hourly precipitation accumulation

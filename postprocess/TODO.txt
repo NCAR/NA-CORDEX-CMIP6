@@ -28,14 +28,12 @@ TODO items:
 
 	change var_specs from yml to tsv
 	       specify what kind of file each var lives in here,
-	       	 instead of hard-coding in postproc.machinery
+	       	 instead of hard-coding in postproc_engine
 
 	setup: drop looking for dreq CSV in ~/work/cordex6
 
-	get rid of exec(compile( shenanigans in postprocess.machinery
+	get rid of exec(compile( shenanigans in postproc_engine
 	    use importlib instead?
-
-	rename postprocess.variables etc to postproc_vars etc
 
 	cleanup rechunk.sh messages
 	make "next step" messages more useful
@@ -63,8 +61,7 @@ updates for different simulations:
 
 allow for different set of variables to process
       extract.sh has hard-coded list of defaults
-      move to config file,
-      have setup autogenerate defaults from postprocess.py?
+      move to config file
 
 
 config files for different simulations

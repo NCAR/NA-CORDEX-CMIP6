@@ -212,7 +212,7 @@ fi
 # Single-level variables
 #
 # Time coordinate (including bounds for extensive variables) is written
-# correctly by postprocess.machinery.py, so no CDO reformatting is needed.
+# correctly by postproc_engine.py, so no CDO reformatting is needed.
 # We start directly from the trimmed coord file and append the data variable.
 # ---------------------------------------------------------------------------
 

@@ -103,10 +103,9 @@ If `dreq_default.csv` already exists at `$WORK/cordex6/dreq_default.csv`,
 
 ### `extract.sh`
 
-Generates commandfiles that use `postprocess.core.variables.py` and
-`postprocess.hyd-atm.variables.py` to extract data from raw wrfout
-files into yearly files by variable.  Skips over any existing outputs
-unless you use `--force`.
+Generates commandfiles that use the various `postproc_*.py` scripts to
+extract data from raw wrfout files into yearly files by variable.
+Skips over any existing outputs unless you use `--force`.
 
 Extracted data is organized in per-variable subdirectories (e.g., all `uas`
 files go into a subdirectory named `uas`).
