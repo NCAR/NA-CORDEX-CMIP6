@@ -79,6 +79,7 @@
         },
         "wchill": {
             "frequency": "1hr",
+	    "standard_name": "wind_chill_of_air_temperature",
             "units": "K",
             "cell_methods": "area: mean time: point",
             "cell_measures": "area: areacella",
@@ -95,6 +96,7 @@
         },
         "heatidx": {
             "frequency": "1hr",
+	    "standard_name": "heat_index_of_air_temperature",
             "units": "K",
             "cell_methods": "area: mean time: point",
             "cell_measures": "area: areacella",

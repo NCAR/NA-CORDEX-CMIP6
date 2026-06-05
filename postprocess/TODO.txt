@@ -2,10 +2,6 @@
 ===========
 TODO items:
 
-     stdnames:
-     wchill:	wind_chill_of_air_temperature
-     heatidx:	heat_index_of_air_temperature
-
      parallel wbgt is MUCH faster
 
      apply workflow updates to env.sh
