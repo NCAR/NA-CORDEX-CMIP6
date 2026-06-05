@@ -250,7 +250,7 @@ cd $topdir
 
 ## merge cluster.json files so you only need to upload one
 set simname = `basename $topdir`
-python $post/merge-qa.py $qdir/$simname.qa.merged.json --find $qdir/qa
+python $post/merge_qa.py $qdir/$simname.qa.merged.json --find $qdir/qa
 echo "scp casper.hpc.ucar.edu:$qdir/$simname.qa.merged.json ."
 
 ## download results, then check the cluster.json file at:

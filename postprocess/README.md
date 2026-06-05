@@ -188,12 +188,12 @@ to a different filesystem, use Globus, which will do it in parallel
 with error-checking.
 
 
-### `merge-qa.py`
+### `merge_qa.py`
 
 The workflow uses `esgqa` to check the formatting of the output files,
 which generates a JSON file for each branch of the dataset.  To avoid
 needing to upload dozens of files to the website that interpret them,
-`merge-qa.py` combines them into a single JSON file.
+`merge_qa.py` combines them into a single JSON file.
 
 
 ### `index.py`
