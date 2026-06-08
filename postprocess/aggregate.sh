@@ -172,6 +172,9 @@ for vardir in "$INDIR"/*/; do
     [[ ! -d "$vardir" ]] && continue
 
     dirname="$(basename "$vardir")"
+    if [[ "$dirname" == _* ]]; then
+	continue  # skip staging directories (e.g., _temp for wbgt)
+    fi
     if [[ "$dirname" != *.* ]]; then
         echo "Warning: $dirname not in var.freq format, skipping" >&2
         continue

@@ -91,6 +91,7 @@ apply_workflow() {
                 "$scripts_dir/postproc_fx.py"
                 "$scripts_dir/postproc_engine.py"
                 "$scripts_dir/postproc_vars.py"
+		"$scripts_dir/postproc_wbgt.py"
                 "$scripts_dir/cmorize.sh"
                 "$scripts_dir/plot.postprocess.var.py"
             )

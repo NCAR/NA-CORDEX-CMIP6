@@ -6,10 +6,6 @@
 # Both indices are computed together since they share the expensive
 # MRT calculation.
 #
-# This is a standalone script; it does not import postproc_engine.py
-# or postproc_vars.py.  Shared physics (_vapor_pressure_from_q)
-# is duplicated here intentionally; consolidate if the two diverge.
-#
 # USAGE:
 #   python postproc_wbgt.py SETUPDIR INFILE OUTDIR
 #
@@ -87,7 +83,7 @@ fname_base = f'{_dom}_{_drs}_{_dre}_{_drv}_{_org}_{_src}_{_ver}'
 # Expected format: wrfout_hour_d01_YYYY-MM-DD_HH:MM:SS
 
 _fname = os.path.basename(infile)
-_m = re.search(r'(\d{4})-(\d{2})-(\d{2})_(\d{2})', _fname)
+_m = re.search(r'(\d{4})-(\d{2})-(\d{2})', _fname)
 if not _m:
     print(f'Error: could not parse date from filename: {_fname}', file=sys.stderr)
     sys.exit(1)
@@ -97,7 +93,7 @@ date_str  = f'{year}{mon}{day}'   # YYYYMMDD, used in output filenames
 
 # -----------------
 # Time coordinate
-# WBGT/UTCI are time: point (instantaneous), so no time_bnds.
+# WBGT/UTCI are instantaneous, so no time_bnds.
 
 _t_encoding = {
     'units':    _cfg['time_units'],
@@ -125,16 +121,18 @@ time_da.encoding = _t_encoding
 
 # -----------------
 # Output filenames
+# Daily files are staged in <outdir>/<var>.1hr/<year>/ so that the
+# per-year ncrcat commands in wbgt_cat.cmd can glob cleanly by year.
 
 wbgt_fout = os.path.join(
-    outdir, 'wbgt.1hr',
+    outdir, 'wbgt.1hr', year,
     f'wbgt_{fname_base}_1hr_{date_str}0000-{date_str}2300.nc')
 utci_fout = os.path.join(
-    outdir, 'utci.1hr',
+    outdir, 'utci.1hr', year,
     f'utci_{fname_base}_1hr_{date_str}0000-{date_str}2300.nc')
 
-os.makedirs(os.path.join(outdir, 'wbgt.1hr'), exist_ok=True)
-os.makedirs(os.path.join(outdir, 'utci.1hr'), exist_ok=True)
+os.makedirs(os.path.join(outdir, 'wbgt.1hr', year), exist_ok=True)
+os.makedirs(os.path.join(outdir, 'utci.1hr', year), exist_ok=True)
 
 # -----------------
 # WRF variables needed
@@ -156,36 +154,35 @@ def _compute_wbgt_utci_arrays(ds):
     """Compute WBGT and UTCI from a single-day WRF dataset.
 
     Returns (wbgt, utci) as float32 arrays shaped (time, y, x).
-    MRT is computed once and shared between both indices to avoid
-    redundant radiation processing.
+    MRT is computed once and shared between both indices.
     """
-    coszen = np.clip(ds['COSZEN'].values, 0.0, 1.0)
+    COSZEN = np.clip(ds['COSZEN'].values, 0.0, 1.0)
     SWDOWN = np.maximum(np.nan_to_num(ds['SWDOWN'].values, nan=0.0), 0.0)
     SWDDNI = np.maximum(np.nan_to_num(ds['SWDDNI'].values, nan=0.0), 0.0)
     GLW    = np.maximum(np.nan_to_num(ds['GLW'].values,    nan=0.0), 0.0)
     LWUPB  = np.maximum(np.nan_to_num(ds['LWUPB'].values,  nan=0.0), 0.0)
     ALBEDO = np.nan_to_num(ds['ALBEDO'].values, nan=0.2)
     T2   = ds['T2'].values
-    Q2   = ds['Q2'].values
+    Q2   = np.maximum(ds['Q2'].values, 0.0)
     PSFC = ds['PSFC'].values
     U10  = ds['U10'].values
     V10  = ds['V10'].values
 
     ssrd = SWDOWN
-    fdir = np.minimum(SWDDNI * coszen, ssrd)
     ssr  = SWDOWN * (1.0 - ALBEDO)
+    dsrp = SWDDNI
     strd = GLW
+    fdir = np.minimum(SWDDNI * COSZEN, SWDOWN)
     strr = GLW - LWUPB
 
     mrt = thermofeel.calculate_mean_radiant_temperature(
-        ssrd=ssrd, ssr=ssr, dsrp=SWDDNI,
+        ssrd=ssrd, ssr=ssr, dsrp=dsrp,
         strd=strd, fdir=fdir, strr=strr,
-        cossza=coszen,
+        cossza=COSZEN,
     )
 
     wspd  = np.maximum(np.sqrt(U10**2 + V10**2), 0.5)
-    Q2_safe = np.maximum(Q2, 0.0)
-    e_a   = _vapor_pressure_from_q(Q2_safe, PSFC)
+    e_a   = _vapor_pressure_from_q(Q2, PSFC)
     e_hPa = np.maximum(e_a / 100.0, 0.001)
     ln_e  = np.log(e_hPa / 6.1078)
     tdew  = (237.3 * ln_e) / (17.27 - ln_e) + 273.15   # dew point (K)
@@ -209,10 +206,13 @@ def _compute_wbgt_utci_arrays(ds):
 # -----------------
 # Load, compute, write
 
-_chunks = {'Time': 1, 'south_north': 337, 'west_east': 354}
+with xr.open_dataset(infile, decode_times=False) as _ds:
+    _ny = _ds.sizes['south_north']
+    _nx = _ds.sizes['west_east']
+_chunking = {'Time:': 1, 'south_north': _ny, 'west_east': _nx}
 
 ds = xr.open_dataset(infile, engine='netcdf4',
-                     chunks=_chunks,
+                     chunks=_chunking,
                      mask_and_scale=False,
                      decode_times=False,
                      decode_coords=False)[_WBGT_WRF_VARS]

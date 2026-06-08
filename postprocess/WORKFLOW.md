@@ -75,16 +75,11 @@ $post/extract.sh $raw $sdir $outdir1 1980-2023 $cmddir1
 
 $post/launch_multi --workflow cordex --run $rundir1 $cmddir1/*cmd
 
+## wbgt (+utci) runs extra parallel, else it takes forever
 
-## NOTE: if you're extracting wbgt/utci, runs can take 2-3 hours;
-## override --workflow defaults with --wall (at end of flags)
+$post/launch_multi --workflow cordex --run $rundir1 --chain \
+  $cmddir1/wbgt/wbgt.cmd $cmddir1/wbgt/wbgt_cat.cmd
 
-set cmdxtra = $edir/cmd.xtra
-set runxtra = $edir/run.xtra
-
-$post/extract.sh --vars wbgt $raw $sdir $outdir1 1980-2023 $cmdxtra
-
-$post/launch_multi --workflow cordex --run $runxtra --wall 03:00:00 $cmdxtra/*cmd
 
 
 ## wait until it finishes, check everything ran correctly

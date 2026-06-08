@@ -136,9 +136,6 @@ dname_map_t   = {'Time': 'time'}
 dname_map_xy  = {'west_east': 'x', 'south_north': 'y'}
 dname_map_xyt = dname_map_t | dname_map_xy
 
-# 'rd1' chunking pattern (applied before dimension renaming)
-_CHUNKS = {'Time': 1, 'south_north': 337, 'west_east': 354}
-
 
 # File naming
 # -----------
@@ -258,12 +255,17 @@ def load_wrf(prefix, yr, accumulated=False):
             f'No WRF files found for year {yr} '
             f'(pattern: {wrfout_path}/{prefix}{yr}-*)')
 
+    with xr.open_dataset(files[0], decode_times=False) as _ds:
+        _ny = _ds.sizes['south_north']
+        _nx = _ds.sizes['west_east']
+    _chunking = {'Time:': 1, 'south_north': _ny, 'west_east': _nx}
+
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', message='.*separate the stored chunks.*')
         ds = xr.open_mfdataset(files,
                                concat_dim='Time',
                                combine='nested',
-                               chunks=_CHUNKS,
+                               chunks=_chunking,
                                mask_and_scale=False,
                                decode_times=False,
                                decode_coords=False,
@@ -274,7 +276,7 @@ def load_wrf(prefix, yr, accumulated=False):
             prev_ds = xr.open_mfdataset(prev_file,
                                         concat_dim='Time',
                                         combine='nested',
-                                        chunks=_CHUNKS,
+                                        chunks=_chunking,
                                         mask_and_scale=False,
                                         decode_times=False,
                                         decode_coords=False,

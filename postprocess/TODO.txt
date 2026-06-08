@@ -2,20 +2,14 @@
 ===========
 TODO items:
 
-     parallel wbgt is MUCH faster
-
      apply workflow updates to env.sh
 
      plot errors on static files (line 66, looking for 'time')
-     rename plot.postprocess.vars.py to shorter & snake
 
      merge extract branch into main
     
 
     deferred:
-
-	wbgt - parallelize by running each day separately
-	     then concatenate to yearly & discard dailies
 
 	group aggregate commandfiles by variable *and* step
 

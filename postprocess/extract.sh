@@ -7,16 +7,25 @@
 # Requires setup.py to have been run first (SETUPDIR must contain sim.env
 # and var_table.tsv).
 #
-# All variables are routed to postproc_vars.py, except fx which
-# goes to postproc_fx.py.
+# All variables are routed to postproc_engine.py, except:
+#   fx   -> postproc_fx.py   (time-invariant; single command)
+#   wbgt -> postproc_wbgt.py (per-day parallelism; see below)
+#
+# wbgt/utci workflow:
+#   Commandfiles are written to CMDDIR/wbgt/ instead of CMDDIR/, so they
+#   can be launched as a chain without interfering with the main *.cmd glob:
+#     launch_multi --workflow cordex --run RUNDIR CMDDIR/*.cmd
+#     launch_multi --chain --workflow cordex --run RUNDIR \
+#         CMDDIR/wbgt/wbgt.cmd CMDDIR/wbgt/wbgt_cat.cmd
+#
+#   Per-day output files are staged in OUTDIR/_temp/<var>.1hr/<year>/ to
+#   keep them separate from the annual files that aggregate.sh expects.
+#   After wbgt_cat.cmd runs, annual files land in OUTDIR/wbgt.1hr/ and
+#   OUTDIR/utci.1hr/ alongside all other extracted variables.
 
 set -euo pipefail
 
 # Default variable list for NA-CORDEX-CMIP6 postprocessing.
-#
-# wbgt and utci have been omitted from DEFAULT_VARS because they take
-# much longer to run (3 hour or more).  To process them, pass them
-# explicitly via --vars.
 #
 # Note: utci is produced automatically when wbgt runs; submitting utci as
 # a standalone job will cause a file conflict. Use --vars wbgt to get both.
@@ -29,7 +38,8 @@ evspsbl,mrro,mrros,mrso,snw,snd,snm,\
 clt,hfls,hfss,rlds,rlus,rsus,\
 ua50m,va50m,ua100m,va100m,ua150m,va150m,\
 ua700,ua500,ua250,va700,va500,va250,\
-hus700,hus500,hus250,ta700,ta500,ta250,zg700,zg500,zg250"
+hus700,hus500,hus250,ta700,ta500,ta250,zg700,zg500,zg250,\
+wbgt"
 
 usage() {
     cat >&2 <<EOF
@@ -46,8 +56,7 @@ Arguments:
 
 Options:
   --vars VAR[,VAR,...]  Comma-separated list of variables to process
-                        (default: all supported variables except wbgt/utci/
-                         humidex, which require the thermofeel package)
+                        (default: all supported variables)
   --scripts PATH        Directory containing the postprocess scripts
                         (default: directory containing extract.sh)
   --force               Overwrite existing output (default: skip variables
@@ -119,13 +128,17 @@ fi
 [[ ! -f "$SETUPDIR/sim.env" ]] && { echo "Error: sim.env not found in $SETUPDIR" >&2; exit 1; }
 [[ ! -f "$SETUPDIR/var_table.tsv" ]] && { echo "Error: var_table.tsv not found in $SETUPDIR" >&2; exit 1; }
 
-for s in postproc_engine.py postproc_vars.py postproc_fx.py; do
-    [[ ! -f "$SCRIPTS_DIR/$s" ]] && {
-        echo "Error: $s not found in $SCRIPTS_DIR" >&2
+for script in engine vars fx wbgt; do
+    [[ ! -f "$SCRIPTS_DIR/postproc_${script}.py" ]] && {
+        echo "Error: postproc_${script}.py not found in $SCRIPTS_DIR" >&2
         exit 1
     }
 done
 
+# Load simulation metadata for filename construction.
+# Used to build wbgt/utci annual output filenames in wbgt_cat.cmd.
+source "$SETUPDIR/sim.env"
+fname_base="${domain_id}_${driving_source_id}_${driving_experiment_id}_${driving_variant_label}_${institution_id}_${source_id}_${version_realization}"
 
 # Verify that each year's chunk directory exists and contains expected files
 for (( year = START_YEAR; year <= END_YEAR; year++ )); do
@@ -153,7 +166,7 @@ for var in "${VARLIST[@]}"; do
         continue
     fi
 
-# Skip if output directory exists and is non-empty, unless --force
+    # Skip if output directory exists and is non-empty, unless --force
     if [[ $FORCE -eq 0 ]]; then
         if [[ "$var" == "fx" ]]; then
             if [[ -d "$OUTDIR/sftlf" && -n "$(ls -A "$OUTDIR/sftlf" 2>/dev/null)" ]] && \
@@ -161,10 +174,57 @@ for var in "${VARLIST[@]}"; do
                 echo "Skipping fx: output directories (sftlf, orog) already exist and are non-empty"
                 continue
             fi
+        elif [[ "$var" == "wbgt" ]]; then
+            if [[ -d "$OUTDIR/wbgt.1hr" && -n "$(ls -A "$OUTDIR/wbgt.1hr" 2>/dev/null)" ]] && \
+               [[ -d "$OUTDIR/utci.1hr" && -n "$(ls -A "$OUTDIR/utci.1hr" 2>/dev/null)" ]]; then
+                echo "Skipping wbgt: output directories (wbgt.1hr, utci.1hr) already exist and are non-empty"
+                continue
+            fi
         elif [[ -d "$OUTDIR/$var" && -n "$(ls -A "$OUTDIR/$var" 2>/dev/null)" ]]; then
             echo "Skipping $var: output directory already exists and is non-empty"
             continue
         fi
+    fi
+
+    # wbgt/utci: per-day extraction, then annual concatenation.
+    if [[ "$var" == "wbgt" ]]; then
+        wbgt_cmddir="$CMDDIR/wbgt"
+        mkdir -p "$wbgt_cmddir"
+
+        cmdfile="$wbgt_cmddir/wbgt.cmd"
+        > "$cmdfile"
+
+        for (( year = START_YEAR; year <= END_YEAR; year++ )); do
+            chunk="$WRFDIR/$(chunk_dir_for_year "$year")"
+            tmpdir="$OUTDIR/_temp"
+            for infile in "$chunk"/wrfout_hour_d01_${year}-*; do
+                [[ -f "$infile" ]] || continue
+                echo "python ./postproc_wbgt.py $SETUPDIR $infile $tmpdir" >> "$cmdfile"
+            done
+        done
+
+        # wbgt_cat.cmd: concatenate per-day files from tmpdir into annual
+        # files in OUTDIR.  One ncrcat command per variable per year.
+        cat_cmdfile="$wbgt_cmddir/wbgt_cat.cmd"
+        > "$cat_cmdfile"
+
+        for (( year = START_YEAR; year <= END_YEAR; year++ )); do
+            for wvar in wbgt utci; do
+		# $wvar.1hr/$year subdir comes from postproc_wbgt
+                tmpvardir="$OUTDIR/_temp/${wvar}.1hr/$year"
+                outvardir="$OUTDIR/${wvar}.1hr"
+                mkdir -p "$outvardir"
+                ann_out="$outvardir/${wvar}_${fname_base}_1hr_${year}01010000-${year}12312300.nc"
+                echo "ncrcat -h $tmpvardir/\*.nc $ann_out" >> "$cat_cmdfile"
+            done
+        done
+
+        if [[ ! -s "$cmdfile" ]]; then
+            rm "$cmdfile" "$cat_cmdfile"
+        else
+            generated_cmds+=("$cmdfile" "$cat_cmdfile")
+        fi
+        continue
     fi
 
     cmdfile="$CMDDIR/${var}.cmd"
