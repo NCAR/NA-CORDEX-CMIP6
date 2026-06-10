@@ -350,6 +350,8 @@ def _derive_minmax(src_path, outvar, cdo_op):
 
     os.makedirs(out_vardir, exist_ok=True)
     subprocess.run(['cdo', '-O', cdo_op, src_path, out_path], check=True)
+    roundtime = "time=round(time*2)/2;time_bnds=round(time_bnds)"
+    subprocess.run(['ncap2', '-h', '-O', '-s', roundtime, out_path, out_path], check=True)
     subprocess.run(['ncrename', '-h', '-v', f'tas,{outvar}', out_path], check=True)
 
 def derive_tasmin(tas_path):
