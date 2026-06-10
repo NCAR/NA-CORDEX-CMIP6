@@ -437,7 +437,6 @@ def _load_psfc(yr):
         ds_psfc = xr.open_mfdataset(files,
                                     concat_dim='Time',
                                     combine='nested',
-                                    chunks=_CHUNKS,
                                     mask_and_scale=False,
                                     decode_times=False,
                                     decode_coords=False,
