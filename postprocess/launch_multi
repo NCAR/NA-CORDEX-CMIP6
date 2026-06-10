@@ -5,7 +5,7 @@
 # Creates a separate run directory for each commandfile to corral output files,
 # copies necessary config/scripts, and submits via launch_cf.
 #
-# Usage: launch_multi [options] --run DIR cmdfile1 [cmdfile2 ...]
+# Usage: launch_multi [options] --run DIR cmdfile1 [cmdfile2 ...] [--final cmdfile]
 #
 # Options:
 #   --run DIR           Directory where run subdirectories are created (required)
@@ -15,6 +15,7 @@
 #   --config FILE       Environment config file (default: ~/config_env.sh)
 #   --copy FILE         Additional file/dir to copy (can be repeated)
 #   --chain             Submit jobs as a dependency chain (each waits for previous)
+#   --final FILE        Submit FILE as a final job dependent on all others (mutually exclusive with --chain)
 #   --dry               Print commands without executing
 #   --sleep N           Delay in seconds between job submissions (default: 1)
 #   --wall TIME         Walltime (default: 00:20:00)
@@ -39,6 +40,7 @@ set -e
 # Defaults
 account="${PROJECT:-}"
 chain=0
+finalfile=""
 cmdfiles=()
 config="$HOME/config_env.sh"
 config_specified=0
@@ -141,6 +143,10 @@ while [[ $# -gt 0 ]]; do
             chain=1
             shift
             ;;
+        --final)
+            finalfile="$2"
+            shift 2
+            ;;
         --sleep)
             sleep="$2"
             shift 2
@@ -191,7 +197,8 @@ done
 [[ ${#cmdfiles[@]} -eq 0 ]] && die "No commandfiles specified"
 [[ -z "$account" ]] && die "No account specified (-A) and \$PROJECT not set"
 
-# Check that commandfiles exist
+[[ $chain -eq 1 && -n "$finalfile" ]] && die "--chain and --final are mutually exclusive"
+[[ -n "$finalfile" && ! -f "$finalfile" ]] && die "Final commandfile not found: $finalfile"
 for cf in "${cmdfiles[@]}"; do
     [[ -f "$cf" ]] || die "Commandfile not found: $cf"
 done
@@ -216,13 +223,17 @@ done
 run_cmd "mkdir -p $(printf %q "$runpath")"
 
 here="$(pwd)"
-prev_jobid=""
 
-for cmdfile in "${cmdfiles[@]}"; do
-    # Get absolute path to cmdfile
+# Submit a single job.  Sets last_jobid to the submitted job ID (or a
+# placeholder under --dry).  Arguments:
+#   $1  cmdfile (path)
+#   $2  label suffix for the === header (e.g. "" or " (final)")
+#   $3  dependency string passed to -W depend= (e.g. "afterok:123:456"), or ""
+submit_job() {
+    local cmdfile="$1" label="$2" dep="$3"
+    local cmdfile_abs cmd basename_no_ext jobname rundir launch_cmd
+
     cmdfile_abs="$(cd "$(dirname "$cmdfile")" && pwd)/$(basename "$cmdfile")"
-    
-    # Derive job name
     cmd="$(basename "$cmdfile")"
     basename_no_ext="${cmd%.cmd}"
     if [[ -n "$jobprefix" ]]; then
@@ -230,55 +241,70 @@ for cmdfile in "${cmdfiles[@]}"; do
     else
         jobname="$basename_no_ext"
     fi
-    
+
     rundir="$runpath/$jobname"
-    
-    echo "=== $jobname ==="
-    
-    # Build and execute commands
+    echo "=== ${jobname}${label} ==="
+
     run_cmd "rm -rf $(printf %q "$rundir")"
     run_cmd "mkdir -p $(printf %q "$rundir")"
     run_cmd "cp $(printf %q "$cmdfile_abs") $(printf %q "$rundir/")"
-    
+
     if [[ -n "$config" ]]; then
         run_cmd "cp $(printf %q "$config") $(printf %q "$rundir/config_env.sh")"
     else
         run_cmd "echo 'module restore default' > $(printf %q "$rundir/config_env.sh")"
     fi
-    
+
     for f in "${copyfiles[@]}"; do
         run_cmd "cp -r $(printf %q "$f") $(printf %q "$rundir/")"
     done
-    
+
     run_cmd "cd $(printf %q "$rundir")"
-    
-    # Build launch_cf command
+
     launch_cmd="launch_cf -A $(printf %q "$account") -q $(printf %q "$queue")"
     launch_cmd+=" -m $(printf %q "$mail") -j $(printf %q "$join")"
     launch_cmd+=" -N $(printf %q "$jobname") -l walltime=$(printf %q "$walltime")"
     if [[ -n "$mem" ]]; then
         launch_cmd+=" --mem $(printf %q "$mem")"
     fi
-    
-    # Add dependency on previous job if chaining
-    if [[ $chain -eq 1 && -n "$prev_jobid" ]]; then
-        launch_cmd+=" -W depend=afterok:$prev_jobid"
+    if [[ -n "$dep" ]]; then
+        launch_cmd+=" -W depend=$dep"
     fi
-    
     for arg in "${passthrough[@]}"; do
         launch_cmd+=" $(printf %q "$arg")"
     done
     launch_cmd+=" $(printf %q "$cmd")"
-    
-    # Execute and capture job ID if chaining
+
     if [[ $dry -eq 1 ]]; then
         echo "  $launch_cmd"
-        [[ $chain -eq 1 ]] && prev_jobid="PREV_JOBID"
+        last_jobid="DRY_JOBID_${jobname}"
     else
-        prev_jobid=$(eval "$launch_cmd" | tee /dev/stderr | tail -1)
-        echo "  Submitted: $prev_jobid"
+        last_jobid=$(eval "$launch_cmd" | tee /dev/stderr | tail -1)
+        echo "  Submitted: $last_jobid"
     fi
-    
+
     run_cmd "cd $(printf %q "$here")"
+}
+
+last_jobid=""
+prev_jobid=""
+all_jobids=()
+
+for cmdfile in "${cmdfiles[@]}"; do
+    dep=""
+    if [[ $chain -eq 1 && -n "$prev_jobid" ]]; then
+        dep="afterok:$prev_jobid"
+    fi
+
+    submit_job "$cmdfile" "" "$dep"
+    prev_jobid="$last_jobid"
+    all_jobids+=("$last_jobid")
+
     run_cmd "sleep $sleep"
 done
+
+# Submit final job dependent on all preceding jobs
+if [[ -n "$finalfile" ]]; then
+    dep_list="$(IFS=:; echo "${all_jobids[*]}")"
+    submit_job "$finalfile" " (final)" "afterok:$dep_list"
+fi

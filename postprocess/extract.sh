@@ -186,15 +186,17 @@ for var in "${VARLIST[@]}"; do
         fi
     fi
 
-    # wbgt/utci: per-day extraction, then annual concatenation.
+    # wbgt/utci: per-day extraction then concatenation (by year, to
+    # keep filesystem & scheduler happy)
     if [[ "$var" == "wbgt" ]]; then
         wbgt_cmddir="$CMDDIR/wbgt"
         mkdir -p "$wbgt_cmddir"
 
-        cmdfile="$wbgt_cmddir/wbgt.cmd"
-        > "$cmdfile"
-
+        year_cmdfiles=()
         for (( year = START_YEAR; year <= END_YEAR; year++ )); do
+            cmdfile="$wbgt_cmddir/wbgt_${year}.cmd"
+            > "$cmdfile"
+
             chunk="$WRFDIR/$(chunk_dir_for_year "$year")"
             tmpdir="$OUTDIR/_temp"
             for infile in "$chunk"/wrfout_hour_d01_${year}-*; do
@@ -203,14 +205,13 @@ for var in "${VARLIST[@]}"; do
             done
         done
 
-        # wbgt_cat.cmd: concatenate per-day files from tmpdir into annual
-        # files in OUTDIR.  One ncrcat command per variable per year.
+        # afterwards, concatenate daily files from tmpdir into OUTDIR.
         cat_cmdfile="$wbgt_cmddir/wbgt_cat.cmd"
         > "$cat_cmdfile"
 
         for (( year = START_YEAR; year <= END_YEAR; year++ )); do
             for wvar in wbgt utci; do
-		# $wvar.1hr/$year subdir comes from postproc_wbgt
+                # $wvar.1hr/$year subdir is created by postproc_wbgt
                 tmpvardir="$OUTDIR/_temp/${wvar}.1hr/$year"
                 outvardir="$OUTDIR/${wvar}.1hr"
                 mkdir -p "$outvardir"
@@ -218,12 +219,6 @@ for var in "${VARLIST[@]}"; do
                 echo "ncrcat -h $tmpvardir/\*.nc $ann_out" >> "$cat_cmdfile"
             done
         done
-
-        if [[ ! -s "$cmdfile" ]]; then
-            rm "$cmdfile" "$cat_cmdfile"
-        else
-            generated_cmds+=("$cmdfile" "$cat_cmdfile")
-        fi
         continue
     fi
 
@@ -239,13 +234,9 @@ for var in "${VARLIST[@]}"; do
             echo "python ./postproc_engine.py $SETUPDIR $chunk $year $var $OUTDIR" >> "$cmdfile"
         done
     fi
-
-    if [[ ! -s "$cmdfile" ]]; then
-        rm "$cmdfile"
-    else
-        generated_cmds+=("$cmdfile")
-    fi
 done
+
+find "$CMDDIR" -empty -delete
 
 # Summary
 echo ""

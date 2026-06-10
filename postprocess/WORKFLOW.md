@@ -77,8 +77,8 @@ $post/launch_multi --workflow cordex --run $rundir1 $cmddir1/*cmd
 
 ## wbgt (+utci) runs extra parallel, else it takes forever
 
-$post/launch_multi --workflow cordex --run $rundir1 --chain \
-  $cmddir1/wbgt/wbgt.cmd $cmddir1/wbgt/wbgt_cat.cmd
+$post/launch_multi --workflow cordex --run $rundir1 \
+  $cmddir1/wbgt/wbgt_????.cmd --final $cmddir1/wbgt/wbgt_cat.cmd
 
 
 
