@@ -1,0 +1,81 @@
+id: "nor-hist"
+path: "NorESM2-MM/hist"
+driving_source_id: "NorESM2-MM"
+driving_experiment_id: "historical"
+driving_institution_id: "NCC"
+driving_variant_label: "r1i1p1f1"
+calendar: "noleap"
+driving_experiment: "all-forcing simulation of the recent past"
+start_year: 1950
+end_year: 2014
+
+domain: "North America"
+domain_id: "NAM-12"
+
+# ---------------------------------------------------------------------------
+# RCM-specific metadata
+# ---------------------------------------------------------------------------
+
+source: "Weather Research and Forecasting model version 4.6.1, CORDEX WRF Community configuration S"
+source_abbrev: "WRF"
+source_id: "WRF461S-SN"
+source_type: "ARCM"
+version_realization: "v1-r1"
+
+grid: "Lambert conic conformal with 12 km grid spacing"
+
+# Sponge zone width in grid cells (trimmed from each edge of the domain).
+sponge_cells: 10
+
+
+# ---------------------------------------------------------------------------
+# Institutional metadata
+# (changes per institution)
+# ---------------------------------------------------------------------------
+
+institution: "NSF National Center for Atmospheric Research, Boulder (Colorado), USA"
+institution_id: "NCAR"
+contact: "na-cordex-admin@ucar.edu"
+
+
+# ---------------------------------------------------------------------------
+# CORDEX-CMIP6 project metadata
+# ---------------------------------------------------------------------------
+
+activity_id: "DD"
+epoch: "1950-01-01 00:00:00"
+mip_era: "CMIP6"
+project_id: "CORDEX-CMIP6"
+product: "model-output"
+license: "https://cordex.org/data-access/cordex-cmip6-data/cordex-cmip6-terms-of-use"
+references: "https://github.com/NCAR/NA-CORDEX-CMIP6 (code and documentation)"
+
+
+# ---------------------------------------------------------------------------
+# File paths
+# ---------------------------------------------------------------------------
+
+# Directory containing a wrfinput_d01 file (used for orog and sftlf)
+wrfinput_path: "/glade/campaign/ral/risc/collections/na-cordex-cmip6/CMIP6/ERA5/aer/geo_em.d01.nc"
+
+
+# ---------------------------------------------------------------------------
+# URLs for upstream data files
+# (used by setup.py to download/cache files in setup/)
+# ---------------------------------------------------------------------------
+
+# CORDEX data request CSV
+dreq_csv_url: "https://raw.githubusercontent.com/WCRP-CORDEX/data-request-table/main/data-request/dreq_default.csv"
+
+# CORDEX-CMIP6 CMOR table base URL (frequency name appended, e.g. _1hr.json)
+cmor_table_base_url: "https://raw.githubusercontent.com/WCRP-CORDEX/cordex-cmip6-cmor-tables/main/Tables/CORDEX-CMIP6"
+
+# Frequencies for which CMOR tables are downloaded.
+# Local supplemental tables (NCAR-CORDEX-CMIP6_<freq>.json) are loaded
+# automatically from the scripts directory for any frequency listed here
+# or for supplemental-only frequencies (e.g. 1hr for AFWA, 6hr for zlev).
+cmor_table_freqs:
+  - fx
+  - 1hr
+  - 6hr
+  - day

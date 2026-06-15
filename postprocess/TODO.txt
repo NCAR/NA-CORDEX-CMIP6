@@ -2,12 +2,17 @@
 ===========
 TODO items:
 
-     apply workflow updates to env.sh
+     update rawdir chunk-finding for future runs
 
-     plot errors on static files (line 66, looking for 'time')
+     env.sh -> shellvars.sh, pull from sim_config
 
-     merge extract branch into main
-    
+     # finish writeup for sim_info generation
+
+     fix plot errors on static files (line 66, looking for 'time')
+
+     add sim id to job names
+
+     gis index var naming etc.
 
     deferred:
 
