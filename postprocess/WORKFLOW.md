@@ -221,6 +221,8 @@ $post/relocate.sh $indir6 $sdir $outdir6
 
 set qdir = $topdir/qa
 
+# this can't go in shell_vars.csh because DRS tree doesn't exist until
+# after step 6 has run
 set indir7drs = `find $topdir/CORDEX-CMIP6 -type d -name v1-r1`
 set indir7flat = $outdir5
 set outdir7 = $qdir/qa

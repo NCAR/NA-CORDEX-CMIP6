@@ -1,12 +1,25 @@
-# source shell_vars.sh id 
+# source shell_vars.csh id
 
-# stopifnot arg #1 exists
+## Validate argument
+if ( $#argv != 1 ) then
+    echo "Usage: source shell_vars.csh <id>"
+    exit
+endif
 
+set id = $argv[1]
 
 ## The directory where all the scripts (including this one) live.
 ## This is black magic for csh that tells you where this script lives
 ## even though you're sourcing it rather than running it.
-set post = `ls -l /proc/$$/fd | sed -e 's/^[^/]*//' | grep "shell_vars.csh" | dirname`
+set post = `ls -l /proc/$$/fd | sed -e 's/^[^/]*//' | grep -o '/.*shell_vars\.csh' | xargs dirname`
+
+grep -qP "^$id\t" $post/sim_info/sim-info.tsv
+if ( $status != 0 ) then
+    echo "invalid id: $id"
+    echo "not found in $post/sim_info/sim-info.tsv"
+    exit
+endif
+
 
 ## simulation configuration
 set simconfig  = $post/sim_info/$id.sim_config.yml
@@ -60,21 +73,18 @@ set outdir5 = $rdir/data
 set cmddir5 = $rdir/cmd
 set rundir5 = $rdir/run
 
-# Step 6 : relocate into DRS tree
+# Step 6: relocate into DRS tree
 set indir6 = $outdir5
 set outdir6 = $topdir
 
 # Step 7: QA
 set qdir = $topdir/qa
-set indir7drs = `find $topdir/CORDEX-CMIP6 -type d -name v1-r1`
 set indir7flat = $outdir5
 set outdir7 = $qdir/qa
 set cmddir7 = $qdir/cmd
 set rundir7 = $qdir/run
 
-#set simname = `basename $topdir`
-
-# Step 8: plotting
+# Step 8: plot
 set pdir = $topdir/plot
 set indir8  = $outdir5
 set outdir8 = $pdir/figs
@@ -89,4 +99,3 @@ set indir10  = $outdir5
 set outdir10 = $idir/data
 set cmddir10 = $idir/cmd
 set rundir10 = $idir/run
-
