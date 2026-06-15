@@ -70,11 +70,18 @@ EOF
 # Each decade is run as a separate simulation with 2.5 years of spinup.
 # The simulation for decade XXXX starts with year (XXXX - 3), so the
 # chunk directory for year Y is named ((Y/10)*10 - 3)_chunk.
-# Adjust this function if the simulation layout changes.
+#
+# Exception: future runs begin in 2015, using the end of the historical
+# run as spinup, so 2015-2019 live in 2015_chunk rather than 2012_chunk.
+# The standard formula resumes at 2020 (-> 2017_chunk).
 chunk_dir_for_year() {
     local year="$1"
-    local sim_start=$(( (year / 10) * 10 - 3 ))
-    echo "${sim_start}_chunk"
+    if [[ $year -ge 2015 && $year -le 2019 ]]; then
+        echo "2015_chunk"
+    else
+        local sim_start=$(( (year / 10) * 10 - 3 ))
+        echo "${sim_start}_chunk"
+    fi
 }
 
 # Parse options

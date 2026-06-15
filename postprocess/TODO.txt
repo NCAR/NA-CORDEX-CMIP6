@@ -2,8 +2,6 @@
 ===========
 TODO items:
 
-     update rawdir chunk-finding for future runs
-
      fix plot errors on static files (line 66, looking for 'time')
 
      gis index var naming etc.
