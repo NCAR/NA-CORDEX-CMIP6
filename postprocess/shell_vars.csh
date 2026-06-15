@@ -99,3 +99,10 @@ set indir10  = $outdir5
 set outdir10 = $idir/data
 set cmddir10 = $idir/cmd
 set rundir10 = $idir/run
+
+echo "NA-CORDEX-CMIP6 postprocessing environment:"
+echo "    post: $post"
+echo "      id: $id"
+echo "   years: $years"
+echo "  topdir: $topdir"
+echo "     raw: $raw"

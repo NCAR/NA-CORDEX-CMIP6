@@ -4,8 +4,6 @@ TODO items:
 
      update rawdir chunk-finding for future runs
 
-    #  env.sh -> shellvars.sh, pull from sim_config
-
      fix plot errors on static files (line 66, looking for 'time')
 
      add sim id to job names

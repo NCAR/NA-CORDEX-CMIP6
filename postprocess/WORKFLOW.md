@@ -12,16 +12,11 @@ in `run`.
 
 The commands are meant to be run interactively, not as a script; for
 each step, you need to run that step, wait for it to finish, check
-whether everythin processed correctly, and fix any errors before
+whether everything processed correctly, and fix any errors before
 moving on to the next one.
 
-Shell variables, loops, etc, are written for tcsh; if you use bash,
-you'll have to translate.  For testing on a single year, change the
-year range to a single year and add `/test` to `$topdir`.
-
-This code is currently set up for post-processing an ERA5 downscaling;
-modify as appropriate for other simulations.  And, of course, you'll
-need to modify all the paths.
+Shell variables, loops, etc, are written for tcsh; bash equivalents
+are available where noted.
 
 The workflow steps are:
 
@@ -39,47 +34,38 @@ The workflow steps are:
 
 ___
 
+Before starting, source the appropriate shell variables script to set
+up your environment:
+
 ```
-tcsh
+# tcsh
+source shell_vars.csh <id>
+
+# bash
+source shell_vars.sh <id>
+```
+
+where `<id>` is the simulation id as defined in
+`sim_info/sim-info.tsv` (e.g. `era5-eval`).  This sets all the
+variables used throughout the workflow.
+
+
+
+```tcsh
 
 ################
 # Step 0: setup
 
 conda activate nac6
 
-set id = era5-eval
-
-set scratch = `realpath ~/glade-scratch/na-cordex/`
-set here = `realpath ~/work/cordex6`
-set post = $here/NA-CORDEX-CMIP6/postprocess
-set base = /glade/campaign/ral/risc/collections/na-cordex-cmip6/raw/
-
-set simconfig  = $post/sim_info/$id.sim_config.yml
-set raw = $base/`grep '^path:' $simconfig | cut -f2 -d: | tr -d ' \"'`
-
-set topdir = $scratch/$id
-
-set sdir = $topdir/setup
-
-
 python $post/setup.py $sdir $post/sim_info/$id.sim_config.yml
+
 
 
 ################
 # Step 1: extract
 
-# If you're re-running the extract stage (e.g., if new variables were
-# added) and you don't want to regenerate everything, just change
-# $cmddir1 and $rundir1
-
-set years = 1980-2023
-#set years = 1950-2014
-#set years = 2015-2100
-
-set edir = $topdir/extract
-set outdir1 = $edir/data
-set cmddir1 = $edir/cmd
-set rundir1 = $edir/run
+# $years is set by shell_vars; override here if needed (e.g., testing)
 
 $post/extract.sh $raw $sdir $outdir1 $years $cmddir1
 
@@ -91,7 +77,6 @@ $post/launch_multi --workflow cordex --run $rundir1 --chain \
   $cmddir1/wbgt/wbgt.cmd $cmddir1/wbgt/wbgt_cat.cmd
 
 
-
 ## wait until it finishes, check everything ran correctly
 
 ## this is ridiculous, but it works
@@ -99,10 +84,10 @@ alias pad 'awk '"'"'{ for (i=1; i<=NF; i++) printf "%10s", $i; print ""}'"'"''
 
 cd $rundir1
 foreach i (*)
-echo -n $i"\t"
-printf "%s\t" `tail -q -n 1 $i/*.o* | cut -f 1 -d : | sort | uniq -c`
-printf "%s\t" `cat $i/stdout*/* | grep mem | datamash -sWR 2 min 4 mean 4 max 4 | pad`
-cat $i/stdout*/* | grep time | datamash -sWR 2 min 3 mean 3 max 3 | pad
+  echo -n $i"\t"
+  printf "%s\t" `tail -q -n 1 $i/*.o* | cut -f 1 -d : | sort | uniq -c`
+  printf "%s\t" `cat $i/stdout*/* | grep mem | datamash -sWR 2 min 4 mean 4 max 4 | pad`
+  cat $i/stdout*/* | grep time | datamash -sWR 2 min 3 mean 3 max 3 | pad
 end
 
 cd $topdir
@@ -111,14 +96,6 @@ cd $topdir
 
 ################
 # Step 2: format
-
-set fdir = $topdir/format
-
-set indir2  = $outdir1
-set outdir2 = $fdir/data
-set cmddir2 = $fdir/cmd
-set rundir2 = $fdir/run
-
 
 $post/format.sh $indir2 $sdir $outdir2 $cmddir2
 
@@ -136,21 +113,11 @@ cd $topdir
 ################
 # Step 3: aggregate
 
-set adir = $topdir/aggregate
-
-set indir3  = $outdir2
-set outdir3 = $adir/data
-
-set tmpdir3 = $adir/tmp
-set cmddir3 = $adir/cmd
-set rundir3 = $adir/run
-
 $post/aggregate.sh $indir3 $sdir $tmpdir3 $outdir3 $cmddir3
 
 $post/launch_multi --workflow cordex --run $rundir3 --chain $cmddir3/avg.cmd $cmddir3/mon.cmd $cmddir3/cat.cmd
 
 
-################
 ## wait until it finishes, check everything ran correctly
 cd $rundir3
 wc */stdout*/* | tail -1
@@ -158,16 +125,9 @@ tail -q -n 1 */*.o* | cut -f 1 -d : | sort | uniq -c
 cd $topdir
 
 
+
 ################
 # Step 4: compress
-
-set cdir = $topdir/compress
-
-set indir4  = $outdir3
-set outdir4 = $cdir/data
-set cmddir4 = $cdir/cmd
-set rundir4 = $cdir/run
-
 
 $post/compress.sh $indir4 $sdir $outdir4 $cmddir4
 
@@ -181,15 +141,9 @@ tail -q -n 1 */*.o* | cut -f 1 -d : | sort | uniq -c
 cd $topdir
 
 
+
 ################
 # Step 5: repack
-
-set rdir = $topdir/repack
-
-set indir5  = $outdir4
-set outdir5 = $rdir/data
-set cmddir5 = $rdir/cmd
-set rundir5 = $rdir/run
 
 $post/repack.sh $indir5 $sdir $outdir5 $cmddir5
 
@@ -208,26 +162,17 @@ cd $topdir
 ################
 # Step 6: relocate into DRS tree
 
-set indir6 = $outdir5
-set outdir6 = $topdir
-
 $post/relocate.sh --dry-run $indir6 $sdir $outdir6 | tail
 
 $post/relocate.sh $indir6 $sdir $outdir6
 
 
+
 ################
 # Step 7: QA
 
-set qdir = $topdir/qa
-
-# this can't go in shell_vars.csh because DRS tree doesn't exist until
-# after step 6 has run
+# indir7drs must be set here (DRS tree created in Step 6)
 set indir7drs = `find $topdir/CORDEX-CMIP6 -type d -name v1-r1`
-set indir7flat = $outdir5
-set outdir7 = $qdir/qa
-set cmddir7 = $qdir/cmd
-set rundir7 = $qdir/run
 
 $post/qa.sh $indir7drs $indir7flat $sdir $outdir7 $cmddir7
 
@@ -256,9 +201,8 @@ end
 cd $topdir
 
 ## merge cluster.json files so you only need to upload one
-set simname = `basename $topdir`
-python $post/merge_qa.py $qdir/$simname.qa.merged.json --find $qdir/qa
-echo "scp casper.hpc.ucar.edu:$qdir/$simname.qa.merged.json ."
+python $post/merge_qa.py $qdir/$id.qa.merged.json --find $qdir/qa
+echo "scp casper.hpc.ucar.edu:$qdir/$id.qa.merged.json ."
 
 ## download results, then check the cluster.json file at:
 https://cmiphub.dkrz.de/info/display_qc_results.html
@@ -282,16 +226,9 @@ https://cmiphub.dkrz.de/info/display_qc_results.html
 ## fzra & humidex don't have a CF standard_name (yet)
 
 
+
 ################
 # Step 8: plot
-
-set pdir = $topdir/plot
-
-set indir8  = $outdir5
-set outdir8 = $pdir/figs
-set cmddir8 = $pdir/cmd
-set rundir8 = $pdir/run
-
 
 $post/plot.sh $indir8 $outdir8 $cmddir8
 
@@ -322,13 +259,6 @@ chmod -R ug+rwX o+rX
 ################
 # Step 10: generate climate indexes for GIS
 
-set idir = $topdir/index
-
-set indir10  = $outdir5
-set outdir10 = $idir/data
-set cmddir10 = $idir/cmd
-set rundir10 = $idir/run
-
 python $post/index.py $indir10 $outdir10 $cmddir10
 
 
@@ -353,9 +283,6 @@ foreach i (*)
 end
 
 cd $topdir
-
-
-
 ```
 
 ## Installing the ESGF compliance checker
