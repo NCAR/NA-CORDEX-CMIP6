@@ -47,16 +47,22 @@ tcsh
 
 conda activate nac6
 
-set raw = `realpath ~/image/collections/na-cordex-cmip6/raw/ERA5/eval/`
+set id = era5-eval
+
 set scratch = `realpath ~/glade-scratch/na-cordex/`
 set here = `realpath ~/work/cordex6`
 set post = $here/NA-CORDEX-CMIP6/postprocess
-set topdir = $scratch/era5
+set base = /glade/campaign/ral/risc/collections/na-cordex-cmip6/raw/
+
+set simconfig  = $post/sim_info/$id.sim_config.yml
+set raw = $base/`grep '^path:' $simconfig | cut -f2 -d: | tr -d ' \"'`
+
+set topdir = $scratch/$id
 
 set sdir = $topdir/setup
 
 
-python $post/setup.py $sdir
+python $post/setup.py $sdir $post/sim_info/$id.sim_config.yml
 
 
 ################
@@ -66,12 +72,16 @@ python $post/setup.py $sdir
 # added) and you don't want to regenerate everything, just change
 # $cmddir1 and $rundir1
 
+set years = 1980-2023
+#set years = 1950-2014
+#set years = 2015-2100
+
 set edir = $topdir/extract
 set outdir1 = $edir/data
 set cmddir1 = $edir/cmd
 set rundir1 = $edir/run
 
-$post/extract.sh $raw $sdir $outdir1 1980-2023 $cmddir1
+$post/extract.sh $raw $sdir $outdir1 $years $cmddir1
 
 $post/launch_multi --workflow cordex --run $rundir1 $cmddir1/*cmd
 
@@ -334,7 +344,7 @@ cd $rundir10
 foreach i (*)
   echo =====================
   echo $i
-  wc -l $i/*.cmd
+  wc -l $i/$i.cmd
   grep Done $i/*.o* | wc -l
   wc $i/stdout*/* | tail -1
   grep Done $i/*.o* | cut -f 2 -d = | cut -f 3-4 -d ' ' | sort -n | uniq -c
