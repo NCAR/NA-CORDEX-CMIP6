@@ -6,7 +6,7 @@ if ( $#argv != 1 ) then
     exit
 endif
 
-set id = $argv[1]
+setenv id $argv[1]
 
 ## The directory where all the scripts (including this one) live.
 ## This is black magic for csh that tells you where this script lives

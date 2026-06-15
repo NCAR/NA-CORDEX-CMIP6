@@ -6,7 +6,7 @@ if [[ $# -ne 1 ]]; then
     return 1
 fi
 
-id=$1
+export id=$1
 
 ## The directory where all the scripts (including this one) live.
 post=$(dirname $(realpath $BASH_SOURCE))

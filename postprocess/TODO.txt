@@ -6,8 +6,6 @@ TODO items:
 
      fix plot errors on static files (line 66, looking for 'time')
 
-     add sim id to job names
-
      gis index var naming etc.
 
     deferred:

@@ -47,7 +47,8 @@ source shell_vars.sh <id>
 
 where `<id>` is the simulation id as defined in
 `sim_info/sim-info.tsv` (e.g. `era5-eval`).  This sets all the
-variables used throughout the workflow.
+variables used throughout the workflow.  `$id` gets set as an
+envariable visible in other scripts.
 
 
 

@@ -230,6 +230,13 @@ for cmdfile in "${cmdfiles[@]}"; do
     else
         jobname="$basename_no_ext"
     fi
+
+    ## if $id is set, prepend an abbreviated version for pbs jobname
+    if [[ "${id:-}" =~ ^([[:alnum:]]+)-([[:alnum:]]+)$ ]]; then
+        pbsname="${BASH_REMATCH[1]:0:1}${BASH_REMATCH[2]:0:1}.${jobname}"
+    else
+        pbsname="$jobname"
+    fi
     
     rundir="$runpath/$jobname"
     
@@ -255,7 +262,7 @@ for cmdfile in "${cmdfiles[@]}"; do
     # Build launch_cf command
     launch_cmd="launch_cf -A $(printf %q "$account") -q $(printf %q "$queue")"
     launch_cmd+=" -m $(printf %q "$mail") -j $(printf %q "$join")"
-    launch_cmd+=" -N $(printf %q "$jobname") -l walltime=$(printf %q "$walltime")"
+    launch_cmd+=" -N $(printf %q "$pbsname") -l walltime=$(printf %q "$walltime")"
     if [[ -n "$mem" ]]; then
         launch_cmd+=" --mem $(printf %q "$mem")"
     fi
