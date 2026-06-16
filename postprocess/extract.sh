@@ -9,7 +9,7 @@
 #
 # All variables are routed to postproc_engine.py, except:
 #   fx   -> postproc_fx.py   (time-invariant; single command)
-#   wbgt -> postproc_wbgt.py (per-day parallelism; see below)
+#   wbgt -> postproc_wbgt.py (per-month parallelism; see below)
 #
 # wbgt/utci workflow:
 #   Commandfiles are written to CMDDIR/wbgt/ instead of CMDDIR/, so they
@@ -193,22 +193,21 @@ for var in "${VARLIST[@]}"; do
         fi
     fi
 
-    # wbgt/utci: per-day extraction then concatenation (by year, to
+    # wbgt/utci: per-month extraction then concatenation (by year, to
     # keep filesystem & scheduler happy)
     if [[ "$var" == "wbgt" ]]; then
         wbgt_cmddir="$CMDDIR/wbgt"
         mkdir -p "$wbgt_cmddir"
 
-        year_cmdfiles=()
         for (( year = START_YEAR; year <= END_YEAR; year++ )); do
             cmdfile="$wbgt_cmddir/wbgt_${year}.cmd"
             > "$cmdfile"
 
             chunk="$WRFDIR/$(chunk_dir_for_year "$year")"
             tmpdir="$OUTDIR/_temp"
-            for infile in "$chunk"/wrfout_hour_d01_${year}-*; do
-                [[ -f "$infile" ]] || continue
-                echo "python ./postproc_wbgt.py $SETUPDIR $infile $tmpdir" >> "$cmdfile"
+            for month in $( seq -w 12 ); do
+                ls "$chunk"/wrfout_hour_d01_${year}-${month}-* &>/dev/null || continue
+                echo "python ./postproc_wbgt.py $SETUPDIR $chunk $year $month $tmpdir" >> "$cmdfile"
             done
         done
 

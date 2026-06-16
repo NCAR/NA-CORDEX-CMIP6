@@ -2,20 +2,27 @@
 
 # Purpose:
 # --------
-# Extract WBGT and UTCI from a single day's WRF hourly output file.
-# Both indices are computed together since they share the expensive
-# MRT calculation.
+# Extract WBGT and UTCI from a month's worth of WRF hourly output files
+# (one file per day). Both indices are computed together since they share
+# the expensive MRT calculation.
+#
+# Parallelized at the month level (rather than per-day) to keep total task
+# counts manageable for large simulations; each invocation loops over the
+# days in one year-month and still writes one output file per day, so
+# downstream concatenation (wbgt_cat.cmd in extract.sh) is unchanged.
 #
 # USAGE:
-#   python postproc_wbgt.py SETUPDIR INFILE OUTDIR
+#   python postproc_wbgt.py SETUPDIR CHUNKDIR YEAR MONTH OUTDIR
 #
 #   SETUPDIR  Directory containing sim.env (produced by setup.py)
-#   INFILE    Single WRF hourly file: wrfout_hour_d01_YYYY-MM-DD_HH:MM:SS
+#   CHUNKDIR  Directory containing WRF hourly files for this chunk
+#   YEAR      4-digit year (e.g. 1980)
+#   MONTH     2-digit month (e.g. 01)
 #   OUTDIR    Output directory (wbgt.1hr/ and utci.1hr/ created here)
 #
-# Output files:
-#   OUTDIR/wbgt.1hr/wbgt_{fname_base}_1hr_{YYYYMMDD}0000-{YYYYMMDD}2300.nc
-#   OUTDIR/utci.1hr/utci_{fname_base}_1hr_{YYYYMMDD}0000-{YYYYMMDD}2300.nc
+# Output files (one pair per day in the month):
+#   OUTDIR/wbgt.1hr/YEAR/wbgt_{fname_base}_1hr_{YYYYMMDD}0000-{YYYYMMDD}2300.nc
+#   OUTDIR/utci.1hr/YEAR/utci_{fname_base}_1hr_{YYYYMMDD}0000-{YYYYMMDD}2300.nc
 #
 # References:
 #   MRT: Di Napoli et al. (2020), Int J Biometeorol, 64:1233-1245
@@ -31,6 +38,7 @@ import pandas as pd
 import sys
 import os
 import re
+import glob
 import time
 import resource
 
@@ -40,10 +48,17 @@ t0 = time.perf_counter()
 # Arguments
 
 setupdir = sys.argv[1]
-infile   = sys.argv[2]
-outdir   = sys.argv[3]
+chunkdir = sys.argv[2]
+year     = sys.argv[3]
+month    = sys.argv[4]
+outdir   = sys.argv[5]
 
 os.makedirs(outdir, exist_ok=True)
+
+infiles = sorted(glob.glob(os.path.join(chunkdir, f'wrfout_hour_d01_{year}-{month}-*')))
+if not infiles:
+    print(f'Error: no files found for {year}-{month} in {chunkdir}', file=sys.stderr)
+    sys.exit(1)
 
 # -----------------
 # sim.env loading
@@ -78,58 +93,14 @@ _ver = _cfg['version_realization']
 
 fname_base = f'{_dom}_{_drs}_{_dre}_{_drv}_{_org}_{_src}_{_ver}'
 
-# -----------------
-# Parse date from filename
-# Expected format: wrfout_hour_d01_YYYY-MM-DD_HH:MM:SS
-
-_fname = os.path.basename(infile)
-_m = re.search(r'(\d{4})-(\d{2})-(\d{2})', _fname)
-if not _m:
-    print(f'Error: could not parse date from filename: {_fname}', file=sys.stderr)
-    sys.exit(1)
-
-year, mon, day = _m.group(1), _m.group(2), _m.group(3)
-date_str  = f'{year}{mon}{day}'   # YYYYMMDD, used in output filenames
-
-# -----------------
-# Time coordinate
-# WBGT/UTCI are instantaneous, so no time_bnds.
-
 _t_encoding = {
     'units':    _cfg['time_units'],
     'calendar': _cfg['calendar'],
     'dtype':    np.float64,
 }
 
-time_da = xr.DataArray(
-    xr.date_range(
-        start=f'{year}-{mon}-{day}',
-        periods=24,
-        freq='1h',
-        calendar=_cfg['calendar'],
-        use_cftime=True,
-        unit='s',
-    ),
-    dims=['time'],
-    attrs={
-        'long_name':     'time',
-        'standard_name': 'time',
-        'axis':          'T',
-    },
-)
-time_da.encoding = _t_encoding
-
 # -----------------
-# Output filenames
-# Daily files are staged in <outdir>/<var>.1hr/<year>/ so that the
-# per-year ncrcat commands in wbgt_cat.cmd can glob cleanly by year.
-
-wbgt_fout = os.path.join(
-    outdir, 'wbgt.1hr', year,
-    f'wbgt_{fname_base}_1hr_{date_str}0000-{date_str}2300.nc')
-utci_fout = os.path.join(
-    outdir, 'utci.1hr', year,
-    f'utci_{fname_base}_1hr_{date_str}0000-{date_str}2300.nc')
+# Output directories (same for every day in this year-month)
 
 os.makedirs(os.path.join(outdir, 'wbgt.1hr', year), exist_ok=True)
 os.makedirs(os.path.join(outdir, 'utci.1hr', year), exist_ok=True)
@@ -204,42 +175,92 @@ def _compute_wbgt_utci_arrays(ds):
 
 
 # -----------------
-# Load, compute, write
+# Chunking, based on domain size (same for every file in this chunk)
 
-with xr.open_dataset(infile, decode_times=False) as _ds:
-    _ny = _ds.sizes['south_north']
-    _nx = _ds.sizes['west_east']
-_chunking = {'Time:': 1, 'south_north': _ny, 'west_east': _nx}
+with xr.open_dataset(infiles[0], decode_times=False) as _ds0:
+    _ny = _ds0.sizes['south_north']
+    _nx = _ds0.sizes['west_east']
+_chunking = {'south_north': _ny, 'west_east': _nx}
 
-ds = xr.open_dataset(infile, engine='netcdf4',
-                     chunks=_chunking,
-                     mask_and_scale=False,
-                     decode_times=False,
-                     decode_coords=False)[_WBGT_WRF_VARS]
-ds = ds.rename({'Time': 'time', 'west_east': 'x', 'south_north': 'y'})
+# -----------------
+# Process a single day's file: parse day, load, compute, write.
+# Daily files are staged in <outdir>/<var>.1hr/<year>/ so that the
+# per-year ncrcat commands in wbgt_cat.cmd can glob cleanly by year.
 
-wbgt_arr, utci_arr = _compute_wbgt_utci_arrays(ds)
-ds.close()
+def process_day(infile):
+    # Day comes from the filename; year/month are fixed for this job.
+    # Expected filename format: wrfout_hour_d01_YYYY-MM-DD_HH:MM:SS
+    _fname = os.path.basename(infile)
+    _m = re.search(r'\d{4}-\d{2}-(\d{2})', _fname)
+    if not _m:
+        print(f'Error: could not parse date from filename: {_fname}', file=sys.stderr)
+        sys.exit(1)
+    day = _m.group(1)
+    date_str = f'{year}{month}{day}'   # YYYYMMDD, used in output filenames
 
-_encoding_base = {
-    'time': _t_encoding,
-}
+    # Time coordinate. WBGT/UTCI are instantaneous, so no time_bnds.
+    time_da = xr.DataArray(
+        xr.date_range(
+            start=f'{year}-{month}-{day}',
+            periods=24,
+            freq='1h',
+            calendar=_cfg['calendar'],
+            use_cftime=True,
+            unit='s',
+        ),
+        dims=['time'],
+        attrs={
+            'long_name':     'time',
+            'standard_name': 'time',
+            'axis':          'T',
+        },
+    )
+    time_da.encoding = _t_encoding
 
-xr.DataArray(wbgt_arr, dims=['time', 'y', 'x'], coords={'time': time_da}) \
-  .to_dataset(name='wbgt') \
-  .to_netcdf(wbgt_fout,
-             encoding={'wbgt': {'_FillValue': np.float32(1.e20)},
-                       **_encoding_base},
-             unlimited_dims=['time'])
+    wbgt_fout = os.path.join(
+        outdir, 'wbgt.1hr', year,
+        f'wbgt_{fname_base}_1hr_{date_str}0000-{date_str}2300.nc')
+    utci_fout = os.path.join(
+        outdir, 'utci.1hr', year,
+        f'utci_{fname_base}_1hr_{date_str}0000-{date_str}2300.nc')
 
-xr.DataArray(utci_arr, dims=['time', 'y', 'x'], coords={'time': time_da}) \
-  .to_dataset(name='utci') \
-  .to_netcdf(utci_fout,
-             encoding={'utci': {'_FillValue': np.float32(1.e20)},
-                       **_encoding_base},
-             unlimited_dims=['time'])
+    ds = xr.open_dataset(infile, engine='netcdf4',
+                         chunks=_chunking,
+                         mask_and_scale=False,
+                         decode_times=False,
+                         decode_coords=False)[_WBGT_WRF_VARS]
+    ds = ds.rename({'Time': 'time', 'west_east': 'x', 'south_north': 'y'})
 
-print(f'  wbgt/utci: {date_str} finished')
+    wbgt_arr, utci_arr = _compute_wbgt_utci_arrays(ds)
+    ds.close()
+
+    _encoding_base = {
+        'time': _t_encoding,
+    }
+
+    xr.DataArray(wbgt_arr, dims=['time', 'y', 'x'], coords={'time': time_da}) \
+      .to_dataset(name='wbgt') \
+      .to_netcdf(wbgt_fout,
+                 encoding={'wbgt': {'_FillValue': np.float32(1.e20)},
+                           **_encoding_base},
+                 unlimited_dims=['time'])
+
+    xr.DataArray(utci_arr, dims=['time', 'y', 'x'], coords={'time': time_da}) \
+      .to_dataset(name='utci') \
+      .to_netcdf(utci_fout,
+                 encoding={'utci': {'_FillValue': np.float32(1.e20)},
+                           **_encoding_base},
+                 unlimited_dims=['time'])
+
+    print(f'  wbgt/utci: {date_str} finished')
+
+
+# -----------------
+# Process each day in the month
+
+for _infile in infiles:
+    process_day(_infile)
+
 print(f'postproc time: {time.perf_counter() - t0:.1f} sec')
 mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
 print(f'postproc max memory: {mem / (1024*1024):.1f} GB')

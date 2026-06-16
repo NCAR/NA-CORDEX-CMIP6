@@ -258,7 +258,7 @@ def load_wrf(prefix, yr, accumulated=False):
     with xr.open_dataset(files[0], decode_times=False) as _ds:
         _ny = _ds.sizes['south_north']
         _nx = _ds.sizes['west_east']
-    _chunking = {'Time:': 1, 'south_north': _ny, 'west_east': _nx}
+    _chunking = {'south_north': _ny, 'west_east': _nx}
 
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', message='.*separate the stored chunks.*')
