@@ -2,12 +2,9 @@
 ===========
 TODO items:
 
-     apply workflow updates to env.sh
+     fix plot errors on static files (line 66, looking for 'time')
 
-     plot errors on static files (line 66, looking for 'time')
-
-     merge extract branch into main
-    
+     gis index var naming etc.
 
     deferred:
 

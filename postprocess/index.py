@@ -12,7 +12,7 @@ Index definitions are read from a TSV file (default: gis_indexes.tsv in
 the same directory as this script).  The TSV drives command construction;
 modifying the TSV is the intended way to add, remove, or change indices.
 
-Generates six commandfiles that must be run in order:
+Generates six commandfiles that must be run in this order:
 
   concat.cmd   - Concatenates per-variable decadal input files into a
                  single file per variable using ncrcat.  Must be run
@@ -387,11 +387,6 @@ def main():
     print(f"  Final index files:       {outdir}")
     print("  " + "  ".join(f"{n.capitalize()}: {counts[n]}" for n in CMDFILES))
     print()
-
-    print("To run in order using launch_multi:")
-    existing = [f"$cmddir/{name}.cmd" for name in CMDFILES if cmd_paths[name].exists()]
-    print(f"  launch_multi --chain --run $rundir {' '.join(existing)}")
-
 
 if __name__ == "__main__":
     main()
