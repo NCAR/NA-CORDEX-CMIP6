@@ -6,6 +6,22 @@ if ( $#argv != 1 ) then
     exit
 endif
 
+set dirs = ()
+foreach dir (in out cmd run)
+  foreach step (`seq 10`)
+    set dirs = ($dirs ${dir}dir${step})
+  end
+end
+
+set vname = (post simconfig start_year end_year years base raw scratch topdir \
+      sdir edir fdir adir cdir rdir qdir pdir idir $dirs tmpdir3 indir7flat)
+
+foreach v ($vname)
+  eval 'if ( $?'$v' ) unset '$v
+end
+unset dir step dirs vname v
+
+
 setenv id $argv[1]
 
 ## The directory where all the scripts (including this one) live.

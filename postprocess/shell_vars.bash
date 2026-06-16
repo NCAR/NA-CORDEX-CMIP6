@@ -6,6 +6,23 @@ if [[ $# -ne 1 ]]; then
     return 1
 fi
 
+dirs=()
+for dir in in out cmd run; do
+  for step in $(seq 10); do
+    dirs+=("${dir}dir${step}")
+  done
+done
+
+vname=(post simconfig start_year end_year years base raw scratch topdir \
+  sdir edir fdir adir cdir rdir qdir pdir idir "${dirs[@]}" tmpdir3 indir7flat)
+
+for v in "${vname[@]}"; do
+  unset "$v"
+done
+
+unset dir step dirs vname v
+
+
 export id=$1
 
 ## The directory where all the scripts (including this one) live.
