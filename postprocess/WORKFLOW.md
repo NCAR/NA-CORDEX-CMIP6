@@ -59,7 +59,7 @@ envariable visible in other scripts.
 
 conda activate nac6
 
-python $post/setup.py $sdir $post/sim_info/$id.sim_config.yml
+python $post/setup.py $sdir $post/sim_config/$id.yml
 
 
 
