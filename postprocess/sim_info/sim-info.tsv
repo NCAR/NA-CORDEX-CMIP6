@@ -1,14 +1,14 @@
-id	path	driving_source_id	driving_experiment_id	driving_institution_id	driving_variant_label	calendar
-era5-eval	ERA5/eval	ERA5	evaluation	ECMWF	r1i1pi1	standard
-cesm-hist	CESM2/hist	CESM2	historical	NCAR	r11i1p1f1	365_day
-cesm-245	CESM2/ssp245	CESM2	ssp245	NCAR	r11i1p1f1	365_day
-cesm-370	CESM2/ssp370	CESM2	ssp370	NCAR	r11i1p1f1	365_day
-ece-hist	EC-EARTH-Veg/hist	EC-Earth3-Veg	historical	EC-Earth-Consortium	r1i1p1f1	proleptic_gregorian
-ece-245	EC-EARTH-Veg/ssp245	EC-Earth3-Veg	ssp245	EC-Earth-Consortium	r1i1p1f1	proleptic_gregorian
-ece-370	EC-EARTH-Veg/ssp370	EC-Earth3-Veg	ssp370	EC-Earth-Consortium	r1i1p1f1	proleptic_gregorian
-mpi-hist	MPI-ESM1-2-HR/hist	MPI-ESM1-2-HR	historical	MPI-M	r1i1p1f1	proleptic_gregorian
-mpi-245	MPI-ESM1-2-HR/ssp245	MPI-ESM1-2-HR	ssp245	DKRZ	r1i1p1f1	proleptic_gregorian
-mpi-370	MPI-ESM1-2-HR/ssp370	MPI-ESM1-2-HR	ssp370	DKRZ	r1i1p1f1	proleptic_gregorian
-nor-hist	NorESM2-MM/hist	NorESM2-MM	historical	NCC	r1i1p1f1	noleap
-nor-245	NorESM2-MM/ssp245	NorESM2-MM	ssp245	NCC	r1i1p1f1	noleap
-nor-370	NorESM2-MM/ssp370	NorESM2-MM	ssp370	NCC	r1i1p1f1	noleap
+id	path	driving_source_id	driving_experiment_id	driving_institution_id	driving_variant_label	calendar	start_year	end_year
+era5-eval	ERA5/eval	ERA5	evaluation	ECMWF	r1i1pi1	standard	1980	2023
+cesm-hist	CESM2/hist	CESM2	historical	NCAR	r11i1p1f1	365_day	1950	2014
+cesm-245	CESM2/ssp245	CESM2	ssp245	NCAR	r11i1p1f1	365_day	2015	2099
+cesm-370	CESM2/ssp370	CESM2	ssp370	NCAR	r11i1p1f1	365_day	2015	2099
+ece-hist	EC-EARTH-Veg/hist	EC-Earth3-Veg	historical	EC-Earth-Consortium	r1i1p1f1	proleptic_gregorian	1953	2014
+ece-245	EC-EARTH-Veg/ssp245	EC-Earth3-Veg	ssp245	EC-Earth-Consortium	r1i1p1f1	proleptic_gregorian	2015	2099
+ece-370	EC-EARTH-Veg/ssp370	EC-Earth3-Veg	ssp370	EC-Earth-Consortium	r1i1p1f1	proleptic_gregorian	2015	2099
+mpi-hist	MPI-ESM1-2-HR/hist	MPI-ESM1-2-HR	historical	MPI-M	r1i1p1f1	proleptic_gregorian	1953	2014
+mpi-245	MPI-ESM1-2-HR/ssp245	MPI-ESM1-2-HR	ssp245	DKRZ	r1i1p1f1	proleptic_gregorian	2015	2099
+mpi-370	MPI-ESM1-2-HR/ssp370	MPI-ESM1-2-HR	ssp370	DKRZ	r1i1p1f1	proleptic_gregorian	2015	2099
+nor-hist	NorESM2-MM/hist	NorESM2-MM	historical	NCC	r1i1p1f1	noleap	1953	2014
+nor-245	NorESM2-MM/ssp245	NorESM2-MM	ssp245	NCC	r1i1p1f1	noleap	2015	2099
+nor-370	NorESM2-MM/ssp370	NorESM2-MM	ssp370	NCC	r1i1p1f1	noleap	2015	2099

@@ -5,9 +5,9 @@ driving_experiment_id: "historical"
 driving_institution_id: "NCAR"
 driving_variant_label: "r11i1p1f1"
 calendar: "365_day"
-driving_experiment: "all-forcing simulation of the recent past"
 start_year: 1950
 end_year: 2014
+driving_experiment: "all-forcing simulation of the recent past"
 
 domain: "North America"
 domain_id: "NAM-12"

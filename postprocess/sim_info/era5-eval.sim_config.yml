@@ -5,9 +5,9 @@ driving_experiment_id: "evaluation"
 driving_institution_id: "ECMWF"
 driving_variant_label: "r1i1pi1"
 calendar: "standard"
-driving_experiment: "reanalysis simulation of the recent past"
 start_year: 1980
 end_year: 2023
+driving_experiment: "reanalysis simulation of the recent past"
 
 domain: "North America"
 domain_id: "NAM-12"

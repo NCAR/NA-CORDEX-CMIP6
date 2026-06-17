@@ -1,5 +1,5 @@
-driving_experiment_id	driving_experiment	start_year	end_year
-historical	all-forcing simulation of the recent past	1950	2014
-ssp245	update of RCP4.5 based on SSP2	2015	2100
-ssp370	gap-filling scenario reaching 7.0 based on SSP3	2015	2100
-evaluation	reanalysis simulation of the recent past	1980	2023
+driving_experiment_id	driving_experiment
+historical	all-forcing simulation of the recent past
+ssp245	update of RCP4.5 based on SSP2
+ssp370	gap-filling scenario reaching 7.0 based on SSP3
+evaluation	reanalysis simulation of the recent past

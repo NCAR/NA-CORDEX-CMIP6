@@ -5,9 +5,9 @@ driving_experiment_id: "ssp245"
 driving_institution_id: "NCAR"
 driving_variant_label: "r11i1p1f1"
 calendar: "365_day"
-driving_experiment: "update of RCP4.5 based on SSP2"
 start_year: 2015
-end_year: 2100
+end_year: 2099
+driving_experiment: "update of RCP4.5 based on SSP2"
 
 domain: "North America"
 domain_id: "NAM-12"
