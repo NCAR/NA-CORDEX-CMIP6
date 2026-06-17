@@ -77,7 +77,7 @@ rownames(data) <- data$id
 data <- data %>% mutate(across(!where(is.numeric), ~ sprintf('"%s"', .)))
 
 for (id in rownames(data)){
-    fname <- paste(id, "sim_config", "yml", sep=".")
+    fname <- paste(id, "yml", sep=".")
     paste(colnames(data), data[id,], sep=": ") |> write(fname)
     system(paste("cat stub.yml >>", fname))
 }
