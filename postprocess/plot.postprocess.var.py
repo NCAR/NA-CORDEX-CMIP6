@@ -128,9 +128,9 @@ ts_ax    = fig.add_subplot(gs[1, :])
 # Map panels
 # -------------------------
 def format_map(ax):
-    ax.add_feature(cfeature.COASTLINE.with_scale('110m'), linewidth=0.2)
-    ax.add_feature(cfeature.STATES,  linewidth=0.2, alpha=0.5)
-    ax.add_feature(cfeature.BORDERS, linewidth=0.2, alpha=0.5)
+    ax.add_feature(cfeature.COASTLINE.with_scale('10m'), linewidth=0.2)
+    ax.add_feature(cfeature.STATES.with_scale('10m'),  linewidth=0.2, alpha=0.5)
+    ax.add_feature(cfeature.BORDERS.with_scale('10m'), linewidth=0.2, alpha=0.5)
 
 for k, (ax, t, data) in enumerate(zip(map_axes, tidx, slices)):
     cf = ax.pcolormesh(x, y, data,
