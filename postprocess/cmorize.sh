@@ -1,5 +1,5 @@
 #!/bin/bash -el
-# Authors: Jacob Stuivenvolt-Allen, Seth McGinnis
+# Authors: Seth McGinnis, Jacob Stuivenvolt-Allen
 #
 # cmorize.sh - Apply CF-compliant metadata and WCRP-CORDEX archiving
 # attributes to an extracted WRF variable file.

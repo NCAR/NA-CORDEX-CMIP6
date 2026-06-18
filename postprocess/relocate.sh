@@ -1,5 +1,6 @@
 #!/bin/bash
-
+# Authors: Seth McGinnis, Jacob Stuivenvolt-Allen
+#
 # relocate.sh - Populate a CORDEX DRS output tree by hard-linking files
 # from the aggregate output directory.
 #

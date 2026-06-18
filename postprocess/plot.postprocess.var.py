@@ -1,5 +1,4 @@
-# Authors: Jacob Stuivenvolt-Allen, Seth McGinnis
-# Last updated: March 2026
+# Authors: Seth McGinnis, Jacob Stuivenvolt-Allen
 
 # Purpose:
 # --------

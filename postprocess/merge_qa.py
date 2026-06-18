@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Authors: Seth McGinnis, Jacob Stuivenvolt-Allen
 """
 merge_qa.py - Merge multiple esgf-qa cluster.json files into one.
 

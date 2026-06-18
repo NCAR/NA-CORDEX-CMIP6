@@ -1,4 +1,5 @@
 # source shell_vars.sh id
+# Authors: Seth McGinnis, Jacob Stuivenvolt-Allen
 
 ## Validate argument
 if [[ $# -ne 1 ]]; then

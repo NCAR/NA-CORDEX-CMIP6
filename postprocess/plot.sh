@@ -1,5 +1,6 @@
 #!/bin/bash
-
+# Authors: Seth McGinnis, Jacob Stuivenvolt-Allen
+#
 # plot.sh - Generate commandfiles for plotting post-processed CORDEX-CMIP6
 # NetCDF files.  Designed for use with launch_multi and launch_cf, matching
 # the pattern established by compress.sh and format.sh.

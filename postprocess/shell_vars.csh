@@ -1,4 +1,5 @@
 # source shell_vars.csh id
+# Authors: Seth McGinnis, Jacob Stuivenvolt-Allen
 
 ## Validate argument
 if ( $#argv != 1 ) then

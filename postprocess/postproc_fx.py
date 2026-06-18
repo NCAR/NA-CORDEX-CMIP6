@@ -1,4 +1,4 @@
-# Authors: Jacob Stuivenvolt-Allen, Seth McGinnis
+# Authors: Seth McGinnis, Jacob Stuivenvolt-Allen
 
 # Purpose:
 # --------

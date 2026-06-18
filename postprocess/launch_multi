@@ -1,9 +1,12 @@
 #!/bin/bash
+# Authors: Seth McGinnis, Jacob Stuivenvolt-Allen
 #
 # launch_multi - Submit multiple MPMD commandfiles via launch_cf
 #
-# Creates a separate run directory for each commandfile to corral output files,
-# copies necessary config/scripts, and submits via launch_cf.
+
+# Creates a separate run directory for each commandfile to corral
+# output files, copies necessary config/scripts, and submits via
+# launch_cf.
 #
 # Usage: launch_multi [options] --run DIR cmdfile1 [cmdfile2 ...] [--final cmdfile]
 #
@@ -97,6 +100,13 @@ apply_workflow() {
                 "$scripts_dir/cmorize.sh"
                 "$scripts_dir/plot.postprocess.var.py"
             )
+	    # Note: tasks are generally < 20 min, but many-many
+	    # I/O-bound tasks running in parallel can be slower than a
+	    # single task because of bandwidth to disk.  Similarly,
+	    # tasks are generally << 50 GB, but transient memory
+	    # spikes exist, and can generate error messages even if
+	    # they don't cause failure, which makes checking success
+	    # harder.
             ;;
         *)
             die "Unknown workflow: $name"

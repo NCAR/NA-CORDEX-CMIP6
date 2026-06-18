@@ -1,5 +1,6 @@
 #!/bin/bash
-
+# Authors: Seth McGinnis, Jacob Stuivenvolt-Allen
+#
 # repack.sh - Generate commandfile for the ncrepack-cordex repack step.
 #
 # For each .nc file in INDIR, creates a symlink in the mirrored OUTDIR tree,

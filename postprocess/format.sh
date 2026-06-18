@@ -1,5 +1,6 @@
 #!/bin/bash
-
+# Authors: Seth McGinnis, Jacob Stuivenvolt-Allen
+#
 # format.sh - Generate commandfiles for applying CF and CORDEX-CMIP6 metadata
 # to extracted WRF variables.  Designed for use with launch_multi and
 # launch_cf, matching the pattern established by extract.sh.

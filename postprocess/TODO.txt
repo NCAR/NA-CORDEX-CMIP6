@@ -35,15 +35,7 @@ Climate indexes:
 
 ---
 
-List Seth & Jacob as authors in all the scripts
-
 Make the comments in the header of each script consistent
-
-document fact that --workflow cordex defaults use 50 GB / 1 hr because
-many-many running in parallel are slower than when testing a single
-case (i/o bandwidth to disk, probably); also transient memory spikes
-can generate error messages without causing failure, which makes
-checking success harder
 
 ---
 

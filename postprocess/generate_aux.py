@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Authors: Seth McGinnis, Jacob Stuivenvolt-Allen
 """
 generate_aux.py - Generate auxiliary NetCDF files for postprocessing.
 

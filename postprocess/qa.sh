@@ -1,28 +1,35 @@
 #!/bin/bash
-
+# Authors: Seth McGinnis, Jacob Stuivenvolt-Allen
+#
 # qa.sh - Generate commandfiles for QA checks on CORDEX-CMIP6 NetCDF files.
 #
 # Runs two QA tools:
 #
-#   esgqa   - ESGF compliance checker.  Requires a DRS-organized input tree
-#             (INDIR_DRS, the version-level node, e.g. v1-r1/).  One commandfile
-#             per frequency; output written to OUTDIR/esgqa/<freq>.  Output
-#             directories are cleared before writing commandfiles, as required
-#             by esgqa.
+#   esgqa - ESGF compliance checker.
+#             Requires a DRS-organized input tree (INDIR_DRS, the
+#             version-level node, e.g. v1-r1/).  One commandfile per
+#             frequency; output written to OUTDIR/esgqa/<freq>.
+#             Output directories are cleared before writing
+#             commandfiles, as required by esgqa.
 #
-#   ncrepack-cordex-check - Checks CORDEX internal packing requirements.
-#             Reads from the flat var.freq layout (INDIR_FLAT, the repack/data/
-#             directory).  One commandfile per frequency; within each frequency,
-#             one invocation per variable (all years passed at once).
+
+#   ncrepack-cordex-check - Checks CORDEX internal packing
+#             requirements.  Reads from the flat var.freq layout
+#             (INDIR_FLAT, the repack/data/ directory).  One
+#             commandfile per frequency; within each frequency, one
+#             invocation per variable (all years passed at once).
 #
 # Usage:
 #   qa.sh [OPTIONS] INDIR_DRS INDIR_FLAT SETUPDIR OUTDIR CMDDIR
 #
 # Arguments:
-#   INDIR_DRS   Version-level node of the DRS tree (e.g. .../v1-r1); used by esgqa
-#   INDIR_FLAT  Flat repack/data/ directory (var.freq/ subdirs); used by ncrepack-cordex-check
-#   SETUPDIR    Output directory from setup.py (provides esgqa test flags via qa_config.sh,
-#               if present; otherwise defaults are used)
+#   INDIR_DRS   Version-level node of the DRS tree (e.g. .../v1-r1);
+#               used by esgqa
+#   INDIR_FLAT  Flat repack/data/ directory (var.freq/ subdirs); used
+#               by ncrepack-cordex-check
+#   SETUPDIR    Output directory from setup.py (provides esgqa test flags
+#               via qa_config.sh, if present; otherwise defaults are
+#               used)
 #   OUTDIR      Root output directory for QA results
 #   CMDDIR      Directory for commandfiles
 

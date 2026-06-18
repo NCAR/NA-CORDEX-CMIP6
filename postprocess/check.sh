@@ -1,5 +1,6 @@
 #!/bin/bash
-
+# Authors: Seth McGinnis, Jacob Stuivenvolt-Allen
+#
 # check.sh - Scan a launch_multi run directory for failed tasks.
 #
 # Each commandfile submitted via launch_multi gets its own subdirectory in

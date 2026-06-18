@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Authors: Seth McGinnis, Jacob Stuivenvolt-Allen
 """
 index.py - Generate commandfiles for computing climate indices from
 compressed CORDEX-CMIP6 daily data.

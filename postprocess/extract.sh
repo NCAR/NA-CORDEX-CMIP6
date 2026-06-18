@@ -1,5 +1,6 @@
 #!/bin/bash
-
+# Authors: Seth McGinnis, Jacob Stuivenvolt-Allen
+#
 # extract.sh - Generate per-variable commandfiles for extracting variables
 # from raw WRF output.  Designed for use with launch_multi and launch_cf,
 # matching the pattern established by aggregate.sh.

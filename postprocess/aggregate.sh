@@ -1,5 +1,6 @@
 #!/bin/bash
-
+# Authors: Seth McGinnis, Jacob Stuivenvolt-Allen
+#
 # aggregate2.sh - Generate commandfiles for NA-CORDEX (WRF) aggregation
 #
 # Reorders operations relative to aggregate.sh for better wallclock performance:

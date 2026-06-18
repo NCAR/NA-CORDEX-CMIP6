@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Authors: Seth McGinnis, Jacob Stuivenvolt-Allen
 """
 setup.py - One-time setup for NA-CORDEX-CMIP6 postprocessing workflow.
 

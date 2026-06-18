@@ -1,4 +1,5 @@
 #!/bin/bash
+# Authors: Seth McGinnis, Jacob Stuivenvolt-Allen
 
 mamba env create -f environment.yml
 
