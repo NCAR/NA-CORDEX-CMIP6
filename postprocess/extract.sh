@@ -74,9 +74,12 @@ EOF
 # Exception: future runs begin in 2015, using the end of the historical
 # run as spinup, so 2015-2019 live in 2015_chunk rather than 2012_chunk.
 # The standard formula resumes at 2020 (-> 2017_chunk).
+#
+# Relies on driving_experiment_id, set by sourcing sim.env before this
+# function is first called.
 chunk_dir_for_year() {
     local year="$1"
-    if [[ $year -ge 2015 && $year -le 2019 ]]; then
+    if [[ "$driving_experiment_id" =~ ^ssp[0-9]{3}$ ]] && [[ $year -ge 2015 && $year -le 2019 ]]; then
         echo "2015_chunk"
     else
         local sim_start=$(( (year / 10) * 10 - 3 ))
@@ -165,7 +168,6 @@ done
 IFS=',' read -ra VARLIST <<< "$VARS"
 
 # Generate one commandfile per variable
-generated_cmds=()
 
 for var in "${VARLIST[@]}"; do
     if [[ "$var" == "utci" ]]; then
@@ -199,10 +201,10 @@ for var in "${VARLIST[@]}"; do
         wbgt_cmddir="$CMDDIR/wbgt"
         mkdir -p "$wbgt_cmddir"
 
-        for (( year = START_YEAR; year <= END_YEAR; year++ )); do
-            cmdfile="$wbgt_cmddir/wbgt_${year}.cmd"
-            > "$cmdfile"
+        cmdfile="$wbgt_cmddir/wbgt_mon.cmd"
+        > "$cmdfile"
 
+        for (( year = START_YEAR; year <= END_YEAR; year++ )); do
             chunk="$WRFDIR/$(chunk_dir_for_year "$year")"
             tmpdir="$OUTDIR/_temp"
             for month in $( seq -w 12 ); do
