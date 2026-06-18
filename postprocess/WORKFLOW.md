@@ -46,7 +46,7 @@ source shell_vars.sh <id>
 ```
 
 where `<id>` is the simulation id as defined in
-`sim_info/sim-info.tsv` (e.g. `era5-eval`).  This sets all the
+`sim_config/sim-info.tsv` (e.g. `era5-eval`).  This sets all the
 variables used throughout the workflow.  `$id` gets set as an
 envariable visible in other scripts.
 
@@ -74,8 +74,8 @@ $post/launch_multi --workflow cordex --run $rundir1 $cmddir1/*cmd
 
 ## wbgt (+utci) runs extra parallel, else it takes forever
 
-$post/launch_multi --workflow cordex --run $rundir1 \
-  $cmddir1/wbgt/wbgt_????.cmd --final $cmddir1/wbgt/wbgt_cat.cmd
+$post/launch_multi --workflow cordex --run $rundir1 --chain \
+  $cmddir1/wbgt/wbgt_mon.cmd $cmddir1/wbgt/wbgt_cat.cmd
 
 
 ## wait until it finishes, check everything ran correctly

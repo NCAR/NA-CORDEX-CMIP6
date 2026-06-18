@@ -28,15 +28,15 @@ export id=$1
 ## The directory where all the scripts (including this one) live.
 post=$(dirname $(realpath $BASH_SOURCE))
 
-if ! grep -qP "^$id\t" $post/sim_info/sim-info.tsv; then
+if ! grep -qP "^$id\t" $post/sim_config/sim-info.tsv; then
     echo "invalid id: $id"
-    echo "not found in $post/sim_info/sim-info.tsv"
+    echo "not found in $post/sim_config/sim-info.tsv"
     return 1
 fi
 
 
 ## simulation configuration
-simconfig=$post/sim_info/$id.sim_config.yml
+simconfig=$post/sim_config/$id.yml
 start_year=$(grep start_year $simconfig | cut -f2 -d: | xargs)
 end_year=$(grep end_year $simconfig | cut -f2 -d: | xargs)
 years=${start_year}-${end_year}

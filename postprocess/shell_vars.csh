@@ -29,16 +29,16 @@ setenv id $argv[1]
 ## even though you're sourcing it rather than running it.
 set post = `ls -l /proc/$$/fd | sed -e 's/^[^/]*//' | grep -o '/.*shell_vars\.csh' | xargs dirname`
 
-grep -qP "^$id\t" $post/sim_info/sim-info.tsv
+grep -qP "^$id\t" $post/sim_config/sim-info.tsv
 if ( $status != 0 ) then
     echo "invalid id: $id"
-    echo "not found in $post/sim_info/sim-info.tsv"
+    echo "not found in $post/sim_config/sim-info.tsv"
     exit
 endif
 
 
 ## simulation configuration
-set simconfig  = $post/sim_info/$id.sim_config.yml
+set simconfig  = $post/sim_config/$id.yml
 set start_year = `grep start_year $simconfig | cut -f2 -d:`
 set end_year   = `grep end_year $simconfig | cut -f2 -d:`
 set years = ${start_year}-${end_year}
