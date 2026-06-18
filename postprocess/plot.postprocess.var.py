@@ -82,7 +82,6 @@ pcrs = ccrs.LambertConformal(
     standard_parallels=(float(sp[0]), float(sp[1])),
 )
 
-
 # -------------------------
 # Timeseries near Boulder
 # -------------------------
@@ -108,8 +107,8 @@ slices = [da.isel(time=t) for t in tidx]
 subset = da.isel(time=tidx)
 vmin, vmax = subset.min().item(), subset.max().item()
 
-x = ds['x'].values
-y = ds['y'].values
+lon = ds['lon'].values
+lat = ds['lat'].values
 
 # -------------------------
 # Figure layout
@@ -133,11 +132,10 @@ def format_map(ax):
     ax.add_feature(cfeature.BORDERS.with_scale('10m'), linewidth=0.2, alpha=0.5)
 
 for k, (ax, t, data) in enumerate(zip(map_axes, tidx, slices)):
-    cf = ax.pcolormesh(x, y, data,
+    cf = ax.pcolormesh(lon, lat, data,
                        vmin=vmin, vmax=vmax,
                        cmap='nipy_spectral',
-                       shading='nearest',
-                       transform=pcrs)
+                       transform=ccrs.PlateCarree())
     format_map(ax)
     time_str = str(da.time.values[t])[:16]
     ax.set_title(time_str, fontsize=8, loc='left')
