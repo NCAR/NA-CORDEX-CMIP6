@@ -2,28 +2,6 @@
 ===========
 TODO items:
 
-     fix plot errors on static files (line 66, looking for 'time')
-
-     gis index var naming etc.
-
-    deferred:
-
-	group aggregate commandfiles by variable *and* step
-
-	change var_specs from yml to tsv
-	       specify what kind of file each var lives in here,
-	       	 instead of hard-coding in postproc_engine
-
-	setup: drop looking for dreq CSV in ~/work/cordex6
-
-	get rid of exec(compile( shenanigans in postproc_engine
-	    use importlib instead?
-
-	cleanup rechunk.sh messages
-	make "next step" messages more useful
-
----
-
 Climate indexes:
 	Need to fix units, stdname, longname, varnames
 	Some indexes end up with different epoch.  Fix?
@@ -39,35 +17,21 @@ Climate indexes:
 			use cdo remapbic
 
 ---
+    deferred:
 
-updates for different simulations:
+	group aggregate commandfiles by variable *and* step
 
+	change var_specs from yml to tsv
+	       specify what kind of file each var lives in here,
+	       	 instead of hard-coding in postproc_engine
 
-allow for different set of variables to process
-      extract.sh has hard-coded list of defaults
-      move to config file
+	setup: drop looking for dreq CSV in ~/work/cordex6
 
+	get rid of exec(compile( shenanigans in postproc_engine
+	    use importlib instead?
 
-config files for different simulations
-
-       specify calendar in config file
-
-       ERA5		proleptic_gregorian
-       MPI-ESM1-2-HR	proleptic_gregorian
-       CESM2		noleap
-       NorESM2-MM	noleap
-       EC-EARTH-Veg3	??? Jacob is checking with Trude
-
-switch from pandas to cftime to handle non-greg calendars
-
-check Jacob's script for workflow automation, which implements ssom
-
-Default $out/data /cmd & /run directory structure
-
-auto-create directories
-
-extend --workflow cordex arg for launch_multi to use these defaults
-
+	cleanup rechunk.sh messages
+	make "next step" messages more useful
 
 ---
 

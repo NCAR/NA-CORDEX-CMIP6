@@ -63,8 +63,13 @@ print(f'Loading {infile}')
 ds = xr.open_dataset(infile)
 da = ds[var]
 
-nt = da.sizes['time']
-print(f'  var={var}, freq={freq}, ntimes={nt}')
+static = (freq == 'fx')
+
+if static:
+    print(f'  var={var}, freq={freq} (static)')
+else:
+    nt = da.sizes['time']
+    print(f'  var={var}, freq={freq}, ntimes={nt}')
 
 units = da.attrs.get('units', '')
 
@@ -82,9 +87,52 @@ pcrs = ccrs.LambertConformal(
     standard_parallels=(float(sp[0]), float(sp[1])),
 )
 
+lon = ds['lon'].values
+lat = ds['lat'].values
+
 # -------------------------
+# Map panel helper
+# -------------------------
+def format_map(ax):
+    ax.add_feature(cfeature.COASTLINE.with_scale('10m'), linewidth=0.2)
+    ax.add_feature(cfeature.STATES.with_scale('10m'),  linewidth=0.2, alpha=0.5)
+    ax.add_feature(cfeature.BORDERS.with_scale('10m'), linewidth=0.2, alpha=0.5)
+
+# -------------------------
+# Static case: single map, no timeseries
+# -------------------------
+if static:
+    vmin, vmax = da.min().item(), da.max().item()
+
+    fig = plt.figure(figsize=(5, 6))
+    gs  = gridspec.GridSpec(1, 1, figure=fig,
+                            top=0.93, bottom=0.08,
+                            left=0.05, right=0.97)
+    ax = fig.add_subplot(gs[0, 0], projection=pcrs)
+
+    cf = ax.pcolormesh(lon, lat, da,
+                       vmin=vmin, vmax=vmax,
+                       cmap='nipy_spectral',
+                       transform=ccrs.PlateCarree())
+    format_map(ax)
+
+    # Colorbar under map panel
+    pos = ax.get_position()
+    cbar_ax = fig.add_axes([pos.x0 + 0.01, pos.y0 - 0.025,
+                             pos.width - 0.02, 0.012])
+    plt.colorbar(cf, cax=cbar_ax, orientation='horizontal', label=units)
+
+    fig.suptitle(f'{var}  |  {freq}  |  {timespan}', fontsize=10)
+    plt.savefig(outfile, dpi=150)
+    plt.close()
+    print(f'Saved: {outfile}')
+    sys.exit(0)
+
+# -------------------------
+# Time-varying case
+# -------------------------
+
 # Timeseries near Boulder
-# -------------------------
 target_lat = 40.0
 target_lon = 255.75
 
@@ -107,9 +155,6 @@ slices = [da.isel(time=t) for t in tidx]
 subset = da.isel(time=tidx)
 vmin, vmax = subset.min().item(), subset.max().item()
 
-lon = ds['lon'].values
-lat = ds['lat'].values
-
 # -------------------------
 # Figure layout
 # -------------------------
@@ -126,11 +171,6 @@ ts_ax    = fig.add_subplot(gs[1, :])
 # -------------------------
 # Map panels
 # -------------------------
-def format_map(ax):
-    ax.add_feature(cfeature.COASTLINE.with_scale('10m'), linewidth=0.2)
-    ax.add_feature(cfeature.STATES.with_scale('10m'),  linewidth=0.2, alpha=0.5)
-    ax.add_feature(cfeature.BORDERS.with_scale('10m'), linewidth=0.2, alpha=0.5)
-
 for k, (ax, t, data) in enumerate(zip(map_axes, tidx, slices)):
     cf = ax.pcolormesh(lon, lat, data,
                        vmin=vmin, vmax=vmax,
