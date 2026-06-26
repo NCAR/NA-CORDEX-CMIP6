@@ -308,7 +308,65 @@ def _output_needed(var, freq, fout):
 # Writes extracted data to outdir/<var>.<freq>/fname.nc.
 # Attaches the time coordinate (and time_bnds for extensive variables)
 # before writing.  _FillValue is set to 1e20 per CORDEX standard.
-def write_vars(var_da_list, freq, time_da, bnds_da, extensive=False):
+# If the dataset has fewer timesteps than expected, missing timesteps are
+# detected and filled with missing_value (1e20) before writing.
+
+def _missing_time_indices(ds, freq, accumulated=False):
+    """Return array of missing timestep indices in ds, using XTIME coordinate.
+
+    Uses spacing of the raw WRF XTIME values (minutes since epoch) to find
+    gaps.  Times are rounded to the nearest expected interval before
+    differencing, to tolerate the few-minute jitter in dynamic timestepping.
+    For accumulated variables, the prepended prior-year timestep is skipped.
+    Returns (missing_idx, gaps): indices of the last present step before each
+    gap, and the full diff array.  Usually missing_idx is empty.
+    """
+    interval = _FREQ_HOURS[freq] * 60          # expected interval in minutes
+    t = ds['XTIME'].values                     # safe: XTIME is a small coordinate
+    if accumulated:
+        t = t[1:]                              # skip prepended prior-year timestep
+    t_round = np.round(t / interval).astype(np.int64)
+    gaps = np.diff(t_round)                    # should all be 1; >1 means gap
+    return np.where(gaps > 1)[0], gaps         # indices of last present step before each gap
+
+
+def _fill_missing_times(da, var, missing_idx, gaps, time_da):
+    """Fill missing timesteps in da with 1e20.
+
+    missing_idx and gaps are precomputed by _missing_time_indices from the
+    raw ds before extraction.  da may be a DataArray or a single-variable
+    Dataset; var is the variable name (used to index Datasets).
+    Returns the padded da and the total number of inserted timesteps.
+    """
+    arr = da[var] if isinstance(da, xr.Dataset) else da
+    fill_shape = arr.isel(time=0).shape  # spatial shape for one timestep
+    fill_vals  = np.full(fill_shape, np.float32(1.e20))
+    fill_da    = xr.DataArray(fill_vals, dims=arr.dims[1:])
+    # Wrap fill slice to match da's type so xr.concat stays consistent
+    fill_slice = fill_da.to_dataset(name=var).expand_dims('time') \
+                 if isinstance(da, xr.Dataset) else fill_da.expand_dims('time')
+
+    # Build list of segments interleaved with fill slices
+    segments = []
+    prev = 0
+    n_inserted = 0
+    for i in missing_idx:
+        n_miss = int(gaps[i]) - 1
+        segments.append(da.isel(time=slice(prev, i + 1)))
+        segments.extend([fill_slice] * n_miss)
+        n_inserted += n_miss
+        prev = i + 1
+    segments.append(da.isel(time=slice(prev, None)))
+
+    # Handle missing steps at the end
+    n_trailing = len(time_da) - (len(da.time) + n_inserted)
+    if n_trailing > 0:
+        segments.append(xr.concat([fill_slice] * n_trailing, dim='time'))
+        n_inserted += n_trailing
+
+    return xr.concat(segments, dim='time'), n_inserted
+
+def write_vars(var_da_list, freq, time_da, bnds_da, missing_idx=None, gaps=None, extensive=False):
     for var, da in var_da_list:
         fout = make_fname(var, freq, extensive)
         if not _output_needed(var, freq, fout):
@@ -317,6 +375,10 @@ def write_vars(var_da_list, freq, time_da, bnds_da, extensive=False):
         vardir = os.path.join(outdir, f'{var}.{freq}')
         os.makedirs(vardir, exist_ok=True)
         outpath = os.path.join(vardir, fout)
+
+        if missing_idx is not None and (missing_idx.size > 0 or len(da.time) < len(time_da)):
+            da, n_inserted = _fill_missing_times(da, var, missing_idx, gaps, time_da)
+            print(f'Warning: {n_inserted} missing timestep(s) filled with missing_value')
 
         ds = da.assign_coords(time=time_da)
         if bnds_da is not None:
@@ -468,7 +530,8 @@ else:
                 _, freq_hours, accumulated = get_loader(variable)
                 ds       = load_wrf(prefix, year, accumulated)
                 time_da, bnds_da = _build_time_coord(year, freq_hours, cm)
-                write_vars(extract_fn(ds), freq, time_da, bnds_da, ext)
+                midx, mgaps  = _missing_time_indices(ds, freq, accumulated)
+                write_vars(extract_fn(ds), freq, time_da, bnds_da, midx, mgaps, ext)
                 ds.close()
 
         # Derive tasmin/tasmax from the tas file.  Runs whether or not

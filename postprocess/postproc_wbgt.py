@@ -232,7 +232,16 @@ def process_day(infile):
     ds = ds.rename({'Time': 'time', 'west_east': 'x', 'south_north': 'y'})
 
     wbgt_arr, utci_arr = _compute_wbgt_utci_arrays(ds)
+    n_times = ds.sizes['time']
     ds.close()
+
+    # Pad trailing missing timesteps with missing_value
+    if n_times < 24:
+        n_missing = 24 - n_times
+        fill = np.full((n_missing, _ny, _nx), np.float32(1.e20))
+        wbgt_arr = np.concatenate([wbgt_arr, fill], axis=0)
+        utci_arr = np.concatenate([utci_arr, fill], axis=0)
+        print(f'Warning: {date_str} has {n_missing} missing timestep(s); filled with missing_value')
 
     _encoding_base = {
         'time': _t_encoding,
