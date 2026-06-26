@@ -245,7 +245,7 @@ cd $topdir
 
 ## viewing all the plots is probably easier if you download them
 
-echo "scp -r casper.hpc.ucar.edu:$outdir8 cordex-plots"
+echo "scp -r casper.hpc.ucar.edu:$outdir8 cordex-plots/$id"
 
 
 
@@ -254,7 +254,11 @@ echo "scp -r casper.hpc.ucar.edu:$outdir8 cordex-plots"
 
 # login to globus & transfer files using the web interface
 
-chmod -R ug+rwX o+rX 
+# tweak file permissions - files world-read-only, directories inherit
+# group & are group-writeable, but no deleting others' files
+
+find . -type f -exec chmod 0444 {} +
+find . -type d -exec chmod 3775 {} +
 
 
 ################
