@@ -386,6 +386,13 @@ def extract_snm(ds):
 
 # Humidex
 # ---------------------------------------------------
+
+def _vapor_pressure_from_q(q, P):
+    """Vapor pressure (Pa) from mixing ratio (kg/kg) and pressure (Pa)."""
+    hus = q / (1 + q)    # mixing ratio -> specific humidity
+    eps = 0.62197
+    return hus * P / (eps + hus * (1.0 - eps))
+
 def extract_humidex(ds):
     # T2 units: K, Q2 units: kg/kg (mixing ratio), PSFC units: Pa
     # Humidex = T2 + 0.5555 * (e_hPa - 10.0)
