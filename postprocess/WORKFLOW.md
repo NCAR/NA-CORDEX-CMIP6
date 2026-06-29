@@ -80,20 +80,29 @@ $post/launch_multi --workflow cordex --run $rundir1 --chain \
 
 ## wait until it finishes, check everything ran correctly
 
-## this is ridiculous, but it works
+## output columns: var, num with "Done:" in .o file, min/mean/max of
+## mem & time, final lines of .o that aren't "Done:"
+## Then grep for infilled missing-data messages in stdout
+## note that wbgt_cat has no memory / time output messages
+
+## this is ridiculous, but it works (tab-padding columns)
 alias pad 'awk '"'"'{ for (i=1; i<=NF; i++) printf "%10s", $i; print ""}'"'"''
 
 cd $rundir1
+echo "\t\t    max memory\t\t      runtime"
+echo "var\tDone:\tmin\tmean\tmax\tmin\tmean\tmax\tother final lines"
 foreach i (*)
   echo -n $i"\t"
-  printf "%s\t" `tail -q -n 1 $i/*.o* | cut -f 1 -d : | sort | uniq -c`
-  printf "%s\t" `cat $i/stdout*/* | grep mem | datamash -sWR 2 min 4 mean 4 max 4 | pad`
-  cat $i/stdout*/* | grep time | datamash -sWR 2 min 3 mean 3 max 3 | pad
+  printf "%s\t" `grep -l '^Done:' $i/*.o* | wc -l`
+  printf "%s\t" `cat $i/std*/* | grep memory: | datamash -sWR 2 min 4 mean 4 max 4 | pad`
+  printf "%s\t" `cat $i/std*/* | grep time: | datamash -sWR 2 min 3 mean 3 max 3 | pad`
+  echo "`tail -q -n 1 $i/*.o* | grep -v '^Done:' | uniq -c`"
 end
+grep -v -E '^postproc|wbgt/utci:' */stdout*/*
 
 cd $topdir
 
-# chmod -R -w $outdir1
+
 
 ################
 # Step 2: format
