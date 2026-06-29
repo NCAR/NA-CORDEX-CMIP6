@@ -80,9 +80,6 @@ $post/launch_multi --workflow cordex --run $rundir1 --chain \
 
 ## wait until it finishes, check everything ran correctly
 
-## output columns: var, num with "Done:" in .o file, min/mean/max of
-## mem & time, final lines of .o that aren't "Done:"
-## Then grep for infilled missing-data messages in stdout
 ## note that wbgt_cat has no memory / time output messages
 
 ## this is ridiculous, but it works (tab-padding columns)
