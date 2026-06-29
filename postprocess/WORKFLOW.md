@@ -111,8 +111,12 @@ $post/launch_multi --workflow cordex --run $rundir2 $cmddir2/*cmd
 
 ## wait until it finishes, check everything ran correctly
 cd $rundir2
-cat */stdout*/* | uniq -c
-tail -q -n 1 */*.o* | cut -f 1 -d : | uniq -c
+foreach i (*)
+  echo -n $i "\t"
+  echo -n `cat $i/stdout*/* | uniq -c`"\t"
+  tail -q -n 1 $i/*.o* | cut -f 1 -d : | uniq -c
+end
+
 cd $topdir
 
 
@@ -127,8 +131,12 @@ $post/launch_multi --workflow cordex --run $rundir3 --chain $cmddir3/avg.cmd $cm
 
 ## wait until it finishes, check everything ran correctly
 cd $rundir3
-wc */stdout*/* | tail -1
-tail -q -n 1 */*.o* | cut -f 1 -d : | sort | uniq -c
+foreach i (*)
+  echo -n $i "\t"
+  echo -n `cat $i/stdout*/* | uniq -c`"\t"
+  tail -q -n 1 $i/*.o* | cut -f 1 -d : | uniq -c
+end
+
 cd $topdir
 
 
@@ -143,8 +151,11 @@ $post/launch_multi --workflow cordex --run $rundir4 $cmddir4/*cmd
 
 ## wait until it finishes, check everything ran correctly
 cd $rundir4
-wc */stdout*/* | tail -1
-tail -q -n 1 */*.o* | cut -f 1 -d : | sort | uniq -c
+foreach i (*)
+  echo -n $i "\t"
+  echo -n `wc $i/stdout*/* | tail -1`
+  tail -q -n 1 $i/*.o* | cut -f 1 -d : | uniq -c
+end
 cd $topdir
 
 
