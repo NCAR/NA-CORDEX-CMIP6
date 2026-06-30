@@ -255,8 +255,11 @@ $post/launch_multi --workflow cordex --run $rundir8 $cmddir8/*cmd
 
 ## wait until it finishes, check everything ran correctly
 cd $rundir8
-tail -q -n 1 */stdout*/* | cut -f 1 -d : | uniq -c
-tail -q -n 1 */*.o* | cut -f 1 -d : | uniq -c
+foreach i (*)
+  echo -n $i "\t"
+  echo -n "`tail -q -n 1 $i/stdout*/* | cut -f 1 -d : | uniq -c`" "\t"
+  tail -q -n 1 $i/*.o* | cut -f 1 -d : | uniq -c
+end
 cd $topdir
 
 
@@ -274,8 +277,12 @@ echo "scp -r casper.hpc.ucar.edu:$outdir8 cordex-plots/$id"
 # tweak file permissions - files world-read-only, directories inherit
 # group & are group-writeable, but no deleting others' files
 
+
+cd /glade/campaign/ral/risc/collections/na-cordex-cmip6/CORDEX-CMIP6
 find . -type f -exec chmod 0444 {} +
 find . -type d -exec chmod 3775 {} +
+cd $topdir
+
 
 
 ################
