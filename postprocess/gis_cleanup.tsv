@@ -1,0 +1,48 @@
+index	source_file	current_var_name	new_var_name	standard_name	long_name	units	fix_time_epoch	threshold	longname_to_comment	cell_methods	units_metadata
+CC	CC	clt	CC	cloud_area_fraction	Mean cloud cover	oktas	FALSE		FALSE	time: mean	
+CC2	CC2	clt	CC2	[CANDIDATE: number_of_days_with_cloud_cover_below_threshold]	Mostly sunny days	days	FALSE	2	FALSE		
+CC6	CC6	clt	CC6	[CANDIDATE: number_of_days_with_cloud_cover_above_threshold]	Mostly cloudy days	days	FALSE	6	FALSE		
+CDD	CDD	cddETCCDI	CDD	spell_length_of_days_with_lwe_thickness_of_precipitation_amount_below_threshold	Consecutive dry days	days	TRUE	1	FALSE		
+CDDn	CDD	number_of_cdd_periods_with_more_than_5days_per_time_period	CDDn	[CANDIDATE: number_of_spells_with_lwe_thickness_of_precipitation_amount_below_threshold]	Dry spells	1	TRUE		TRUE		
+CFD	CFD	consecutive_frost_days_index_per_time_period	CFD	spell_length_of_days_with_air_temperature_below_threshold	Consecutive frost days	days	TRUE	0	TRUE		
+CFDn	CFD	number_of_cfd_periods_with_more_than_5days_per_time_period	CFDn	[CANDIDATE: number_of_spells_with_air_temperature_below_threshold]	Frost spells	1	TRUE		TRUE		
+CSU	CSU	consecutive_summer_days_index_per_time_period	CSU	spell_length_of_days_with_air_temperature_above_threshold	Consecutive summer days	days	TRUE	25	TRUE		
+CSUn	CSU	number_of_csu_periods_with_more_than_5days_per_time_period	CSUn	[CANDIDATE: number_of_spells_with_air_temperature_above_threshold]	Summer heat spells	1	TRUE		TRUE		
+CWDI	CWDI	cold_wave_duration_index_wrt_mean_of_reference_period	CWDI	[CANDIDATE: number_of_days_in_cold_waves_wrt_mean_of_reference_period]	Cold wave duration index	days	TRUE		TRUE		
+CWDIn	CWDI	cold_waves_per_time_period	CWDIn	[CANDIDATE: number_of_cold_waves_per_time_period]	Cold waves	1	TRUE		TRUE		
+CWD	CWD	cwdETCCDI	CWD	spell_length_of_days_with_lwe_thickness_of_precipitation_amount_above_threshold	Consecutive wet days	days	TRUE	1	FALSE		
+CWDn	CWD	number_of_cwd_periods_with_more_than_5days_per_time_period	CWDn	[CANDIDATE: number_of_spells_with_lwe_thickness_of_precipitation_amount_above_threshold]	Wet spells	1	TRUE		TRUE		
+DTR	DTR	tasmax	DTR	air_temperature	Mean diurnal temperature range	degC	FALSE		FALSE	time: range within days time: mean over days	temperature: difference
+ETR	ETR	intra_period_extreme_temperature_range	ETR	air_temperature	Extreme temperature range	degC	TRUE		TRUE	time: range within years	temperature: difference
+FD	FD	fdETCCDI	FD	number_of_days_with_air_temperature_below_threshold	Frost days	days	TRUE	0	FALSE		
+FG	FG	sfcWind	FG	wind_speed	Mean wind speed	m s-1	FALSE		FALSE	time: mean	
+FG6Bft	FG6Bft	sfcWind	FG6Bft	number_of_days_with_wind_speed_above_threshold	Strong wind days (>= Beaufort 6)	days	FALSE	10.8	FALSE		
+FGcalm	FGcalm	sfcWind	FGcalm	number_of_days_with_wind_speed_below_threshold	Calm days	days	FALSE	2	FALSE		
+GD4	GD4	tas	GD4	[CANDIDATE: integral_of_air_temperature_excess_wrt_time]	Growing degree days	degC days	FALSE	4	FALSE		temperature: difference
+HD17	HD17	heating_degree_days_per_time_period	HD17	[CANDIDATE: integral_of_air_temperature_deficit_wrt_time]	Heating degree days	degC days	TRUE	17	TRUE		temperature: difference
+HWDI	HWDI	heat_wave_duration_index_wrt_mean_of_reference_period	HWDI	[CANDIDATE: number_of_days_in_heat_waves_wrt_mean_of_reference_period]	Heat wave duration index	days	TRUE		TRUE		
+HWDIn	HWDI	heat_waves_per_time_period	HWDIn	[CANDIDATE: number_of_heat_waves_per_time_period]	Heat waves	1	TRUE		TRUE		
+ID	ID	idETCCDI	ID	number_of_days_with_air_temperature_below_threshold	Ice days	days	TRUE	0	FALSE		
+PP	PP	psl	PP	air_pressure_at_mean_sea_level	Mean sea level pressure	Pa	FALSE		FALSE	time: mean	
+PRCPTOT	PRCPTOT	pr	PRCPTOT	lwe_precipitation_amount	Annual total wet-day precipitation	mm	FALSE		FALSE	[TODO: time: sum where precipitation > 1mm/day, or time: sum within days time: sum over days (wet days)]	
+R10mm	R10mm	heavy_precipitation_days_index_per_time_period	R10mm	number_of_days_with_lwe_thickness_of_precipitation_amount_above_threshold	Heavy precipitation days	days	TRUE	10	TRUE		
+R1mm	R1mm	r1mmETCCDI	R1mm	number_of_days_with_lwe_thickness_of_precipitation_amount_above_threshold	Precipitation days	days	TRUE	1	FALSE		
+R20mm	R20mm	very_heavy_precipitation_days_index_per_time_period	R20mm	number_of_days_with_lwe_thickness_of_precipitation_amount_above_threshold	Very heavy precipitation days	days	TRUE	20	FALSE		
+RH	RH	hurs	RH	relative_humidity	Mean relative humidity	%	FALSE		FALSE	time: mean	
+RR	RR	pr	RR	lwe_precipitation_amount	Precipitation sum	mm	FALSE		FALSE	time: sum	
+RSDSann	RSDSann	rsds	RSDSann	surface_downwelling_shortwave_flux_in_air	Annual mean surface downwelling shortwave radiation	W m-2	FALSE		FALSE	time: mean	
+Rx1day	Rx1day	rx1dayETCCDI	Rx1day	lwe_thickness_of_precipitation_amount	Max 1-day precipitation	mm	TRUE		FALSE	time: maximum	
+Rx5day	Rx5day	rx5dayETCCDI	Rx5day	lwe_thickness_of_precipitation_amount	Max 5-day precipitation	mm	TRUE		FALSE	time: sum within days time: maximum over days	
+Rx5dayN	Rx5day	number_of_5day_heavy_precipitation_periods_per_time_period	Rx5dayN	[CANDIDATE: number_of_5day_heavy_precipitation_periods_per_time_period]	Heavy 5-day precipitation periods	1	TRUE		TRUE		
+SDII	SDII	simple_daily_intensity_index_per_time_period	SDII	lwe_precipitation_rate	Simple daily intensity index	mm d-1	TRUE		TRUE	[TODO: resolve whether where: or over days (wet days) is preferred]	
+SU	SU	suETCCDI	SU	number_of_days_with_air_temperature_above_threshold	Summer days	days	TRUE	25	FALSE		
+TG	TG	tas	TG	air_temperature	Mean temperature	K	FALSE		FALSE	time: mean	temperature: on_scale
+TG10p	TG10p	cold_days_percent_wrt_10th_percentile_of_reference_period	TG10p	[CANDIDATE: fraction_of_days_with_air_temperature_below_percentile_threshold]	Cold days wrt 10th percentile	%	TRUE		TRUE		
+TG90p	TG90p	warm_days_percent_wrt_90th_percentile_of_reference_period	TG90p	[CANDIDATE: fraction_of_days_with_air_temperature_above_percentile_threshold]	Warm days wrt 90th percentile	%	TRUE		TRUE		
+TN	TN	tasmin	TN	air_temperature	Mean daily minimum temperature	K	FALSE		FALSE	time: minimum within days time: mean over days	temperature: on_scale
+TNn	TNn	tasmin	TNn	air_temperature	Annual minimum of daily minimum temperature	K	FALSE		FALSE	time: minimum within days time: minimum over days	temperature: on_scale
+TNx	TNx	tasmin	TNx	air_temperature	Annual maximum of daily minimum temperature	K	FALSE		FALSE	time: minimum within days time: maximum over days	temperature: on_scale
+TR	TR	trETCCDI	TR	number_of_days_with_air_temperature_above_threshold	Tropical nights	days	TRUE	20	FALSE		
+TX	TX	tasmax	TX	air_temperature	Mean daily maximum temperature	K	FALSE		FALSE	time: maximum within days time: mean over days	temperature: on_scale
+TXn	TXn	tasmax	TXn	air_temperature	Annual minimum of daily maximum temperature	K	FALSE		FALSE	time: maximum within days time: minimum over days	temperature: on_scale
+TXx	TXx	tasmax	TXx	air_temperature	Annual maximum of daily maximum temperature	K	FALSE		FALSE	time: maximum within days time: maximum over days	temperature: on_scale

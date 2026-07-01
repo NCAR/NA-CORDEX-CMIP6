@@ -6,14 +6,13 @@ compressed CORDEX-CMIP6 daily data.
 
 Operates on the output of compress.sh (Step 4), where data are organized
 into <var>.<freq> subdirectories (e.g., pr.day, tasmax.day).  Produces
-one NetCDF file per index covering all available years, written flat into
-OUTDIR (no per-variable subdirectories, since these files go to GIS).
+one NetCDF file per index covering all available years.
 
-Index definitions are read from a TSV file (default: gis_indexes.tsv in
-the same directory as this script).  The TSV drives command construction;
-modifying the TSV is the intended way to add, remove, or change indices.
+Index definitions are read from gis_indexes.tsv and cleanup specs from
+gis_cleanup.tsv, both expected in SETUPDIR.  Modifying the TSVs is the
+intended way to add, remove, or change indices.
 
-Generates six commandfiles that must be run in this order:
+Generates seven commandfiles that must be run in this order:
 
   concat.cmd   - Concatenates per-variable decadal input files into a
                  single file per variable using ncrcat.  Must be run
@@ -33,11 +32,23 @@ Generates six commandfiles that must be run in this order:
                  input file for that year.  Output goes to OUTDIR/annual/.
 
   merge.cmd    - One mergetime per annual-loop index assembling per-year
-                 files from OUTDIR/annual/ into OUTDIR.
+                 files from OUTDIR/annual/ into OUTDIR/raw/.
+
+  cleanup.cmd  - Applies corrected CF metadata to each raw index file via
+                 clean_index.sh, writing final files to OUTDIR/.
 
 Per-year temporary files in OUTDIR/annual/ can be removed after merge.cmd.
+Raw index files in OUTDIR/raw/ can be removed after cleanup.cmd.
 
-See gis_indexes.tsv for TSV column documentation.
+Directory layout under OUTDIR:
+  concat/   Concatenated per-variable input files (intermediate)
+  pctl/     Baseline percentile/minmax reference files (intermediate)
+  annual/   Per-year files for annual_loop indices (intermediate)
+  raw/      Raw index files before metadata cleanup
+  (root)    Final cleaned index files
+
+See gis_indexes.tsv and gis_cleanup.tsv in SETUPDIR for TSV column
+documentation.
 """
 
 import argparse
@@ -59,7 +70,7 @@ UNIT_CONV = {
 PCTL_WINDOW  = 5   # running-window width for ydrun* operators
 
 # Commandfile each prereq operator writes to.  Also the single source of
-# truth for prereq operator names; used with CMDFILES to define all six
+# truth for prereq operator names; used with CMDFILES to define all seven
 # commandfiles in their required run order.
 PREREQ_CMD = {
     "ydrunmin":  "minmax",
@@ -71,7 +82,7 @@ PREREQ_CMD = {
     "timpctl":   "pctile",
 }
 
-CMDFILES = ["concat", "minmax", "pctile", "indices", "annual", "merge"]
+CMDFILES = ["concat", "minmax", "pctile", "indices", "annual", "merge", "cleanup"]
 
 # Dependency tree for prerequisite operators.  Each operator lists the
 # operators whose output files it requires as additional inputs.
@@ -140,19 +151,15 @@ def emit(cmdfile, outfile, cmd):
 
 def main():
     global FORCE, MIDDLE, BL_TIMESPAN
-
-    script_dir  = Path(__file__).parent
-    default_tsv = script_dir / "gis_indexes.tsv"
-
     ap = argparse.ArgumentParser(
         description="Generate commandfiles for computing climate indices.",
         formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("indir",  type=Path, help="compress.sh output directory")
-    ap.add_argument("outdir", type=Path, help="Output directory for index files")
+    ap.add_argument("indir",    type=Path, help="compress.sh output directory")
+    ap.add_argument("outdir",   type=Path, help="Output directory for index files")
+    ap.add_argument("setupdir", type=Path, help="Directory containing gis_indexes.tsv, "
+                                                 "gis_cleanup.tsv, and clean_index.sh")
     ap.add_argument("cmddir", type=Path, nargs="?", default=Path("."),
                     help="Directory for commandfiles (default: .)")
-    ap.add_argument("--tsv", type=Path, default=default_tsv,
-                    help=f"Index definitions TSV (default: {default_tsv})")
     ap.add_argument("--baseline", default="1991-2020",
                     metavar="STARTYEAR-ENDYEAR",
                     help="Reference period (default: 1991-2020)")
@@ -165,18 +172,26 @@ def main():
         ap.error(f"--baseline must be STARTYEAR-ENDYEAR, got: {args.baseline}")
     bstart, bend = int(m[1]), int(m[2])
 
-    indir  = args.indir.resolve()
-    outdir = args.outdir
-    cmddir = args.cmddir
-    tsv    = args.tsv
+    indir    = args.indir.resolve()
+    outdir   = args.outdir
+    setupdir = args.setupdir.resolve()
+    cmddir   = args.cmddir
+    tsv      = setupdir / "gis_indexes.tsv"
+    cleanup_tsv = setupdir / "gis_cleanup.tsv"
 
     if not indir.is_dir():
         sys.exit(f"Error: INDIR not found: {indir}")
+    if not setupdir.is_dir():
+        sys.exit(f"Error: SETUPDIR not found: {setupdir}")
     if not tsv.is_file():
-        sys.exit(f"Error: TSV not found: {tsv}")
+        sys.exit(f"Error: gis_indexes.tsv not found in SETUPDIR: {tsv}")
+    if not cleanup_tsv.is_file():
+        sys.exit(f"Error: gis_cleanup.tsv not found in SETUPDIR: {cleanup_tsv}")
 
     outdir.mkdir(parents=True, exist_ok=True)
     outdir = outdir.resolve()
+    rawdir = outdir / "raw"
+    rawdir.mkdir(exist_ok=True)
     cmddir.mkdir(parents=True, exist_ok=True)
     cmddir = cmddir.resolve()
 
@@ -200,6 +215,7 @@ def main():
     BL_TIMESPAN = f"{bstart}0101-{bend}1231"
 
     print(f"Baseline period: {bstart}-{bend}")
+    print(f"  Setup dir:  {setupdir}")
     print(f"  DRS middle: {MIDDLE}")
     print(f"  Timespan:   {timespan}  ({sim_start}-{sim_end})")
 
@@ -300,7 +316,7 @@ def main():
 
             bl_pipe   = (f"-selyear,{bstart}/{bend} "
                          f"{concatdir}/{primary_var}_{MIDDLE}_{timespan}.nc")
-            final_out = outdir / f"{idx}_{MIDDLE}_{timespan}.nc"
+            final_out = rawdir / f"{idx}_{MIDDLE}_{timespan}.nc"
 
             # Resolve prerequisites
             prereq_str = " ".join(
@@ -362,6 +378,21 @@ def main():
                 print(f"    WARNING: unknown output_frequency '{freq}' "
                       f"for {idx}; skipping", file=sys.stderr)
 
+    # ------------------------------------------------------------------
+    # Pass 3: emit cleanup.cmd from gis_cleanup.tsv.
+    # One call to clean_index.sh per row (== per output file).
+    # Raw index file is keyed on source_file column, not index, since
+    # secondary variables (e.g. CDDn) live in the primary index's raw file.
+    # ------------------------------------------------------------------
+    with open(cleanup_tsv, newline="") as fh:
+        for row in csv.DictReader(fh, delimiter="\t"):
+            idx        = row["index"].strip()
+            src        = row["source_file"].strip()
+            raw_in     = rawdir  / f"{src}_{MIDDLE}_{timespan}.nc"
+            clean_out  = outdir  / f"{idx}_{MIDDLE}_{timespan}.nc"
+            cmd = (f"./clean_index.sh {idx} {raw_in} {clean_out} {setupdir}")
+            emit(cmd_files["cleanup"], clean_out, cmd)
+
     # Close commandfiles; remove any that are empty
     for name, fh in cmd_files.items():
         fh.close()
@@ -381,10 +412,12 @@ def main():
     print()
     print("Commandfile generation complete.")
     print(f"  TSV:                     {tsv}")
+    print(f"  Cleanup TSV:             {cleanup_tsv}")
     print(f"  Commandfiles:            {cmddir}")
     print(f"  Concatenated inputs:     {concatdir}")
     print(f"  Reference files:         {pctldir}")
     print(f"  Per-year temp files:     {anndir}")
+    print(f"  Raw index files:         {rawdir}")
     print(f"  Final index files:       {outdir}")
     print("  " + "  ".join(f"{n.capitalize()}: {counts[n]}" for n in CMDFILES))
     print()

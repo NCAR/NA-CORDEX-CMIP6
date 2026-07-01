@@ -288,15 +288,17 @@ cd $topdir
 ################
 # Step 10: generate climate indexes for GIS
 
-python $post/index.py $indir10 $outdir10 $cmddir10
+python $post/index.py $indir10 $outdir10 $sdir $cmddir10
 
 
 # launch jobs as dependent chain
 
-$post/launch_multi --chain --run $rundir10 --wall 00:30:00 --mem 50GB\
+$post/launch_multi --run $rundir10 --wall 00:30:00 --mem 50GB\
+		   --copy $post/clean_index.sh --chain \
 		   $cmddir10/concat.cmd $cmddir10/minmax.cmd \
 		   $cmddir10/pctile.cmd  $cmddir10/indices.cmd \
-		   $cmddir10/annual.cmd $cmddir10/merge.cmd
+		   $cmddir10/annual.cmd $cmddir10/merge.cmd \
+		   $cmddir10/cleanup.cmd
 
 ## check everything ran correctly
 
