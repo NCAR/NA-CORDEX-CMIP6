@@ -3,13 +3,6 @@
 TODO items:
 
 Climate indexes:
-	delete inherited tracking_id
-
-	threshold: same stdname, longname, units, cell_m as *input* var
-		   add threshold to coordinates attr of main var
-	
-	longname_to_comment not working
-	
 
 	*after* other simulations
 		calculate seasonally in addition to annually
