@@ -1,0 +1,11 @@
+model_run,scenario,GWL1.5,GWL2.0,GWL3.0,GWL4.0
+MPI-ESM1-2-HR_r1i1p1f1,ssp245,2037,2063,NA,NA
+MPI-ESM1-2-HR_r1i1p1f1,ssp370,2034,2050,2081,NA
+EC-Earth3-Veg_r1i1p1f1,ssp245,2010,2033,2067,NA
+EC-Earth3-Veg_r1i1p1f1,ssp370,2011,2032,2057,2076
+NorESM2-MM_r1i1p1f1,ssp245,2046,2078,NA,NA
+NorESM2-MM_r1i1p1f1,ssp370,2046,2062,NA,NA
+
+# Source: https://github.com/IPCC-WG1/Atlas/tree/main/warming-levels
+# Note: no info on CESM2 r11i1p1f1; needs to be calculated
+
