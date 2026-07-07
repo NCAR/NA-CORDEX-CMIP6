@@ -4,10 +4,9 @@ TODO items:
 
 Climate indexes:
 
-	*after* other simulations
+	Later:
 		calculate seasonally in addition to annually
-		decadal 30-year averages
-		warming-level based 20-year averages
+			for variables / indexes where it makes sense
 		regridding to lat-lon
 			? for the GIS climate indexes
 			? subset of CORE vars (maybe just T & P)

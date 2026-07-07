@@ -314,7 +314,21 @@ foreach i (*)
 end
 
 cd $topdir
+
+
+
+################
+# Step 10.5: climate index running-means for GIS
+
+# If this is a future run, also generate 21- and 31-year running means
+# for use in GIS.  (Only future runs, since we concatenate historical
+# & future runs to make them.)  These get put in $scratch/index/$id.
+# Runs fast enough it can run interactively.  Requires corresponding
+# -hist directory to exist alongside $topdir .
+
+$post/indrun.sh $scratch $id
 ```
+
 
 ## Installing the ESGF compliance checker
 
