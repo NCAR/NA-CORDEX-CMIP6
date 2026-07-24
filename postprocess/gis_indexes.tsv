@@ -39,3 +39,9 @@ RSDSann	yearmean	rsds	W/m²	Annual mean surface downwelling shortwave radiation	
 CC	yearmean	clt	octas	Mean cloud cover	annual	none	Annual mean of daily mean cloud cover	ECA&D index CC; clt (0-100%) converted to continuous oktas via mulc,0.08
 CC2	yearsum -lec,2	clt	octas	Mostly sunny days	annual	none	Count of days with cloud cover <= 2 oktas	ECA&D index CC2
 CC6	yearsum -gec,6	clt	octas	Mostly cloudy days	annual	none	Count of days with cloud cover >= 6 oktas	ECA&D index CC6
+HMDX	yearmean	humidex	K	Mean humidex	annual	none
+WBGT	yearmean	wbgt	K	Mean wet-bulb globe temperature	annual	none
+TX90F	yearsum -gtc,305.372	tasmax	K	Days above 90°F	annual	none	90°F = 305.372K
+TX95F	yearsum -gtc,308.15	tasmax	K	Days above 95°F	annual	none	95°F = 308.15K
+TX100F	yearsum -gtc,310.928	tasmax	K	Days above 100°F	annual	none	100°F = 310.928K
+TX105F	yearsum -gtc,313.706	tasmax	K	Days above 105°F	annual	none	105°F = 313.706K

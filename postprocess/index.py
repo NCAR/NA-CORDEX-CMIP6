@@ -10,7 +10,8 @@ one NetCDF file per index covering all available years.
 
 Index definitions are read from gis_indexes.tsv and cleanup specs from
 gis_cleanup.tsv, both expected in SETUPDIR.  Modifying the TSVs is the
-intended way to add, remove, or change indices.
+intended way to add, remove, or change indices.  Use --indexes or --preset
+to generate only a subset of the TSV's rows without editing the TSV.
 
 Generates seven commandfiles that must be run in this order:
 
@@ -68,6 +69,13 @@ UNIT_CONV = {
 }
 
 PCTL_WINDOW  = 5   # running-window width for ydrun* operators
+
+# Named subsets of indices selectable via --preset.  Add new presets here.
+PRESETS = {
+    "gis": {"TG", "TX", "TN", "RR", "HMDX", "WBGT",
+             "Rx5day", "R10mm", "R20mm", "CDD",
+             "TX90F", "TX95F", "TX100F", "TX105F"},
+}
 
 # Commandfile each prereq operator writes to.  Also the single source of
 # truth for prereq operator names; used with CMDFILES to define all seven
@@ -165,6 +173,12 @@ def main():
                     help="Reference period (default: 1991-2020)")
     ap.add_argument("--force", action="store_true",
                     help="Overwrite existing output files")
+    sel = ap.add_mutually_exclusive_group()
+    sel.add_argument("--indexes", metavar="ind1,ind2,...",
+                    help="Only generate these indices (comma-separated, "
+                         "matching the 'index' column). Default: all rows.")
+    sel.add_argument("--preset", choices=sorted(PRESETS),
+                    help="Only generate a named preset subset of indices.")
     args = ap.parse_args()
 
     m = re.fullmatch(r"(\d{4})-(\d{4})", args.baseline)
@@ -187,6 +201,25 @@ def main():
         sys.exit(f"Error: gis_indexes.tsv not found in SETUPDIR: {tsv}")
     if not cleanup_tsv.is_file():
         sys.exit(f"Error: gis_cleanup.tsv not found in SETUPDIR: {cleanup_tsv}")
+
+    # Resolve which indices to generate.  selected=None means "all rows"
+    # (the historical default); otherwise it's a set of index names checked
+    # against gis_indexes.tsv's 'index' column at each pass.
+    if args.preset:
+        selected = set(PRESETS[args.preset])
+    elif args.indexes:
+        selected = {s.strip() for s in args.indexes.split(",") if s.strip()}
+    else:
+        selected = None
+
+    if selected is not None:
+        with open(tsv, newline="") as fh:
+            known = {row["index"].strip()
+                     for row in csv.DictReader(fh, delimiter="\t")}
+        unknown = selected - known
+        if unknown:
+            sys.exit(f"Error: unknown index/indices not in gis_indexes.tsv: "
+                      f"{', '.join(sorted(unknown))}")
 
     outdir.mkdir(parents=True, exist_ok=True)
     outdir = outdir.resolve()
@@ -230,6 +263,8 @@ def main():
     all_vars  = []
     with open(tsv, newline="") as fh:
         for row in csv.DictReader(fh, delimiter="\t"):
+            if selected is not None and row["index"].strip() not in selected:
+                continue
             for v in row["input_vars"].strip().split("+"):
                 if v != "sftlf" and v not in seen_vars:
                     all_vars.append(v)
@@ -293,6 +328,8 @@ def main():
     with open(tsv, newline="") as fh:
         for row in csv.DictReader(fh, delimiter="\t"):
             idx          = row["index"].strip()
+            if selected is not None and idx not in selected:
+                continue
             op           = row["cdo_operator"].strip()
             units        = row["units"].strip()
             freq         = row["output_frequency"].strip()
@@ -388,6 +425,8 @@ def main():
         for row in csv.DictReader(fh, delimiter="\t"):
             idx        = row["index"].strip()
             src        = row["source_file"].strip()
+            if selected is not None and src not in selected:
+                continue
             raw_in     = rawdir  / f"{src}_{MIDDLE}_{timespan}.nc"
             clean_out  = outdir  / f"{idx}_{MIDDLE}_{timespan}.nc"
             cmd = (f"./clean_index.sh {idx} {raw_in} {clean_out} {setupdir}")
