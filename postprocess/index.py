@@ -13,7 +13,7 @@ gis_cleanup.tsv, both expected in SETUPDIR.  Modifying the TSVs is the
 intended way to add, remove, or change indices.  Use --indexes or --preset
 to generate only a subset of the TSV's rows without editing the TSV.
 
-Generates seven commandfiles that must be run in this order:
+Generates eight commandfiles that must be run in this order:
 
   concat.cmd   - Concatenates per-variable decadal input files into a
                  single file per variable using ncrcat.  Must be run
@@ -28,6 +28,13 @@ Generates seven commandfiles that must be run in this order:
   indices.cmd  - Indices whose CDO operators natively output annual time
                  steps.  Unit conversion applied here, not in prereqs.
 
+  seasonal.cmd - For indices.cmd indices whose cdo_operator starts with
+                 "year" (yearmean, yearsum, etc.), the seas* equivalent
+                 (seasmean, seassum, etc.) run via `cdo splitseas`,
+                 producing separate DJF/MAM/JJA/SON files alongside the
+                 annual output from indices.cmd (in addition to, not
+                 instead of).
+
   annual.cmd   - One command per year for operators that summarise over
                  their entire input.  Each command operates on the single
                  input file for that year.  Output goes to OUTDIR/annual/.
@@ -36,7 +43,8 @@ Generates seven commandfiles that must be run in this order:
                  files from OUTDIR/annual/ into OUTDIR/raw/.
 
   cleanup.cmd  - Applies corrected CF metadata to each raw index file via
-                 clean_index.sh, writing final files to OUTDIR/.
+                 clean_index.sh, writing final files to OUTDIR/.  Includes
+                 one call per season for indices with seasonal output.
 
 Per-year temporary files in OUTDIR/annual/ can be removed after merge.cmd.
 Raw index files in OUTDIR/raw/ can be removed after cleanup.cmd.
@@ -90,7 +98,12 @@ PREREQ_CMD = {
     "timpctl":   "pctile",
 }
 
-CMDFILES = ["concat", "minmax", "pctile", "indices", "annual", "merge", "cleanup"]
+CMDFILES = ["concat", "minmax", "pctile", "indices", "seasonal",
+            "annual", "merge", "cleanup"]
+
+# Season tags as produced by `cdo splitseas` (appended directly to the
+# obase argument, so obase must supply its own trailing separator).
+SEASONS = ["DJF", "MAM", "JJA", "SON"]
 
 # Dependency tree for prerequisite operators.  Each operator lists the
 # operators whose output files it requires as additional inputs.
@@ -149,6 +162,14 @@ def sftlf_file(indir):
 def emit(cmdfile, outfile, cmd):
     """Write cmd to cmdfile unless --force is unset and outfile already exists."""
     if not FORCE and outfile.exists():
+        return
+    cmdfile.write(cmd + "\n")
+
+
+def emit_multi(cmdfile, outfiles, cmd):
+    """Like emit(), but for one command that produces several output files
+    (e.g. splitseas). Skips only if --force is unset and ALL outfiles exist."""
+    if not FORCE and all(o.exists() for o in outfiles):
         return
     cmdfile.write(cmd + "\n")
 
@@ -291,6 +312,11 @@ def main():
     # ------------------------------------------------------------------
     prereq_done = set()
 
+    # Index names whose cdo_operator starts with "year" -- these also get
+    # seasonal (splitseas) output in seasonal.cmd, and need matching
+    # per-season cleanup calls in Pass 3.
+    year_indexes = set()
+
     def ensure(spec, var, bl_pipe):
         key = (spec, var)
         op  = spec.split(",")[0]
@@ -388,6 +414,20 @@ def main():
                         + tail(final_out))
                 emit(cmd_files["indices"], final_out, cmd)
 
+                # Seasonal output (in addition to annual): only for indices
+                # whose operator is a plain year* summary (yearmean, yearsum,
+                # yearmin, yearmax, ...); annual_loop/eca_*/etccdi_* indices
+                # are out of scope here.
+                if op.startswith("year"):
+                    year_indexes.add(idx)
+                    seas_op   = "seas" + op[len("year"):]
+                    seas_base = rawdir / f"{idx}_{MIDDLE}_{timespan}_"
+                    seas_outs = [Path(f"{seas_base}{s}.nc") for s in SEASONS]
+                    seas_cmd  = (f"cdo splitseas -{seas_op} {pipe}"
+                                 + (f" {sec}" if sec else "")
+                                 + tail(seas_base))
+                    emit_multi(cmd_files["seasonal"], seas_outs, seas_cmd)
+
             elif freq == "annual_loop":
                 c       = UNIT_CONV.get(units, "")
                 yr_outs = []
@@ -431,6 +471,16 @@ def main():
             clean_out  = outdir  / f"{idx}_{MIDDLE}_{timespan}.nc"
             cmd = (f"./clean_index.sh {idx} {raw_in} {clean_out} {setupdir}")
             emit(cmd_files["cleanup"], clean_out, cmd)
+
+            # Matching per-season cleanup calls, if this index has seasonal
+            # (splitseas) output from seasonal.cmd.
+            if src in year_indexes:
+                for s in SEASONS:
+                    seas_raw_in  = rawdir / f"{src}_{MIDDLE}_{timespan}_{s}.nc"
+                    seas_clean   = outdir / f"{idx}_{MIDDLE}_{timespan}_{s}.nc"
+                    seas_cmd = (f"./clean_index.sh {idx} {seas_raw_in} "
+                                f"{seas_clean} {setupdir}")
+                    emit(cmd_files["cleanup"], seas_clean, seas_cmd)
 
     # Close commandfiles; remove any that are empty
     for name, fh in cmd_files.items():

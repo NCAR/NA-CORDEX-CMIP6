@@ -46,8 +46,8 @@ TR	TR	trETCCDI	TR	number_of_days_with_air_temperature_above_threshold	Tropical n
 TX	TX	tasmax	TX	air_temperature	Mean daily maximum temperature	K	FALSE		FALSE	time: maximum within days time: mean over days	temperature: on_scale
 TXn	TXn	tasmax	TXn	air_temperature	Annual minimum of daily maximum temperature	K	FALSE		FALSE	time: maximum within days time: minimum over days	temperature: on_scale
 TXx	TXx	tasmax	TXx	air_temperature	Annual maximum of daily maximum temperature	K	FALSE		FALSE	time: maximum within days time: maximum over days	temperature: on_scale
-HMDX	HMDX	humidex	HMDX		Mean humidex	K	FALSE	time: mean
-WBGT	WBGT	wbgt	WBGT		Mean wet-bulb globe temperature	K	FALSE	time: mean
+HMDX	HMDX	humidex	HMDX		Mean humidex	K	FALSE			time: mean
+WBGT	WBGT	wbgt	WBGT		Mean wet-bulb globe temperature	K	FALSE			time: mean
 TX90F	TX90F	tasmax	TX90F	number_of_days_with_air_temperature_above_threshold	Days above 90°F	days	FALSE	90	
 TX95F	TX95F	tasmax	TX95F	number_of_days_with_air_temperature_above_threshold	Days above 95°F	days	FALSE	95	
 TX100F	TX100F	tasmax	TX100F	number_of_days_with_air_temperature_above_threshold	Days above 100°F	days	FALSE	100	
