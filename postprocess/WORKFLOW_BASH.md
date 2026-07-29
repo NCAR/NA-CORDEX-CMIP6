@@ -320,10 +320,8 @@ cd $topdir
 $post/indrun.sh $scratch $id
 ```
 
-
 ## Installing the ESGF compliance checker
 
-```
 https://github.com/ESGF/esgf-qa
 
 
@@ -341,11 +339,19 @@ conda activate esgf-qa
 pip install esgf-qa
 pip install esgvoc
 hash -r
-esgvoc config set universe:branch=esgvoc_dev
-esgvoc config add cordex-cmip6
-esgvoc install
+
+# esgvoc 5.0.0+ uses a registry model instead of config/install.
+# Check available versions and activate the ones you need:
+esgvoc list-remote universe
+esgvoc use universe@1.0.26
+
+esgvoc list-remote cordex-cmip6
+esgvoc use cordex-cmip6@<latest-version>
+
+# Verify install:
+esgvoc status
+cchecker.py -l
 
 
 # It spawns a whole mess of subprocesses; Be sure to run it on a
 # Casper interactive node, not on a login node.
-```
