@@ -39,3 +39,6 @@ This model was compiled on NCAR's Derecho high-performance computing machine, an
 * Fractional sea ice = 1
 * Seaice_thickness_default: 1
 * RADT : 12
+
+### Problems with data:
+[Known Issues](KNOWN_ISSUES.md)
