@@ -291,9 +291,6 @@ cd $topdir
 ## all indexes:
 python $post/index.py $indir10 $outdir10 $sdir $cmddir10
 
-
-# launch jobs as dependent chain
-
 $post/launch_multi --run $rundir10 --wall 00:30:00 --mem 50GB\
 		   --copy $post/clean_index.sh --chain \
 		   $cmddir10/concat.cmd $cmddir10/minmax.cmd \
