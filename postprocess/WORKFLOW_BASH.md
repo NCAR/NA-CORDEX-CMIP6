@@ -82,8 +82,8 @@ echo -e "var\tDone:\tmin\tmean\tmax\tmin\tmean\tmax\tother final lines"
 for i in *; do
   echo -ne "$i\t"
   printf "%s\t" "$(grep -l '^Done:' $i/*.o* | wc -l)"
-  printf "%s\t" "$(cat $i/std*/* | grep memory: | datamash -sWR 2 min 4 mean 4 max 4 | pad)"
-  printf "%s\t" "$(cat $i/std*/* | grep time: | datamash -sWR 2 min 3 mean 3 max 3 | pad)"
+  printf "%s\t" "$(cat $i/std*/* | grep memory: | awk '{v=$4; if(NR==1||v<min)min=v; if(NR==1||v>max)max=v; sum+=v; n++} END{if(n>0) printf "%.1f\t%.1f\t%.1f", min, sum/n, max}')"
+  printf "%s\t" "$(cat $i/std*/* | grep time: | awk '{v=$3; if(NR==1||v<min)min=v; if(NR==1||v>max)max=v; sum+=v; n++} END{if(n>0) printf "%.1f\t%.1f\t%.1f", min, sum/n, max}')"
   echo "$(tail -q -n 1 $i/*.o* | grep -v '^Done:' | uniq -c)"
 done
 grep -v -E '^postproc|wbgt/utci:' */stdout*/*

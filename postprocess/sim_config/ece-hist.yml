@@ -1,5 +1,5 @@
 id: "ece-hist"
-path: "EC-EARTH-Veg/hist"
+path: "EC-Earth3-Veg/hist"
 driving_source_id: "EC-Earth3-Veg"
 driving_experiment_id: "historical"
 driving_institution_id: "EC-Earth-Consortium"
