@@ -1,3 +1,6 @@
+# Ignore Python bytecode cache directories
+__pycache__/
+
 # Ignore datafiles produced by postproc
 
 # Supplemental variables
