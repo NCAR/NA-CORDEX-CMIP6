@@ -28,23 +28,18 @@ Generates eight commandfiles that must be run in this order:
   indices.cmd  - Indices whose CDO operators natively output annual time
                  steps.  Unit conversion applied here, not in prereqs.
 
-  seasonal.cmd - For indices.cmd indices whose cdo_operator starts with
-                 "year" (yearmean, yearsum, etc.), the seas* equivalent
-                 (seasmean, seassum, etc.) run via `cdo splitseas`,
-                 producing separate DJF/MAM/JJA/SON files alongside the
-                 annual output from indices.cmd (in addition to, not
-                 instead of).
+  seasonal.cmd - Seasonal (DJF/MAM/JJA/SON) versions of the annual
+                 indices, one file per season.
 
-  annual.cmd   - One command per year for operators that summarise over
-                 their entire input.  Each command operates on the single
-                 input file for that year.  Output goes to OUTDIR/annual/.
+  annual.cmd   - Loops over individual years for operators that summarize
+                 over their entire input; output goes to OUTDIR/annual.
+                 Also handles the seasonal versions thereof.
 
-  merge.cmd    - One mergetime per annual-loop index assembling per-year
-                 files from OUTDIR/annual/ into OUTDIR/raw/.
+  merge.cmd    - Reassembles single-year files in OUTDIR/annual/ into
+                 single files in OUTDIR/raw.
 
   cleanup.cmd  - Applies corrected CF metadata to each raw index file via
-                 clean_index.sh, writing final files to OUTDIR/.  Includes
-                 one call per season for indices with seasonal output.
+                 clean_index.sh, writing final files to OUTDIR/.
 
 Per-year temporary files in OUTDIR/annual/ can be removed after merge.cmd.
 Raw index files in OUTDIR/raw/ can be removed after cleanup.cmd.
@@ -58,6 +53,7 @@ Directory layout under OUTDIR:
 
 See gis_indexes.tsv and gis_cleanup.tsv in SETUPDIR for TSV column
 documentation.
+
 """
 
 import argparse
@@ -105,6 +101,19 @@ CMDFILES = ["concat", "minmax", "pctile", "indices", "seasonal",
 # obase argument, so obase must supply its own trailing separator).
 SEASONS = ["DJF", "MAM", "JJA", "SON"]
 
+# Month-window bounds for annual_loop seasonal extraction via ncks, as
+# (yr_offset_start, month_start, yr_offset_end, month_end); offsets
+# are relative to yr. Bounds are the 1st of the month at midnight.
+# (Input timestamps are at noon, so there's no ambiguity about
+# boundary points.)
+
+SEASON_BOUNDS = {
+    "DJF": (-1, 12, 0, 3),
+    "MAM": ( 0,  3, 0, 6),
+    "JJA": ( 0,  6, 0, 9),
+    "SON": ( 0,  9, 0, 12),
+}
+
 # Dependency tree for prerequisite operators.  Each operator lists the
 # operators whose output files it requires as additional inputs.
 PREREQ_DEPS = {
@@ -146,6 +155,13 @@ def year_file(indir, var, yr):
         if sy <= yr <= ey:
             return f
     return None
+
+
+def seas_window(yr, seas):
+    """returns YYYY-MM-DD bounds for ncks subsetting by season.
+    Uses SEASON_BOUNDS; note that DJF comes from previous year."""
+    yoff0, m0, yoff1, m1 = SEASON_BOUNDS[seas]
+    return f"{yr + yoff0}-{m0:02d}-01", f"{yr + yoff1}-{m1:02d}-01"
 
 
 def sftlf_file(indir):
@@ -414,10 +430,7 @@ def main():
                         + tail(final_out))
                 emit(cmd_files["indices"], final_out, cmd)
 
-                # Seasonal output (in addition to annual): only for indices
-                # whose operator is a plain year* summary (yearmean, yearsum,
-                # yearmin, yearmax, ...); annual_loop/eca_*/etccdi_* indices
-                # are out of scope here.
+                # Seasonal output for non-looped (year*) indexes
                 if op.startswith("year"):
                     year_indexes.add(idx)
                     seas_op   = "seas" + op[len("year"):]
@@ -450,6 +463,35 @@ def main():
                     yr_list = " ".join(str(y) for y in yr_outs)
                     emit(cmd_files["merge"], final_out,
                          f"cdo mergetime {yr_list} {final_out}")
+
+                # Seasonal output for annual-loop indexes.  Note that
+                # DJF for the first year is only 2 months.  Currently
+                # skips indexes needing extra inputs.
+                if len(vars_list) > 1:
+                    print(f"    NOTE: {idx} has secondary inputs; "
+                          f"skipping seasonal output", file=sys.stderr)
+                else:
+                    psrc = f"{concatdir}/{primary_var}_{MIDDLE}_{timespan}.nc"
+                    for seas in SEASONS:
+                        seas_yr_outs = []
+                        for yr in range(sim_start, sim_end + 1):
+                            t0, t1 = seas_window(yr, seas)
+                            pwin = anndir / f"{primary_var}_{MIDDLE}_{yr}_{seas}.nc"
+                            emit(cmd_files["annual"], pwin,
+                                 f"ncks -d time,{t0},{t1} {psrc} {pwin}")
+
+                            seas_yr_out = anndir / f"{idx}_{MIDDLE}_{yr}_{seas}.nc"
+                            cmd = (f"cdo {op} {f'{c} ' if c else ''}{pwin}"
+                                   + tail(seas_yr_out))
+                            emit(cmd_files["annual"], seas_yr_out, cmd)
+                            seas_yr_outs.append(seas_yr_out)
+
+                        if seas_yr_outs:
+                            year_indexes.add(idx)
+                            seas_final = rawdir / f"{idx}_{MIDDLE}_{timespan}_{seas}.nc"
+                            sy_list = " ".join(str(y) for y in seas_yr_outs)
+                            emit(cmd_files["merge"], seas_final,
+                                 f"cdo mergetime {sy_list} {seas_final}")
 
             else:
                 print(f"    WARNING: unknown output_frequency '{freq}' "
