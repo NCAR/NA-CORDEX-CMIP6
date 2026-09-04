@@ -122,6 +122,29 @@ FORCE      = False
 MIDDLE     = ""
 BL_TIMESPAN = ""
 
+# ---------------------------------------------------------------------------
+# TSV checker
+# ---------------------------------------------------------------------------
+
+END_SENTINEL = "~"  # value for the '_end' guard column
+
+def check_end_column(path):
+    """Validate existence of _end guard column in TSV file.
+
+    TSVs are most easily edited in a spreadsheet; guard column
+    prevents silent loss of trailing empty cells when copy-pasting
+    to/from spreadsheet.
+    """
+    with open(path, newline="") as fh:
+        reader = csv.DictReader(fh, delimiter="\t")
+        if reader.fieldnames[-1] != "_end":
+            sys.exit(f"Error: {path} missing '_end' guard column as last "
+                      f"column (found: {reader.fieldnames[-1]!r})")
+        for row in reader:
+            if row.get("_end") != END_SENTINEL:
+                sys.exit(f"Error: {path} line {reader.line_num}: '_end' "
+                          f"guard column missing or corrupted (row may be "
+                          f"missing trailing columns)")
 
 # ---------------------------------------------------------------------------
 # File discovery helpers
@@ -222,6 +245,8 @@ def main():
         sys.exit(f"Error: gis_indexes.tsv not found in SETUPDIR: {tsv}")
     if not cleanup_tsv.is_file():
         sys.exit(f"Error: gis_cleanup.tsv not found in SETUPDIR: {cleanup_tsv}")
+    check_end_column(tsv)
+    check_end_column(cleanup_tsv)
 
     # Resolve which indices to generate.  selected=None means "all rows"
     # (the historical default); otherwise it's a set of index names checked
