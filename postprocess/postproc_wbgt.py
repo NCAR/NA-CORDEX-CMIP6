@@ -41,6 +41,7 @@ import re
 import glob
 import time
 import resource
+import cftime
 
 t0 = time.perf_counter()
 
@@ -175,6 +176,29 @@ def _compute_wbgt_utci_arrays(ds):
 
 
 # -----------------
+# Actual timestamps from the WRF file.
+# Mirrors the timestamp handling in postproc_engine.load_wrf: read the
+# Times strings and floor each to its nominal hour, so that days with
+# missing raw timesteps can be aligned on timestamp (not position) and
+# the gaps filled with _FillValue.  WBGT/UTCI are instantaneous, so this
+# is the plain intensive path (no time_bnds, no gap-neighbor masking).
+
+def _read_wrf_times(infile):
+    """Return a cftime array of the file's hourly timestamps, floored to
+    the nominal hour.  Expected Times format: YYYY-MM-DD_HH:MM:SS."""
+    with xr.open_dataset(infile, decode_times=False, decode_coords=False) as _ds:
+        times_raw = _ds['Times'].load().values
+    times_str = [t.decode() if isinstance(t, bytes) else str(t)
+                 for t in times_raw]
+    # Slicing off minutes/seconds floors each stamp to its nominal hour.
+    return np.array(
+        [cftime.datetime(int(s[0:4]), int(s[5:7]), int(s[8:10]),
+                         int(s[11:13]), calendar=_cfg['calendar'])
+         for s in times_str],
+        dtype=object)
+
+
+# -----------------
 # Chunking, based on domain size (same for every file in this chunk)
 
 with xr.open_dataset(infiles[0], decode_times=False) as _ds0:
@@ -224,6 +248,9 @@ def process_day(infile):
         outdir, 'utci.1hr', year,
         f'utci_{fname_base}_1hr_{date_str}0000-{date_str}2300.nc')
 
+    # Read the file's actual hourly timestamps before subsetting drops Times.
+    have_times = _read_wrf_times(infile)
+
     ds = xr.open_dataset(infile, engine='netcdf4',
                          chunks=_chunking,
                          mask_and_scale=False,
@@ -235,31 +262,36 @@ def process_day(infile):
     n_times = ds.sizes['time']
     ds.close()
 
-    # Pad trailing missing timesteps with missing_value
-    if n_times < 24:
-        n_missing = 24 - n_times
-        fill = np.full((n_missing, _ny, _nx), np.float32(1.e20))
-        wbgt_arr = np.concatenate([wbgt_arr, fill], axis=0)
-        utci_arr = np.concatenate([utci_arr, fill], axis=0)
-        print(f'Warning: {date_str} has {n_missing} missing timestep(s); filled with missing_value')
+    n_expected = len(time_da)
+    n_have     = wbgt_arr.shape[0]
 
     _encoding_base = {
         'time': _t_encoding,
     }
 
-    xr.DataArray(wbgt_arr, dims=['time', 'y', 'x'], coords={'time': time_da}) \
-      .to_dataset(name='wbgt') \
-      .to_netcdf(wbgt_fout,
-                 encoding={'wbgt': {'_FillValue': np.float32(1.e20)},
-                           **_encoding_base},
-                 unlimited_dims=['time'])
+    def _finalize(arr, name, fout):
+        """Attach real timestamps, reindex to the full day (filling any
+        missing hours with _FillValue), and write.  Aligning on timestamp
+        rather than position places each present hour correctly and drops
+        the fill into the gap."""
+        da = xr.DataArray(arr, dims=['time', 'y', 'x'],
+                          coords={'time': have_times})
+        if n_have != n_expected:
+            da = da.reindex(time=time_da, fill_value=np.float32(1.e20))
+        da = da.assign_coords(time=time_da)
+        da.to_dataset(name=name) \
+          .to_netcdf(fout,
+                     encoding={name: {'_FillValue': np.float32(1.e20)},
+                               **_encoding_base},
+                     unlimited_dims=['time'])
 
-    xr.DataArray(utci_arr, dims=['time', 'y', 'x'], coords={'time': time_da}) \
-      .to_dataset(name='utci') \
-      .to_netcdf(utci_fout,
-                 encoding={'utci': {'_FillValue': np.float32(1.e20)},
-                           **_encoding_base},
-                 unlimited_dims=['time'])
+    _finalize(wbgt_arr, 'wbgt', wbgt_fout)
+    _finalize(utci_arr, 'utci', utci_fout)
+
+    if n_have != n_expected:
+        print(f'WARNING: wbgt/utci {date_str}: '
+              f'{n_expected - n_have} missing timesteps '
+              f'({n_expected - n_have} total values set to _FillValue)')
 
     print(f'  wbgt/utci: {date_str} finished')
 

@@ -60,6 +60,7 @@ import resource
 import re
 import subprocess
 import warnings
+import cftime
 
 t0 = time.perf_counter()
 
@@ -285,6 +286,22 @@ def load_wrf(prefix, yr, accumulated=False):
             # leads to unwanted dimension reordering on concatenation
             ds = xr.concat([prev_ds, ds], dim='Time')
 
+    # Decode WRF's Times strings and attach as a real coordinate so that
+    # write_vars can align on timestamps rather than position.  WRF writes
+    # at slightly ragged sub-hour offsets, so floor to the nominal hour.
+    times_raw = ds['Times'].load().values
+    #times_str = [b''.join(t).decode() if isinstance(t[0], bytes)
+    #             else ''.join(t) for t in times_raw]
+    times_str = [t.decode() if isinstance(t, bytes) else str(t)
+                 for t in times_raw]
+    # Slicing off minutes/seconds floors each stamp to its nominal hour.
+    times = np.array(
+        [cftime.datetime(int(s[0:4]), int(s[5:7]), int(s[8:10]),
+                         int(s[11:13]), calendar=_cfg['calendar'])
+         for s in times_str],
+        dtype=object)
+    ds = ds.assign_coords(Time=('Time', times))
+
     return ds.rename(dname_map_xyt)
 
 
@@ -376,11 +393,56 @@ def write_vars(var_da_list, freq, time_da, bnds_da, missing_idx=None, gaps=None,
         os.makedirs(vardir, exist_ok=True)
         outpath = os.path.join(vardir, fout)
 
-        if missing_idx is not None and (missing_idx.size > 0 or len(da.time) < len(time_da)):
-            da, n_inserted = _fill_missing_times(da, var, missing_idx, gaps, time_da)
-            print(f'Warning: {n_inserted} missing timestep(s) filled with missing_value')
+        n_expected = len(time_da)
+        n_have = da.sizes['time']
 
-        ds = da.assign_coords(time=time_da)
+        if n_have == n_expected:
+            ds = da.assign_coords(time=time_da)
+        else:
+            # Data is short: one or more raw timesteps are missing.  Align on
+            # timestamps rather than position so the gap lands in the right
+            # place, and fill it with _FillValue rather than interpolating.
+            #
+            # The data (da) carries start-of-interval timestamps (from load_wrf),
+            # but for extensive variables time_da is at interval midpoints, so
+            # the two share no labels and reindexing directly against time_da
+            # would fill every value.  Align in the start-of-interval domain
+            # instead: for extensive vars the starts are bnds_da[:, 0]; for
+            # intensive vars time_da already holds the starts.  Reindex and build
+            # the gap mask against those starts, then stamp the CMOR-correct
+            # time_da coordinate on positionally at the end.
+            if extensive:
+                align_starts = xr.DataArray(bnds_da.values[:, 0], dims=['time'])
+            else:
+                align_starts = time_da
+
+            have_times = set(da['time'].values)
+            da = da.reindex(time=align_starts, fill_value=np.float32(1.e20))
+
+            if extensive:
+                # An accumulated/averaged value immediately following a gap
+                # covers the whole gap, not a single interval, so it is not a
+                # valid value at its nominal frequency.  Invalidate it too.
+                start_vals = align_starts.values
+                mask = np.array([
+                    (i > 0
+                     and t in have_times
+                     and start_vals[i - 1] not in have_times)
+                    for i, t in enumerate(start_vals)
+                ])
+
+                if mask.any():
+                    da = da.where(~xr.DataArray(mask, dims=['time']),
+                                  np.float32(1.e20))
+
+            ds = da.assign_coords(time=time_da)
+
+            n_filled = int((n_expected - n_have)
+                           + (mask.sum() if extensive else 0))
+            print(f'WARNING: {var}.{freq} {fout}: '
+                  f'{n_expected - n_have} missing timesteps '
+                  f'({n_filled} total values set to _FillValue)')
+
         if bnds_da is not None:
             ds = ds.assign(time_bnds=bnds_da)
 

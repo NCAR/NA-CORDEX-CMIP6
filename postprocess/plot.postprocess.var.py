@@ -21,6 +21,7 @@ import matplotlib
 matplotlib.use('Agg')
 
 import xarray as xr
+import cftime
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -189,16 +190,38 @@ for k, (ax, t, data) in enumerate(zip(map_axes, tidx, slices)):
 # -------------------------
 # Timeseries panel
 # -------------------------
-ts_ax.plot(times, ts, color='cadetblue', lw=0.5, alpha=0.8, label='raw')
+#ts_ax.plot(times, ts, color='cadetblue', lw=0.5, alpha=0.8, label='raw')
+#if rw > 1 and nt > rw:
+#    smoothed = pd.Series(ts).rolling(rw, center=True, min_periods=1).mean().values
+#    ts_ax.plot(times, smoothed,
+#               color='darkslategray', lw=1.5, label=f'{rw}-step mean')
+#    ts_ax.legend(fontsize=8, loc='upper right')
+#
+#ts_ax.set_ylabel(units)
+#ts_ax.set_title(f'{var} near Boulder ({target_lat}°N, {target_lon}°E)',
+#                fontsize=9, loc='left')
+
+
+# -------------------------
+# Timeseries panel
+# -------------------------
+calendar = times[0].calendar
+time_units = f'days since {times[0].strftime("%Y-%m-%d %H:%M:%S")}'
+t_num = cftime.date2num(times, units=time_units, calendar=calendar)
+
+ts_ax.plot(t_num, ts, color='cadetblue', lw=0.5, alpha=0.8, label='raw')
 if rw > 1 and nt > rw:
     smoothed = pd.Series(ts).rolling(rw, center=True, min_periods=1).mean().values
-    ts_ax.plot(times, smoothed,
+    ts_ax.plot(t_num, smoothed,
                color='darkslategray', lw=1.5, label=f'{rw}-step mean')
     ts_ax.legend(fontsize=8, loc='upper right')
 
-ts_ax.set_ylabel(units)
-ts_ax.set_title(f'{var} near Boulder ({target_lat}°N, {target_lon}°E)',
-                fontsize=9, loc='left')
+def _fmt_cftime(x, pos=None):
+    return cftime.num2date(x, units=time_units, calendar=calendar).strftime('%Y-%m-%d')
+
+ts_ax.xaxis.set_major_formatter(plt.FuncFormatter(_fmt_cftime))
+fig.autofmt_xdate()
+
 
 # -------------------------
 # Figure title and save
