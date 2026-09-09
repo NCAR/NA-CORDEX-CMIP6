@@ -159,60 +159,248 @@ va150m:
   <<: *zlev_specs
   refh: 150
 
+
 # --- Pressure-level variables (6-hourly) ---
 # levels: pressure   - tells cmorize.sh to create a plev scalar coordinate
 # plev: <Pa>         - pressure value in Pascals
-ta700: &pres_specs
+ta1000: &pres_specs
   <<: *defaults
   levels: pressure
+  plev: 100000
+ta925:
+  <<: *pres_specs
+  plev: 92500
+ta850:
+  <<: *pres_specs
+  plev: 85000
+ta750:
+  <<: *pres_specs
+  plev: 75000
+ta700:
+  <<: *pres_specs
   plev: 70000
+ta600:
+  <<: *pres_specs
+  plev: 60000
 ta500:
   <<: *pres_specs
   plev: 50000
+ta400:
+  <<: *pres_specs
+  plev: 40000
+ta300:
+  <<: *pres_specs
+  plev: 30000
 ta250:
   <<: *pres_specs
   plev: 25000
+ta200:
+  <<: *pres_specs
+  plev: 20000
+ta150:
+  <<: *pres_specs
+  plev: 15000
+ta100:
+  <<: *pres_specs
+  plev: 10000
+ta70:
+  <<: *pres_specs
+  plev: 7000
 
+ua1000:
+  <<: *pres_specs
+ua925:
+  <<: *pres_specs
+  plev: 92500
+ua850:
+  <<: *pres_specs
+  plev: 85000
+ua750:
+  <<: *pres_specs
+  plev: 75000
 ua700:
   <<: *pres_specs
+  plev: 70000
+ua600:
+  <<: *pres_specs
+  plev: 60000
 ua500:
   <<: *pres_specs
   plev: 50000
+ua400:
+  <<: *pres_specs
+  plev: 40000
+ua300:
+  <<: *pres_specs
+  plev: 30000
 ua250:
   <<: *pres_specs
   plev: 25000
+ua200:
+  <<: *pres_specs
+  plev: 20000
+ua150:
+  <<: *pres_specs
+  plev: 15000
+ua100:
+  <<: *pres_specs
+  plev: 10000
+ua70:
+  <<: *pres_specs
+  plev: 7000
 
+va1000:
+  <<: *pres_specs
+va925:
+  <<: *pres_specs
+  plev: 92500
+va850:
+  <<: *pres_specs
+  plev: 85000
+va750:
+  <<: *pres_specs
+  plev: 75000
 va700:
   <<: *pres_specs
+  plev: 70000
+va600:
+  <<: *pres_specs
+  plev: 60000
 va500:
   <<: *pres_specs
   plev: 50000
+va400:
+  <<: *pres_specs
+  plev: 40000
+va300:
+  <<: *pres_specs
+  plev: 30000
 va250:
   <<: *pres_specs
   plev: 25000
+va200:
+  <<: *pres_specs
+  plev: 20000
+va150:
+  <<: *pres_specs
+  plev: 15000
+va100:
+  <<: *pres_specs
+  plev: 10000
+va70:
+  <<: *pres_specs
+  plev: 7000
 
+zg1000:
+  <<: *pres_specs
+  quant: '.0'
+zg925:
+  <<: *pres_specs
+  plev: 92500
+  quant: '.0'
+zg850:
+  <<: *pres_specs
+  plev: 85000
+  quant: '.0'
+zg750:
+  <<: *pres_specs
+  plev: 75000
+  quant: '.0'
 zg700:
   <<: *pres_specs
+  plev: 70000
+  quant: '.0'
+zg600:
+  <<: *pres_specs
+  plev: 60000
   quant: '.0'
 zg500:
   <<: *pres_specs
   plev: 50000
   quant: '.0'
+zg400:
+  <<: *pres_specs
+  plev: 40000
+  quant: '.0'
+zg300:
+  <<: *pres_specs
+  plev: 30000
+  quant: '.0'
 zg250:
   <<: *pres_specs
   plev: 25000
   quant: '.0'
+zg200:
+  <<: *pres_specs
+  plev: 20000
+  quant: '.0'
+zg150:
+  <<: *pres_specs
+  plev: 15000
+  quant: '.0'
+zg100:
+  <<: *pres_specs
+  plev: 10000
+  quant: '.0'
+zg70:
+  <<: *pres_specs
+  plev: 7000
+  quant: '.0'
 
+hus1000:
+  <<: *pres_specs
+  quant: '.6'
+hus925:
+  <<: *pres_specs
+  plev: 92500
+  quant: '.6'
+hus850:
+  <<: *pres_specs
+  plev: 85000
+  quant: '.6'
+hus750:
+  <<: *pres_specs
+  plev: 75000
+  quant: '.6'
 hus700:
   <<: *pres_specs
+  plev: 70000
+  quant: '.6'
+hus600:
+  <<: *pres_specs
+  plev: 60000
   quant: '.6'
 hus500:
   <<: *pres_specs
   plev: 50000
   quant: '.6'
+hus400:
+  <<: *pres_specs
+  plev: 40000
+  quant: '.6'
+hus300:
+  <<: *pres_specs
+  plev: 30000
+  quant: '.6'
 hus250:
   <<: *pres_specs
   plev: 25000
+  quant: '.6'
+hus200:
+  <<: *pres_specs
+  plev: 20000
+  quant: '.6'
+hus150:
+  <<: *pres_specs
+  plev: 15000
+  quant: '.6'
+hus100:
+  <<: *pres_specs
+  plev: 10000
+  quant: '.6'
+hus70:
+  <<: *pres_specs
+  plev: 7000
   quant: '.6'
 
 # --- Time-invariant variables (no compression) ---
