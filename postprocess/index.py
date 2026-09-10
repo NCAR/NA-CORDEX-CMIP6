@@ -29,7 +29,11 @@ Generates six commandfiles that must be run in this order:
 
   indexes.cmd  - Runs each index's `formula` against the annual,
                  seasonal, and monthly versions of its input variable(s).
-                 Writes final index files directly to OUTDIR.
+                 Writes final index files directly to OUTDIR.  Commands
+                 are bundled by (index, tag) into indexes/<idx>.<tag>.cmd
+                 subfiles (one command per simulation each); indexes.cmd
+                 itself just contains one `csh <subfile>` line per bundle,
+                 to stay under the scheduler's total-task limit.
 
   derived.cmd  - Indexes computed from other indexes rather than
                  from a base variable: ETR = TXx - TNn, SDII = PTOT / R1mm.
@@ -39,11 +43,18 @@ Generates six commandfiles that must be run in this order:
                  derived.cmd output file IN PLACE via clean_index.sh.
                  (No separate raw/clean copy needed anymore, since
                  extracting a specific variable is no longer required.)
+                 Bundled the same way, into cleanup/<idx>.<tag>.cmd.
 
 Directory layout under OUTDIR:
   tmp/    All intermediate files (concat, units, split) -- can be
           removed once cleanup.cmd is done.
   (root)  Final index files, flat, one per simulation/index/tag.
+
+Directory layout under CMDDIR:
+  indexes.cmd, cleanup.cmd  - dispatcher files: one `csh <subfile>` line
+                              per (index, tag) bundle.
+  indexes/, cleanup/        - the bundled subfiles themselves, one command
+                              per simulation for that (index, tag).
 
 See gis_indexes.tsv in SETUPDIR for TSV column documentation.
 
@@ -210,6 +221,42 @@ def emit_multi(cmdfile, outfiles, cmd):
     cmdfile.write(cmd + "\n")
 
 
+class Bundler:
+    """Collects commands into per-(index, tag) subfiles instead of writing
+    them straight to a single flat commandfile, to stay under the PBS
+    scheduler's total-task limit.  Used for indexes.cmd and cleanup.cmd,
+    each of which would otherwise have one line per simulation per index
+    per tag (thousands of tasks).
+
+    Call add(idx, tag, cmd) once per simulation's command; write_all()
+    then writes each bundle to CMDDIR/<name>/<idx>.<tag>.cmd (one command
+    per simulation) and writes a `csh <subfile>` dispatcher line for each
+    bundle into the top-level CMDDIR/<name>.cmd.
+    """
+
+    def __init__(self, name, cmddir):
+        self.name = name
+        self.subdir = cmddir / name
+        self.toplevel = cmddir / f"{name}.cmd"
+        self.bundles = defaultdict(list)  # (idx, tag) -> [cmd, ...]
+
+    def add(self, idx, tag, cmd):
+        self.bundles[(idx, tag)].append(cmd)
+
+    def write_all(self):
+        if not self.bundles:
+            return
+        self.subdir.mkdir(parents=True, exist_ok=True)
+        with open(self.toplevel, "w") as top:
+            for (idx, tag), cmds in sorted(self.bundles.items()):
+                subfile = self.subdir / f"{idx}.{tag}.cmd"
+                subfile.write_text("\n".join(cmds) + "\n")
+                top.write(f"csh {subfile}\n")
+
+    def count(self):
+        return sum(len(cmds) for cmds in self.bundles.values())
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -289,8 +336,16 @@ def main():
     for middle in sims:
         print(f"  {middle}: {sorted(sims[middle])}")
 
-    cmd_paths = {name: cmddir / f"{name}.cmd" for name in CMDFILES}
+    # concat/units/split/derived stay flat, one commandfile each.
+    # indexes/cleanup get bundled by (index, tag) to stay under PBS's
+    # total-task limit -- see Bundler.
+    FLAT_CMDFILES = ["concat", "units", "split", "derived"]
+    BUNDLED_CMDFILES = ["indexes", "cleanup"]
+
+    cmd_paths = {name: cmddir / f"{name}.cmd" for name in FLAT_CMDFILES}
     cmd_files = {k: open(v, "w") for k, v in cmd_paths.items()}
+    bundlers = {name: Bundler(name, cmddir) for name in BUNDLED_CMDFILES}
+    cmd_files.update(bundlers)
 
     # rows actually in play, keyed by index name, honoring selection and
     # dropping percentile/norm-based indexes for now
@@ -316,17 +371,24 @@ def main():
         process_simulation(middle, varfiles, active_rows, active_derived,
                             outdir, tmpdir, setupdir, cmd_files)
 
-    # Close commandfiles; remove any that are empty
+    # Close flat commandfiles; remove any that are empty
     for name, fh in cmd_files.items():
+        if name in bundlers:
+            continue
         fh.close()
         p = cmd_paths[name]
         if p.stat().st_size == 0:
             p.unlink()
 
+    # Write out bundled commandfiles (subfiles + dispatcher)
+    for bundler in bundlers.values():
+        bundler.write_all()
+
     def count_cmds(p):
         return sum(1 for _ in p.read_text().splitlines()) if p.exists() else 0
 
-    counts = {name: count_cmds(cmd_paths[name]) for name in CMDFILES}
+    counts = {name: count_cmds(cmd_paths[name]) for name in FLAT_CMDFILES}
+    counts.update({name: b.count() for name, b in bundlers.items()})
 
     print()
     print("Commandfile generation complete.")
@@ -364,7 +426,7 @@ def process_simulation(middle, varfiles, active_rows, active_derived,
             continue
         for outvar, unit in outs:
             out = tmpdir / f"{outvar}_{middle}_{ts}.nc"
-            cmd = (f'ncap2 -O -s \'{outvar}=udunits({basevar},"{unit}")\' '
+            cmd = (f'ncap2 -O -v -s \'{outvar}=udunits({basevar},"{unit}")\' '
                    f'{concat_ok[basevar]} {out}')
             emit(cmd_files["units"], out, cmd)
             unit_files[outvar] = out
@@ -420,8 +482,9 @@ def process_simulation(middle, varfiles, active_rows, active_derived,
 
         for tag, infile in _tags(split_files[invar]):
             outfile = outdir / f"{idx}_{middle}_{ts}{_tagsuffix(tag)}.nc"
-            cmd = f"cdo {formula} {infile} {outfile}"
-            emit(cmd_files["indexes"], outfile, cmd)
+            if FORCE or not outfile.exists():
+                cmd = f"cdo {formula} {infile} {outfile}"
+                cmd_files["indexes"].add(idx, tag, cmd)
             raw_index_files[idx][tag] = outfile
 
     for invar, idxs in sorted(skipped_by_var.items()):
@@ -450,13 +513,12 @@ def process_simulation(middle, varfiles, active_rows, active_derived,
               file=sys.stderr)
 
     # -- cleanup: apply CF metadata, in place, one call per (index, tag) ---
+    # Cleanup mutates its file in place, so file existence can't be used to
+    # detect "already done" -- always bundle a line, regardless of --force.
     for idx, by_tag in raw_index_files.items():
         for tag, f in by_tag.items():
             cmd = f"./clean_index.sh {idx} {f} {setupdir}"
-            # Cleanup mutates f in place, so its own existence can't be
-            # used to detect "already done" -- always emit; commandfile
-            # runners are expected to be idempotent/re-runnable here.
-            cmd_files["cleanup"].write(cmd + "\n")
+            cmd_files["cleanup"].add(idx, tag, cmd)
 
 
 def _tags(split_entry):
