@@ -1,47 +1,73 @@
-index	cdo_operator	input_vars	units	long_name	output_frequency	prereq_type	description	notes	_end
-CDD	etccdi_cdd	pr	mm/day	Consecutive dry days	annual	none	Longest run of consecutive days with RR < 1 mm		~
-CWD	etccdi_cwd	pr	mm/day	Consecutive wet days	annual	none	Longest run of consecutive days with RR >= 1 mm		~
-R1mm	etccdi_r1mm	pr	mm/day	Precipitation days	annual_loop	none	Count of days with RR >= 1 mm		~
-Rx1day	etccdi_rx1day	pr	mm/day	Max 1-day precipitation	annual	none	Highest single-day precipitation total in year		~
-Rx5day	etccdi_rx5day	pr	mm/day	Max 5-day precipitation	annual	none	Highest 5-day consecutive precipitation total in year		~
-R10mm	eca_r10mm	pr	mm/day	Heavy precipitation days	annual_loop	none	Count of days with RR >= 10 mm		~
-R20mm	eca_r20mm	pr	mm/day	Very heavy precipitation days	annual_loop	none	Count of days with RR >= 20 mm		~
-SDII	eca_sdii	pr	mm/day	Simple daily intensity index	annual_loop	none	Mean precipitation on wet days (RR >= 1 mm)		~
-RR	yearsum	pr	mm/day	Precipitation sum	annual	none	Total annual precipitation sum (all days)		~
-PRCPTOT	yearsum -setrtomiss,,1	pr	mm/day	Annual total wet-day precipitation	annual	none	Annual sum of precipitation on wet days (RR >= 1 mm); dry days excluded inline		~
-FD	etccdi_fd	tasmin	K	Frost days	annual	none	Count of days with TN < 0°C		~
-TR	etccdi_tr	tasmin	K	Tropical nights	annual	none	Count of nights with TN > 20°C		~
-CFD	eca_cfd	tasmin	K	Consecutive frost days	annual_loop	none	Longest run of consecutive days with TN < 0°C		~
-TNn	yearmin	tasmin	K	Annual minimum of daily minimum temperature	annual	none	Coldest nightly minimum temperature of the year		~
-TNx	yearmax	tasmin	K	Annual maximum of daily minimum temperature	annual	none	Warmest nightly minimum temperature of the year		~
-TN	yearmean	tasmin	K	Mean daily minimum temperature	annual	none	Annual mean of daily minimum near-surface air temperature	ECA&D index TN	~
-CWDI	eca_cwdi	tasmin	K	Cold wave duration index	annual_loop	ydrunmean,5	Count of days in cold waves: >= 6 consecutive days with TN < TNnorm - 5°C		~
-ID	etccdi_id	tasmax	K	Ice days	annual	none	Count of days with TX < 0°C		~
-SU	etccdi_su	tasmax	K	Summer days	annual	none	Count of days with TX > 25°C		~
-CSU	eca_csu	tasmax	K	Consecutive summer days	annual_loop	none	Longest run of consecutive days with TX > 25°C		~
-TXn	yearmin	tasmax	K	Annual minimum of daily maximum temperature	annual	none	Coldest daytime maximum temperature of the year		~
-TXx	yearmax	tasmax	K	Annual maximum of daily maximum temperature	annual	none	Hottest daytime maximum temperature of the year		~
-TX	yearmean	tasmax	K	Mean daily maximum temperature	annual	none	Annual mean of daily maximum near-surface air temperature	ECA&D index TX	~
-HWDI	eca_hwdi	tasmax	K	Heat wave duration index	annual_loop	ydrunmean,5	Count of days in heat waves: >= 6 consecutive days with TX > TXnorm + 5°C		~
-DTR	yearmean -sub	tasmax+tasmin	K	Mean diurnal temperature range	annual	none	Annual mean of daily (TX - TN)	Two-variable operator: yearmean of (tasmax - tasmin)	~
-ETR	eca_etr	tasmax+tasmin	K	Extreme temperature range	annual_loop	none	Max of TX minus min of TN over the period		~
-TG	yearmean	tas	K	Mean temperature	annual	none	Annual mean of daily mean near-surface air temperature	ECA&D index TG	~
-GD4	yearsum -setrtomiss,,0 -subc,277.15	tas	C	Growing degree days	annual	none	Sum of (TG - 4°C) for days with TG > 4°C	subc,277.15 is the K-to-C unit conversion plus the 4°C threshold shift	~
-TG10p	eca_tg10p	tas	K	Cold days wrt 10th percentile	annual_loop	ydrunpctl,10,5	Percent of days with TG < 10th percentile of baseline daily mean temperature		~
-TG90p	eca_tg90p	tas	K	Warm days wrt 90th percentile	annual_loop	ydrunpctl,90,5	Percent of days with TG > 90th percentile of baseline daily mean temperature		~
-HD17	eca_hd	tas	K	Heating degree days	annual_loop	none	Sum of (17°C - TG) for days with TG < 17°C	ECA&D index HD17; eca_hd uses 17°C threshold by default	~
-FG	yearmean	sfcWind	m/s	Mean wind speed	annual	none	Annual mean of daily mean near-surface wind speed	ECA&D index FG	~
-FGcalm	yearsum -lec,2	sfcWind	m/s	Calm days	annual	none	Count of days with mean wind speed <= 2 m/s	ECA&D index FGcalm	~
-FG6Bft	yearsum -gec,10.8	sfcWind	m/s	Strong wind days (>= Beaufort 6)	annual	none	Count of days with mean wind speed >= 10.8 m/s	ECA&D index FG6Bft	~
-RH	yearmean	hurs	%	Mean relative humidity	annual	none	Annual mean of daily mean near-surface relative humidity	ECA&D index RH	~
-PP	yearmean	psl	Pa	Mean sea level pressure	annual	none	Annual mean of daily mean sea level pressure	ECA&D index PP	~
-RSDSann	yearmean	rsds	W/m²	Annual mean surface downwelling shortwave radiation	annual	none	Annual mean of daily mean surface downwelling shortwave radiation	Using RSDSann to match CORDEX variable name; ECA&D equivalent is QQ	~
-CC	yearmean	clt	octas	Mean cloud cover	annual	none	Annual mean of daily mean cloud cover	ECA&D index CC; clt (0-100%) converted to continuous oktas via mulc,0.08	~
-CC2	yearsum -lec,2	clt	octas	Mostly sunny days	annual	none	Count of days with cloud cover <= 2 oktas	ECA&D index CC2	~
-CC6	yearsum -gec,6	clt	octas	Mostly cloudy days	annual	none	Count of days with cloud cover >= 6 oktas	ECA&D index CC6	~
-HMDX	yearmean	humidex	K	Mean humidex	annual	none			~
-WBGT	yearmean	wbgt	K	Mean wet-bulb globe temperature	annual	none			~
-TX90F	yearsum -gtc,305.372	tasmax	K	Days above 90°F	annual	none	90°F = 305.372K		~
-TX95F	yearsum -gtc,308.15	tasmax	K	Days above 95°F	annual	none	95°F = 308.15K		~
-TX100F	yearsum -gtc,310.928	tasmax	K	Days above 100°F	annual	none	100°F = 310.928K		~
-TX105F	yearsum -gtc,313.706	tasmax	K	Days above 105°F	annual	none	105°F = 313.706K		~
+index	formula	threshold	th_units	out_units	input_vars	long_name	description	standard_name	cell_methods	units_metadata	_end
+CC	yearmean				clt	Mean cloud cover	Mean cloud cover	cloud_area_fraction	time: mean		~
+CC2	yearsum -lec,$threshold	0.25	%	days	clt	Mostly sunny days	Count of days with cloud cover <= 25% (2 oktas)				~
+CC6	yearsum -gec,$threshold	0.75	%	days	clt	Mostly cloudy days	Count of days with cloud cover >= 75% (6 oktas)				~
+HMDX	yearmean				humidex	Mean humidex	Mean humidex		time: mean		~
+RH	yearmean				hurs	Mean relative humidity	Mean near-surface relative humidity	relative_humidity	time: mean		~
+CDD	yearmax -consects -ltc,$threshold	1	mm/day	days	RR	Consecutive dry days	Longest run of consecutive days with RR < 1 mm	spell_length_of_days_with_lwe_thickness_of_precipitation_amount_below_threshold			~
+CDDn	yearsum -gtc 5 -consects -ltc,$threshold	1	mm/day	1	RR	Dry spells	Count of runs of > 5 consecutive days with RR < 1 mm				~
+CWD	yearmax -consects -gec,$threshold	1	mm/day	days	RR	Consecutive wet days	Longest run of consecutive days with RR >= 1 mm	spell_length_of_days_with_lwe_thickness_of_precipitation_amount_above_threshold			~
+CWDn	yearsum -gtc 5 -consects -gec,$threshold	1	mm/day	1	RR	Wet spells	Count of runs of > 5 consecutive days with RR >= 1mm				~
+DP01	yearsum -gec,$threshold	0.01	in/day	days	precip	Wet days	Count of days with > 0.01 inches precipitation	number_of_days_with_lwe_thickness_of_precipitation_amount_above_threshold			~
+DP100	yearsum -gec,$threshold	1	in/day	days	precip	Heavy rain days	Count of days with >= 1 inch precipitation	number_of_days_with_lwe_thickness_of_precipitation_amount_above_threshold			~
+DP200	yearsum -gec,$threshold	2	in/day	days	precip	Very heavy rain days	Count of days with >= 2 inch precipitation	number_of_days_with_lwe_thickness_of_precipitation_amount_above_threshold			~
+DP300	yearsum -gec,$threshold	3	in/day	days	precip	Extreme rain days	Count of days with >= 3 inch precipitation	number_of_days_with_lwe_thickness_of_precipitation_amount_above_threshold			~
+PTOT	yearsum -setrtomiss,,$threshold	1	mm/day	mm	RR	Total wet-day precipitation	Sum of precipitation on days with RR >= 1mm 	lwe_precipitation_amount	time: sum within days time: sum over days (wet days)		~
+R10mm	yearsum -gec,$threshold	10	mm/day	days	RR	Heavy precipitation days	Count of days with RR >= 10 mm	number_of_days_with_lwe_thickness_of_precipitation_amount_above_threshold	time: sum within days time: sum over days		~
+R1mm	yearsum -gec,$threshold	1	mm/day	days	RR	Precipitation days	Count of days with RR >= 1 mm	number_of_days_with_lwe_thickness_of_precipitation_amount_above_threshold	time: sum within days time: sum over days		~
+R20mm	yearsum -gec,$threshold	20	mm/day	days	RR	Very heavy precipitation days	Count of days with RR >= 20 mm	number_of_days_with_lwe_thickness_of_precipitation_amount_above_threshold	time: sum within days time: sum over days		~
+Rx1day	yearmax			mm	RR	Max 1-day precipitation	Highest single-day precipitation total in year	lwe_thickness_of_precipitation_amount	time: maximum		~
+Rx5day	yearmax -runsum,5			mm	RR	Max 5-day precipitation	Highest 5-day consecutive precipitation total in year	lwe_thickness_of_precipitation_amount	time: sum within days time: maximum over days		~
+Rx5dayN	yearsum -gtc,$threshold -runsum,5	50	mm/day	1	RR	Heavy 5-day precipitation periods	Count of consecutive 5-day periods with RR > 50 mm				~
+TPCP	yearsum			inches	precip	Total precipitation	Total precipitation (all days)	lwe_precipitation_amount			~
+PP	yearmean				psl	Sea level pressure	Mean sea level pressure	air_pressure_at_mean_sea_level	time: mean		~
+SDII	div	1	mm/day	mm/day	PTOT+R1mm	Simple daily intensity index	Mean precipitation on wet days (RR >= 1 mm)	lwe_precipitation_rate	time: average over days (wet days)		~
+RSDSann	yearmean				rsds	Surface solar radiation	Mean surface downwelling shortwave radiation	surface_downwelling_shortwave_flux_in_air	time: mean		~
+FG	yearmean				sfcWind	Wind speed	Mean near-surface wind speed	wind_speed	time: mean		~
+FG6Bft	yearsum -gec,$threshold	10.8	m/s	days	sfcWind	Strong wind days (>= Beaufort 6)	Count of days with mean wind speed >= 10.8 m/s	number_of_days_with_wind_speed_above_threshold			~
+FGcalm	yearsum -lec,$threshold	2	m/s	days	sfcWind	Calm days	Count of days with mean wind speed <= 2 m/s	number_of_days_with_wind_speed_below_threshold			~
+CD65F	yearsum -setrtomiss,,0 -subc,$threshold	65	degF	degF day	Tavg	Cooling degree days (65°F)	Sum of (Tavg - 65°F) on days when Tavg > 65°F				~
+GD4	yearsum -setrtomiss,,0 -subc,$threshold	4	degC	degC day	TG	Growing degree days (4°C)	Sum of (Tavg - 4°C) on days when Tavg > 4°C			temperature: difference	~
+HD17	yearsum -setrtomiss,,0 -addc,$threshold -mulc,-1	17	degC	degC day	TG	Heating degree days (17°C)	Sum of (17°C - Tavg) on days when Tavg < 17°C			temperature: difference	~
+HD65F	yearsum -setrtomiss,,0 -addc,$threshold -mulc,-1	65	degF	degF day	Tavg	Heating degree days (65°C)	Sum of (65°F - Tavg) on days when Tavg < 65°F	air_temperature			~
+TAVG	yearmean			degF	Tavg	Mean temperature	Mean near-surface air temperature (°F)	air_temperature			~
+TG	yearmean			degC	TG	Mean temperature	Mean near-surface air temperature (°C)	air_temperature	time: mean	temperature: on_scale	~
+CSU	yearmax -consects -gtc,$threshold	25	degC	days	TX	Consecutive summer days	Longest run of consecutive days with Tmax > 25°C	spell_length_of_days_with_air_temperature_above_threshold	time: minimum within days time: maximum over days		~
+CSUn	yearsum -gtc 5 -consects -gtc,$threshold	25	degC	1	TX	Summer heat spells	Count of runs of > 5 consecutive days with Tmax > 25°C				~
+HW90F	yearsum -gec,3 -consects -gtc,$threshold	90	degF	1	Tmax	Heat wave frequency (90°F)	Count of heat waves: Tmax > 90°F for 3 or more days				~
+HW95F	yearsum -gec,3 -consects -gtc,$threshold	95	degF	1	Tmax	Heat wave frequency (95°F)	Count of heat waves: Tmax > 95°F for 3 or more days				~
+ID	yearsum -ltc,$threshold	0	degC	days	TX	Ice days	Count of days with Tmax < 0°C	number_of_days_with_air_temperature_below_threshold	time: maximum within days time: sum over days		~
+LHW90F	yearmax -consects -gec,$threshold	90	degF	days	Tmax	Longest 90°F spell	Longest consecutive period with Tmax > 90°F	spell_length_of_days_with_air_temperature_above_threshold			~
+LHW95F	yearmax -consects -gec,$threshold	95	degF	days	Tmax	Longest 95°F spell	Longest consecutive period with Tmax > 95°F	spell_length_of_days_with_air_temperature_above_threshold			~
+SU	yearsum -gtc,$threshold	25	degC	days	TX	Summer days	Count of days with Tmax > 25°C	number_of_days_with_air_temperature_above_threshold	time: maximum within days time: sum over days		~
+TMAX	yearmean				Tmax	Mean daily Tmax	Mean of daily maximum near-surface air temperature (°F)	air_temperature			~
+TX	yearmean				TX	Mean daily Tmax	Mean of daily maximum near-surface air temperature (°C)	air_temperature	time: maximum within days time: mean over days	temperature: on_scale	~
+TX100F	yearsum -gtc,$threshold	100	degF	days	Tmax	Days above 100°F	Count of days with Tmax > 100°F	number_of_days_with_air_temperature_above_threshold			~
+TX105F	yearsum -gtc,$threshold	105	degF	days	Tmax	Days above 105°F	Count of days with Tmax > 105°F	number_of_days_with_air_temperature_above_threshold			~
+TX90F	yearsum -gtc,$threshold	90	degF	days	Tmax	Days above 90°F	Count of days with Tmax > 90°F	number_of_days_with_air_temperature_above_threshold			~
+TX95F	yearsum -gtc,$threshold	95	degF	days	Tmax	Days above 95°F	Count of days with Tmax > 95°F	number_of_days_with_air_temperature_above_threshold			~
+TXn	yearmin				TX	Coolest daytime high	Coldest daily maximum temperature	air_temperature	time: maximum within days time: minimum over days	temperature: on_scale	~
+TXx	yearmax				TX	Hottest daytime high	Hottest daily maximum temperature	air_temperature	time: maximum within days time: maximum over days	temperature: on_scale	~
+DTR	yearmean -sub				TX+TN	Mean temperature swing	Mean diurnal temperature range (Tmax - Tmin)	air_temperature	time: range within days time: mean over days	temperature: difference	~
+CFD	yearmax -consects -ltc,$threshold	0	degC	days	TN	Consecutive frost days	Longest run of consecutive days with Tmin < 0°C	spell_length_of_days_with_air_temperature_below_threshold	time: minimum within days time: maximum over days		~
+CFDn	yearsum -gtc 5 -consects -ltc,$threshold	0	degC	1	TN	Frost spells	Count of runs of > 5 consecutive days with Tmin < 0°C				~
+FD	yearsum -ltc,$threshold	0	degC	days	TN	Frost days	Count of days with Tmin < freezing (0°C / 32°F)	number_of_days_with_air_temperature_below_threshold	time: minimum within days time: sum over days		~
+HFD	yearsum -ltc,$threshold	25	degF	days	Tmin	Hard freeze days	Count of days with Tmin < 25°F	number_of_days_with_air_temperature_below_threshold			~
+HW68F	yearsum -gec,3 -consects -gtc,$threshold	68	degF	1	Tmin	Heat wave frequency (68°F)	Count of heat waves: Tmin > 68°F for 3 or more days				~
+HW70F	yearsum -gec,3 -consects -gtc,$threshold	70	degF	1	Tmin	Heat wave frequency (70°F)	Count of heat waves: Tmin > 70°F for 3 or more days				~
+TMIN	yearmin			degF	Tmin	Mean daily Tmin	Mean daily minimum near-surface air temperature	air_temperature			~
+TN	yearmean				TN	Mean daily Tmin	Mean daily minimum near-surface air temperature	air_temperature	time: minimum within days time: mean over days	temperature: on_scale	~
+TN65F	yearsum -gtc,$threshold	65	degF	days	Tmin	Nights above 65°F	Count of days with Tmin > 65°F	number_of_days_with_air_temperature_above_threshold			~
+TN68F	yearsum -gtc,$threshold	68	degF	days	Tmin	Nights above 68°F	Count of days with Tmin > 68°F	number_of_days_with_air_temperature_above_threshold			~
+TN70F	yearsum -gtc,$threshold	70	degF	days	Tmin	Nights above 70°F	Count of days with Tmin > 70°F	number_of_days_with_air_temperature_above_threshold			~
+TN75F	yearsum -gtc,$threshold	75	degF	days	Tmin	Nights above 75°F	Count of days with Tmin > 75°F	number_of_days_with_air_temperature_above_threshold			~
+TN80F	yearsum -gtc,$threshold	80	degF	days	Tmin	Nights above 80°F	Count of days with Tmin > 80°F	number_of_days_with_air_temperature_above_threshold			~
+TNn	yearmin				TN	Coldest nighttime low	Coldest daily minimum temperature	air_temperature	time: minimum within days time: minimum over days	temperature: on_scale	~
+TNx	yearmax				TN	Warmest nightime low	Hottest daily minimum temperature	air_temperature	time: minimum within days time: maximum over days	temperature: on_scale	~
+TR	yearsum -gtc,$threshold	20	degC	days	TN	Tropical nights	Count of nights with Tmin > 20°C	number_of_days_with_air_temperature_above_threshold	time: minimum within days time: sum over days		~
+ETR	sub				TXx+TNn	Extreme temperature range	Max of Tmax minus min of Tmin over the period	air_temperature	time: range within years	temperature: difference	~
+WBGT	yearmean			degF	wbgt	Mean WBGT	Mean wet-bulb globe temperature		time: mean		~
+WBGT82F	yearsum -gec,$threshold	82	degF	days	wbgt	Green flag days	Count of elevated threat days (WBGT > 82 °F)				~
+WBGT85F	yearsum -gec,$threshold	85	degF	days	wbgt	Yellow flag days	Count of moderate threat days (WBGT > 85 °F)				~
+WBGT88F	yearsum -gec,$threshold	88	degF	days	wbgt	Red flag days	Count of high threat days (WBGT > 88 °F)				~
+WBGT90F	yearsum -gec,$threshold	90	degF	days	wbgt	Black flag days	Count of extreme threat days (WBGT > 90 °F)				~
