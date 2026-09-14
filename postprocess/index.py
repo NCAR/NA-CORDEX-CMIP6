@@ -79,6 +79,13 @@ UNIT_VARS = {
     "wbgt":    [("WBGT", "degF")],
 }
 
+# Model outputs have precip as flux (kg/m^2/s) but we want it as lwe
+# (mm/day); udunits won't do that conversion, so we do it manually by
+# changing the units to mm/s (1 kg H2O / m^2 == 1mm LWE).
+RELABEL_UNITS = {
+    "pr": "mm s-1",
+}
+
 # Variables that pass through unconverted (index formulas use them as-is,
 # under their native/CMIP6 name).  Anything referenced in gis_indexes.tsv
 # that isn't a UNIT_VARS output and isn't here is assumed to need concat
@@ -347,8 +354,7 @@ def main():
     bundlers = {name: Bundler(name, cmddir) for name in BUNDLED_CMDFILES}
     cmd_files.update(bundlers)
 
-    # rows actually in play, keyed by index name, honoring selection and
-    # dropping percentile/norm-based indexes for now
+    # rows actually in play, keyed by index name, honoring selection
     active_rows = {
         row["index"]: row for row in rows
         if row["index"] not in SKIP_PREREQ_INDEXES
@@ -360,9 +366,6 @@ def main():
     # (DERIVED indexes are handled separately, from other indexes' outputs.)
     needed_vars = {v for row in active_rows.values()
                    for v in row["input_vars"].split("+")}
-    # DTR is a units-step pseudo-variable, not itself in UNIT_VARS/PASSTHROUGH;
-    # its inputs (TX, TN) are pulled in via the normal mechanism below.
-    needed_vars.discard("DTR")
 
     active_derived = {k: v for k, v in DERIVED.items()
                        if selected is None or k in selected}
@@ -411,37 +414,41 @@ def process_simulation(middle, varfiles, active_rows, active_derived,
     ts = sim_timespan(sorted(all_files, key=lambda f: f.stem.split("_")[-1]))
 
     # -- concat: one file per raw variable actually present --------------
-    concat_ok = {}
+    concat_files = {}
     for var, files in varfiles.items():
         out = tmpdir / f"{var}_{middle}_{ts}.nc"
         filenames = " ".join(str(f) for f in files)
-        emit(cmd_files["concat"], out, f"ncrcat -O -o {out} {filenames}")
-        concat_ok[var] = out
+        emit(cmd_files["concat"], out, f"ncrcat -h -O -o {out} {filenames}")
+        concat_files[var] = out
 
-    # -- units: derive index-native variables + DTR -----------------------
+    # -- units: derive index-native variables -----------------------
     # unit_files[outvar] -> path to the annual (unsplit) units-converted file
+
     unit_files = {}
     for basevar, outs in UNIT_VARS.items():
-        if basevar not in concat_ok:
+        if basevar not in concat_files:
             continue
-        for outvar, unit in outs:
-            out = tmpdir / f"{outvar}_{middle}_{ts}.nc"
-            cmd = (f'ncap2 -O -v -s \'{outvar}=udunits({basevar},"{unit}")\' '
-                   f'{concat_ok[basevar]} {out}')
-            emit(cmd_files["units"], out, cmd)
-            unit_files[outvar] = out
+        cfile = concat_files[basevar]
+        relabel = RELABEL_UNITS.get(basevar)
+        outfiles = [tmpdir / f"{vout}_{middle}_{ts}.nc" for vout, unit in outs]
+
+        parts = []
+        if relabel:
+            parts.append(f'ncatted -a units,{basevar},o,c,"{relabel}" {cfile}')
+        for (outvar, unit), out in zip(outs, outfiles):
+            script = (f'{outvar}=udunits({basevar},"{unit}");' +
+                      f'{outvar}@units="{unit}"')
+            parts.append(f"ncap2 -O -v -s '{script}' {cfile} {out}")
+
+        emit_multi(cmd_files["units"], outfiles, "; ".join(parts))
+
+        for (outvar, _unit), unitfile in zip(outs, outfiles):
+            unit_files[outvar] = unitfile
 
     for var in PASSTHROUGH_VARS:
-        if var in concat_ok:
-            unit_files[var] = concat_ok[var]
+        if var in concat_files:
+            unit_files[var] = concat_files[var]
 
-    # DTR = TX - TN (daily), computed here since it's a units-step
-    # pseudo-variable rather than an index in its own right.
-    if "TX" in unit_files and "TN" in unit_files:
-        out = tmpdir / f"DTR_{middle}_{ts}.nc"
-        cmd = f"cdo sub {unit_files['TX']} {unit_files['TN']} {out}"
-        emit(cmd_files["units"], out, cmd)
-        unit_files["DTR"] = out
 
     # -- split: splitseas/splitmon on each units.cmd output ---------------
     # split_files[var]["ann"] = unsplit path
