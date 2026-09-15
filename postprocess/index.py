@@ -417,8 +417,10 @@ def process_simulation(middle, varfiles, active_rows, active_derived,
     concat_files = {}
     for var, files in varfiles.items():
         out = tmpdir / f"{var}_{middle}_{ts}.nc"
-        filenames = " ".join(str(f) for f in files)
-        emit(cmd_files["concat"], out, f"ncrcat -h -O -o {out} {filenames}")
+        indir = files[0].parent
+        filenames = " ".join(f.name for f in files)
+        emit(cmd_files["concat"], out,
+             f"ncrcat -h -O -p {indir} -o {out} {filenames}")
         concat_files[var] = out
 
     # -- units: derive index-native variables -----------------------
