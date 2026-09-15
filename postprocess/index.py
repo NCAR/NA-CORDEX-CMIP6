@@ -198,6 +198,20 @@ def group_simulations(indir):
     return sims
 
 
+def nco_loop_spec(files):
+    """If files are a contiguous run of single-year <YYYY>.nc timespans
+    (one year per file, step 1), return (first_filename, nfiles, ndigits)
+    for use with ncrcat's -n loop syntax.  Otherwise return None.
+    """
+    tss = [f.stem.split("_")[-1] for f in files]
+    if not all(len(t) == 4 and t.isdigit() for t in tss):
+        return None
+    years = [int(t) for t in tss]
+    if years != list(range(years[0], years[0] + len(years))):
+        return None
+    return files[0].name, len(files), 4
+
+
 def sim_timespan(files):
     """Overall timespan tag for a simulation: first file's start through
     last file's end, both taken as opaque strings split on '-'."""
@@ -418,9 +432,15 @@ def process_simulation(middle, varfiles, active_rows, active_derived,
     for var, files in varfiles.items():
         out = tmpdir / f"{var}_{middle}_{ts}.nc"
         indir = files[0].parent
-        filenames = " ".join(f.name for f in files)
-        emit(cmd_files["concat"], out,
-             f"ncrcat -h -O -p {indir} -o {out} {filenames}")
+        concat = f"ncrcat -O -p {indir} -o {out}"
+        loop = nco_loop_spec(files)
+        if loop:
+            first, n, ndigits = loop
+            emit(cmd_files["concat"], out,
+                 f"{concat} -n {n},{ndigits},1 {first}")
+        else:
+            filenames = " ".join(f.name for f in files)
+            emit(cmd_files["concat"], out, f"{concat} {filenames}")
         concat_files[var] = out
 
     # -- units: derive index-native variables -----------------------
