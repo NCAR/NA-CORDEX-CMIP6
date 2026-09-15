@@ -46,9 +46,9 @@ Generates six commandfiles that must be run in this order:
                  Bundled the same way, into cleanup/<idx>.<tag>.cmd.
 
 Directory layout under OUTDIR:
-  tmp/    All intermediate files (concat, units, split) -- can be
-          removed once cleanup.cmd is done.
-  (root)  Final index files, flat, one per simulation/index/tag.
+  tmp/               All intermediate files (concat, units, split) --
+                      can be removed once cleanup.cmd is done.
+  <idx>/<freq>/      Outputs grouped by index & annual/seasonal/monthly
 
 Directory layout under CMDDIR:
   indexes.cmd, cleanup.cmd  - dispatcher files: one `csh <subfile>` line
@@ -510,7 +510,7 @@ def process_simulation(middle, varfiles, active_rows, active_derived,
             formula = formula.replace("$threshold", row["threshold"])
 
         for tag, infile in _tags(split_files[invar]):
-            outfile = outdir / f"{idx}_{middle}_{ts}{_tagsuffix(tag)}.nc"
+            outfile = _outfile(outdir, idx, tag, middle, ts)
             if FORCE or not outfile.exists():
                 cmd = f"cdo {formula} {infile} {outfile}"
                 cmd_files["indexes"].add(idx, tag, cmd)
@@ -529,7 +529,7 @@ def process_simulation(middle, varfiles, active_rows, active_derived,
             continue
         tags = set(raw_index_files[in_a]) & set(raw_index_files[in_b])
         for tag in tags:
-            outfile = outdir / f"{idx}_{middle}_{ts}{_tagsuffix(tag)}.nc"
+            outfile = _outfile(outdir, idx, tag, middle, ts)
             fa = raw_index_files[in_a][tag]
             fb = raw_index_files[in_b][tag]
             cmd = f"cdo {op} {fa} {fb} {outfile}"
@@ -548,6 +548,21 @@ def process_simulation(middle, varfiles, active_rows, active_derived,
         for tag, f in by_tag.items():
             cmd = f"./clean_index.sh {idx} {f} {setupdir}"
             cmd_files["cleanup"].add(idx, tag, cmd)
+
+
+def _freq(tag):
+    """Group splits (annual, seasonal, monthly) by tag."""
+    if tag == "ann":
+        return "ann"
+    return "seas" if tag in SEASONS else "mon"
+
+
+def _outfile(outdir, idx, tag, middle, ts):
+    """Output path for one (index, tag): OUTDIR/<idx>/<freq>/<name>.nc,
+    creating the directory if needed."""
+    d = outdir / idx / _freq(tag)
+    d.mkdir(parents=True, exist_ok=True)
+    return d / f"{idx}_{middle}_{ts}{_tagsuffix(tag)}.nc"
 
 
 def _tags(split_entry):
