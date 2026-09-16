@@ -111,19 +111,17 @@ MONTHS  = [f"{m:02d}" for m in range(1, 13)]
 
 # Named subsets of indexes selectable via --preset.  Add new presets here.
 PRESETS = {
-    "gis": {"CDD", "PTOT", "R10mm", "R1mm", "R20mm",
+    "gis": {"CDD", "CWD", "PTOT", "R10mm", "R1mm", "R20mm",
             "Rx1day", "Rx5day", "Rx5dayN", "SDII",
-            "HMDX", "TG",
-            "TX", "CD65F",
-            "TX90F", "TX95F", "TX100F", "TX105F",
-            "TN", "FD", "ID", "HD65F",
-            "TN65F", "TN70F", "TN75F", "TN80F",
+            "HMDX", "TAVG", "CD65", "HD65F", "FD", "ID",
+            "TMAX", "TX90F", "TX95F", "TX100F", "TX105F",
+            "TMIN", "FD", "TN65F", "TN70F", "TN75F", "TN80F",
             "WBGT", "WBGT82F", "WBGT85F", "WBGT88F", "WBGT90F"},
-    "denver": { "TPCP", "DP01", "DP100", "DP200", "DP300", 
+    "denver": { "DP01", "DP100", "DP200", "DP300", "TPCP",
                 "TAVG", "CD65F", "HD65F",
-                "TMAX", "TX100F", "TX90F", "TX95F",
+                "TMAX", "TX90F", "TX95F", "TX100F",
                 "HW90F", "HW95F", "LHW90F", "LHW95F",
-                "TMIN", "FD", "HFD",
+                "TMIN", "FD", "HFD", "ID",
                 "HW68F", "HW70F", "TN68F", "TN70F"},
 }
 
