@@ -118,6 +118,7 @@ PRESETS = {
             "TMIN", "FD", "TN65F", "TN70F", "TN75F", "TN80F",
             "WBGT", "WBGT82F", "WBGT85F", "WBGT88F", "WBGT90F"},
     "denver": { "DP01", "DP100", "DP200", "DP300", "TPCP",
+                "CDD", "CDDn", "CWD", "CWDn",
                 "TAVG", "CD65F", "HD65F",
                 "TMAX", "TX90F", "TX95F", "TX100F",
                 "HW90F", "HW95F", "LHW90F", "LHW95F",
