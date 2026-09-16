@@ -225,10 +225,12 @@ def sim_timespan(files):
 # ---------------------------------------------------------------------------
 
 def emit(cmdfile, outfile, cmd):
-    """Write cmd to cmdfile unless --force is unset and outfile already exists."""
+    """Write cmd to cmdfile unless --force is unset and outfile already
+    exists. Returns True if the command was written."""
     if not FORCE and outfile.exists():
-        return
+        return False
     cmdfile.write(cmd + "\n")
+    return True
 
 
 def emit_multi(cmdfile, outfiles, cmd):
@@ -495,6 +497,7 @@ def process_simulation(middle, varfiles, active_rows, active_derived,
     # -- indexes: run each formula on annual + seasonal + monthly ---------
     # raw_index_files[idx]["ann"|SEASON|MM] -> Path, for use by derived step
     raw_index_files = defaultdict(dict)
+    needs_cleanup = set()  # (idx, tag) pairs whose file was (re)computed
     skipped_by_var = defaultdict(list)  # invar -> [idx, ...], for one warning/var
 
     for idx, row in active_rows.items():
@@ -512,6 +515,7 @@ def process_simulation(middle, varfiles, active_rows, active_derived,
             if FORCE or not outfile.exists():
                 cmd = f"cdo {formula} {infile} {outfile}"
                 cmd_files["indexes"].add(idx, tag, cmd)
+                needs_cleanup.add((idx, tag))
             raw_index_files[idx][tag] = outfile
 
     for invar, idxs in sorted(skipped_by_var.items()):
@@ -531,7 +535,8 @@ def process_simulation(middle, varfiles, active_rows, active_derived,
             fa = raw_index_files[in_a][tag]
             fb = raw_index_files[in_b][tag]
             cmd = f"cdo {op} {fa} {fb} {outfile}"
-            emit(cmd_files["derived"], outfile, cmd)
+            if emit(cmd_files["derived"], outfile, cmd):
+                needs_cleanup.add((idx, tag))
             raw_index_files[idx][tag] = outfile
 
     if skipped_derived:
@@ -540,10 +545,13 @@ def process_simulation(middle, varfiles, active_rows, active_derived,
               file=sys.stderr)
 
     # -- cleanup: apply CF metadata, in place, one call per (index, tag) ---
-    # Cleanup mutates its file in place, so file existence can't be used to
-    # detect "already done" -- always bundle a line, regardless of --force.
+    # Cleanup mutates its file in place, so its own output can't be used to
+    # detect "already done" -- instead, piggyback on the indexes/derived
+    # existence check: only clean up files that were just (re)computed.
     for idx, by_tag in raw_index_files.items():
         for tag, f in by_tag.items():
+            if (idx, tag) not in needs_cleanup:
+                continue
             cmd = f"./clean_index.sh {idx} {f} {setupdir}"
             cmd_files["cleanup"].add(idx, tag, cmd)
 
