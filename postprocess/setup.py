@@ -16,8 +16,8 @@ file in sim_config to create two auxiliary files used downstream:
   wrf.fx.nc     fixed fields used in postprocessing
   xy.coords.nc  aux & regular coordinate vars added during format
 
-Also copies gis_indexes.tsv and gis_cleanup.tsv into SETUPDIR, since
-index.py (Step 10) expects to find them there.
+Also copies gis_indexes.tsv into SETUPDIR, since index.py (Step 10)
+expects to find it there.
 
 Run once at beginning of workflow.  All outputs go to SETUPDIR.
 
@@ -382,13 +382,13 @@ def copy_config(config_path, setupdir, force):
 
 
 # ---------------------------------------------------------------------------
-# Step 7: Copy gis_indexes.tsv / gis_cleanup.tsv into setupdir
+# Step 7: Copy gis_indexes.tsv into setupdir
 # (consumed by index.py in Step 10)
 # ---------------------------------------------------------------------------
 
 def copy_gis_tsv(scripts_dir, setupdir, force):
-    print(f"\n=== Copying GIS index TSVs ===")
-    for name in ("gis_indexes.tsv", "gis_cleanup.tsv"):
+    print(f"\n=== Copying GIS index TSV ===")
+    for name in ("gis_indexes.tsv",):
         src  = os.path.join(scripts_dir, name)
         dest = os.path.join(setupdir, name)
         if not os.path.exists(src):
@@ -456,7 +456,7 @@ def main():
     # 6: copy sim_config into setup
     copy_config(config_path, setupdir, force)
 
-    # 7: copy gis_indexes.tsv / gis_cleanup.tsv into setup
+    # 7: copy gis_indexes.tsv into setup
     copy_gis_tsv(scripts_dir, setupdir, force)
 
     print(f"\n=== Setup complete ===")

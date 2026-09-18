@@ -291,22 +291,15 @@ cd $topdir
 ## all indexes:
 python $post/index.py $indir10 $outdir10 $sdir $cmddir10
 
-$post/launch_multi --run $rundir10 --wall 00:30:00 --mem 50GB\
-		   --copy $post/clean_index.sh --chain \
-		   $cmddir10/concat.cmd $cmddir10/minmax.cmd \
-		   $cmddir10/pctile.cmd  $cmddir10/indices.cmd \
-		   $cmddir10/seasonal.cmd $cmddir10/annual.cmd \
-		   $cmddir10/merge.cmd $cmddir10/cleanup.cmd
-
 ## gis indexes only:
 python $post/index.py --preset gis $indir10 $outdir10 $sdir $cmddir10
 
-$post/launch_multi --run $rundir10 --wall 00:30:00 --mem 50GB\
-		   --copy $post/clean_index.sh --chain \
-		   $cmddir10/concat.cmd $cmddir10/indices.cmd \
-		   $cmddir10/seasonal.cmd $cmddir10/annual.cmd \
-		   $cmddir10/merge.cmd $cmddir10/cleanup.cmd
 
+$post/launch_multi --run $rundir10 --wall 00:30:00 --mem 50GB\
+                   --copy $post/clean_index.sh --chain \
+                   $cmddir10/concat.cmd $cmddir10/units.cmd \
+                   $cmddir10/split.cmd  $cmddir10/indexes.cmd \
+                   $cmddir10/derived.cmd $cmddir10/cleanup.cmd
 
 ## check everything ran correctly
 

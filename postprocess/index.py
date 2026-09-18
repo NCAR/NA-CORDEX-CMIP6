@@ -9,6 +9,13 @@ where <middle> uniquely identifies all the files from a single
 simulation and that timespan lexically sorts into the correct ordering
 for ncrcat.
 
+Two input layouts are recognized automatically (see find_inputs):
+  flat:   INDIR/<var>_<middle>_<timespan>.nc  (e.g., yearly files)
+  nested: INDIR/<var>.day/<var>_<middle>_<timespan>.nc  (e.g., 5-year
+          files, as written by compress.sh)
+If INDIR contains any *.day subdirectories, the nested layout is used
+and only files in those subdirectories are read.
+
 Index definitions (formulas, thresholds, units, and output metadata)
 are read from gis_indexes.tsv in SETUPDIR.  (Note: modifying the TSV
 to add new indexes is most easily done in a spreadsheet.)  Use
@@ -113,7 +120,7 @@ MONTHS  = [f"{m:02d}" for m in range(1, 13)]
 PRESETS = {
     "gis": {"CDD", "CWD", "PTOT", "R10mm", "R1mm", "R20mm",
             "Rx1day", "Rx5day", "Rx5dayN", "SDII",
-            "HMDX", "TAVG", "CD65", "HD65F", "FD", "ID",
+            "HMDX", "TAVG", "CD65F", "HD65F", "FD", "ID",
             "TMAX", "TX90F", "TX95F", "TX100F", "TX105F",
             "TMIN", "FD", "TN65F", "TN70F", "TN75F", "TN80F",
             "WBGT", "WBGT82F", "WBGT85F", "WBGT88F", "WBGT90F"},
@@ -176,14 +183,26 @@ def parse_fname(path):
     return var, middle, timespan
 
 
-def group_simulations(indir):
-    """Group all <var>_<middle>_<timespan>.nc files in indir by middle.
+def find_inputs(indir):
+    """Return (layout, sorted list of .nc Paths) for indir.
+
+    layout is 'nested' if indir has *.day subdirectories (files are read
+    from those only), else 'flat' (files are read from indir itself).
+    """
+    if any(d.is_dir() for d in indir.glob("*.day")):
+        return "nested", sorted(indir.glob("*.day/*.nc"))
+    return "flat", sorted(indir.glob("*.nc"))
+
+
+def group_simulations(files):
+    """Group <var>_<middle>_<timespan>.nc files (as found by find_inputs)
+    by middle.
 
     Returns dict: middle -> {var: [sorted Paths]} (sorted lexically by
     timespan, which is opaque but assumed sortable).
     """
     sims = defaultdict(lambda: defaultdict(list))
-    for f in sorted(indir.glob("*.nc")):
+    for f in files:
         parsed = parse_fname(f)
         if parsed is None:
             print(f"    WARNING: skipping unparseable filename: {f.name}",
@@ -289,7 +308,8 @@ def main():
         description="Generate commandfiles for computing climate indexes.",
         formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("indir",    type=Path,
-                    help="Directory containing <var>_<middle>_<timespan>.nc input files")
+                    help="Directory containing <var>_<middle>_<timespan>.nc input "
+                         "files, either directly or in <var>.day subdirectories")
     ap.add_argument("outdir",   type=Path, help="Output directory for index files")
     ap.add_argument("setupdir", type=Path,
                     help="Directory containing gis_indexes.tsv and clean_index.sh")
@@ -350,11 +370,13 @@ def main():
 
     FORCE = args.force
 
-    sims = group_simulations(indir)
+    layout, infiles = find_inputs(indir)
+    sims = group_simulations(infiles)
     if not sims:
-        sys.exit(f"Error: no <var>_<middle>_<timespan>.nc files found in {indir}")
+        sys.exit(f"Error: no <var>_<middle>_<timespan>.nc files found in "
+                 f"{indir} ({layout} layout)")
 
-    print(f"Found {len(sims)} simulation(s) in {indir}")
+    print(f"Found {len(sims)} simulation(s) in {indir} ({layout} layout)")
     for middle in sims:
         print(f"  {middle}: {sorted(sims[middle])}")
 
