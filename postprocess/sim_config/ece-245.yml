@@ -1,5 +1,5 @@
 id: "ece-245"
-path: "EC-EARTH-Veg/ssp245"
+path: "EC-Earth3-Veg/ssp245"
 driving_source_id: "EC-Earth3-Veg"
 driving_experiment_id: "ssp245"
 driving_institution_id: "EC-Earth-Consortium"

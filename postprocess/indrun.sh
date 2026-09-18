@@ -7,28 +7,36 @@
 # $topdir/index and is run by hand.
 #
 # Usage:
-#   ./indrun.sh <scratch> <id>   # <id> must be a scenario run, e.g. mpi-245
+#   ./indrun.sh <scratch> <id> [histidxdir]
+#   # <id> must be a scenario run, e.g. mpi-245
+#   # histidxdir optionally overrides the historical index/data dir,
+#   # e.g. if the historical run has already been moved to campaign
 
 set -euo pipefail
 
-if [[ $# -ne 2 ]]; then
-    echo "Usage: $0 <scratch> <id>"
+if [[ $# -ne 2 && $# -ne 3 ]]; then
+    echo "Usage: $0 <scratch> <id> [histidxdir]"
     exit 1
 fi
 
 scratch=$1
 id=$2
 
-## Historical run is named by convention: <model>-hist
-histid=${id%-*}-hist
-
-if [[ "$histid" == "$id" ]]; then
-    echo "Error: $id has no '-<scenario>' suffix; can't derive historical id"
-    exit 1
-fi
-
 scenidxdir=$scratch/$id/index/data
-histidxdir=$scratch/$histid/index/data
+
+if [[ $# -eq 3 ]]; then
+    histidxdir=$3
+else
+    ## Historical run is named by convention: <model>-hist
+    histid=${id%-*}-hist
+
+    if [[ "$histid" == "$id" ]]; then
+        echo "Error: $id has no '-<scenario>' suffix; can't derive historical id"
+        exit 1
+    fi
+
+    histidxdir=$scratch/$histid/index/data
+fi
 
 for d in "$scenidxdir" "$histidxdir"; do
     if [[ ! -d $d ]]; then
