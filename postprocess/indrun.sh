@@ -6,26 +6,31 @@
 # indexes before computing the running mean, so it lives outside
 # $topdir/index and is run by hand.
 #
+# Generates three commandfiles: concat.cmd, run21.cmd, run31.cmd.
+# concat.cmd must complete before the other two, e.g.:
+#   launch_multi --chain cmddir/concat.cmd cmddir/run21.cmd cmddir/run31.cmd
+#
 # Usage:
-#   ./indrun.sh <scratch> <id> [histidxdir]
+#   ./indrun.sh <scratch> <id> <cmddir> [histidxdir]
 #   # <id> must be a scenario run, e.g. mpi-245
 #   # histidxdir optionally overrides the historical index/data dir,
 #   # e.g. if the historical run has already been moved to campaign
 
 set -euo pipefail
 
-if [[ $# -ne 2 && $# -ne 3 ]]; then
-    echo "Usage: $0 <scratch> <id> [histidxdir]"
+if [[ $# -ne 3 && $# -ne 4 ]]; then
+    echo "Usage: $0 <scratch> <id> <cmddir> [histidxdir]"
     exit 1
 fi
 
 scratch=$1
 id=$2
+cmddir=$3
 
 scenidxdir=$scratch/$id/index/data
 
-if [[ $# -eq 3 ]]; then
-    histidxdir=$3
+if [[ $# -eq 4 ]]; then
+    histidxdir=$4
 else
     ## Historical run is named by convention: <model>-hist
     histid=${id%-*}-hist
@@ -47,7 +52,26 @@ done
 
 outdir=$scratch/index/$id
 catdir=$outdir/cat
-mkdir -p "$catdir"
+mkdir -p "$catdir" "$cmddir"
+
+concatcmd=$cmddir/concat.cmd
+run21cmd=$cmddir/run21.cmd
+run31cmd=$cmddir/run31.cmd
+: > "$concatcmd"
+: > "$run21cmd"
+: > "$run31cmd"
+
+## Write cmd to cmdfile unless --force is unset and outfile already
+## exists. Returns 0 (written) or 1 (skipped), matching index.py's emit().
+FORCE=${FORCE:-0}
+emit() {
+    local cmdfile=$1 outfile=$2 cmd=$3
+    if [[ $FORCE -eq 0 && -e $outfile ]]; then
+        return 1
+    fi
+    echo "$cmd" >> "$cmdfile"
+    return 0
+}
 
 ## Parse an index.py output filename into its fields:
 ##   {idx}_{middle}_{tstart}-{tend}[_{period}].nc
@@ -65,6 +89,8 @@ parse_fname() {
     return 1
 }
 
+nconcat=0 nrun21=0 nrun31=0
+
 for scenfile in "$scenidxdir"/*/{ann,seas,mon}/*.nc; do
     [[ -e $scenfile ]] || continue
     fname=${scenfile##*/}
@@ -73,41 +99,59 @@ for scenfile in "$scenidxdir"/*/{ann,seas,mon}/*.nc; do
         echo "  WARNING: unrecognized filename pattern: $fname; skipping" >&2
         continue
     fi
-    IFS=$'\t' read -r idx middle tstart tend period <<<"$fields"
+    IFS=$'\t' read -r idx middle tstart tend seas <<<"$fields"
 
-    ## Files are organized by <index>/<freq> (ann/mon/seas).
-    ## Find matching historical file: same index & period, but
-    ## middle & timespan differ (e.g., historical vs ssp245).
+    ## freq dir (ann/seas/mon) is the scenario file's own parent dir; the
+    ## historical file lives under the same <idx>/<freq>/ dir, but
+    ## middle/timespan differ (e.g. "historical" vs "ssp245"), so it
+    ## still needs to be found by season/month match within that dir.
     freq=${scenfile%/*}
     freq=${freq##*/}
     histfile=""
-    for file in "$histidxdir/$idx/$freq"/*.nc; do
-        [[ -e $file ]] || continue
-        if hfields=$(parse_fname "${file##*/}"); then
-            IFS=$'\t' read -r hidx hmiddle htstart htend hperiod <<<"$hfields"
-            if [[ "$hperiod" == "$period" ]]; then
-                histfile=$file
+    for cand in "$histidxdir/$idx/$freq"/*.nc; do
+        [[ -e $cand ]] || continue
+        if hfields=$(parse_fname "${cand##*/}"); then
+            IFS=$'\t' read -r hidx hmiddle htstart htend hseas <<<"$hfields"
+            if [[ "$hseas" == "$seas" ]]; then
+                histfile=$cand
                 break
             fi
         fi
     done
 
     if [[ -z "$histfile" ]]; then
-        echo "  WARNING: no historical file for $idx${period:+ ($period)}; skipping" >&2
+        echo "  WARNING: no historical file for $idx${seas:+ ($seas)}; skipping" >&2
         continue
     fi
-
-    echo "$idx${seas:+ ($seas)}"
 
     catsubdir=$catdir/$idx/$freq
     mkdir -p "$catsubdir"
     catfile=$catsubdir/${idx}${seas:+_$seas}.nc
-    ncrcat -O "$histfile" "$scenfile" "$catfile"
+
+    if emit "$concatcmd" "$catfile" \
+            "ncrcat -O '$histfile' '$scenfile' '$catfile'"; then
+        ((++nconcat))
+    fi
 
     outbase=${idx}_${middle}
     tag="${htstart}-${tend}${seas:+_$seas}"
     freqdir=$outdir/$idx/$freq
     mkdir -p "$freqdir"
-    cdo runmean,21 "$catfile" "$freqdir/${outbase}_21yr_${tag}.nc"
-    cdo runmean,31 "$catfile" "$freqdir/${outbase}_31yr_${tag}.nc"
+
+    out21=$freqdir/${outbase}_21yr_${tag}.nc
+    if emit "$run21cmd" "$out21" "cdo runmean,21 '$catfile' '$out21'"; then
+        ((++nrun21))
+    fi
+
+    out31=$freqdir/${outbase}_31yr_${tag}.nc
+    if emit "$run31cmd" "$out31" "cdo runmean,31 '$catfile' '$out31'"; then
+        ((++nrun31))
+    fi
+
+    echo "$idx${seas:+ ($seas)}"
 done
+
+echo
+echo "Commandfile generation complete."
+echo "  Concat: $nconcat  Run21: $nrun21  Run31: $nrun31"
+echo "  Commandfiles: $cmddir"
