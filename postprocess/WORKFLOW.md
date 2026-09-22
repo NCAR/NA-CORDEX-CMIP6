@@ -328,6 +328,29 @@ cd $topdir
 # -hist directory to exist alongside $topdir .
 
 $post/indrun.sh $scratch $id
+
+set indrundir = $scratch/index/$id
+set rundiri = $indrundir/run
+set cmddiri = $indrundir/cmd
+
+$post/launch_multi --run $rundiri --wall 00:10:00 --mem 50GB\
+		   --chain $cmddiri/concat.cmd \
+		   $cmddiri/run21.cmd $cmddiri/run31.cmd
+
+cd $rundiri
+
+foreach i (*)
+  echo =====================
+  echo $i
+  wc -l $i/$i.cmd
+  grep Done $i/*.o* | wc -l
+  wc $i/stdout*/* | tail -1
+  grep Done $i/*.o* | cut -f 2 -d = | cut -f 3-4 -d ' ' | sort -n | uniq -c
+end
+
+cd $topdir
+
+
 ```
 
 

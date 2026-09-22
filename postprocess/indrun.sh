@@ -8,30 +8,53 @@
 #
 # Generates three commandfiles: concat.cmd, run21.cmd, run31.cmd.
 # concat.cmd must complete before the other two, e.g.:
-#   launch_multi --chain cmddir/concat.cmd cmddir/run21.cmd cmddir/run31.cmd
+#   launch_multi --chain concat.cmd run21.cmd run31.cmd
 #
 # Usage:
-#   ./indrun.sh <scratch> <id> <cmddir> [histidxdir]
+#   ./indrun.sh <scratch> <id> [outdir] [--histdir DIR]
 #   # <id> must be a scenario run, e.g. mpi-245
-#   # histidxdir optionally overrides the historical index/data dir,
-#   # e.g. if the historical run has already been moved to campaign
+#   # outdir defaults to <scratch>/index/<id>; holds cmd/ and data/
+#   # --histdir overrides the historical index/data dir, e.g. if the
+#   # historical run has already been moved to campaign
 
 set -euo pipefail
 
-if [[ $# -ne 3 && $# -ne 4 ]]; then
-    echo "Usage: $0 <scratch> <id> <cmddir> [histidxdir]"
+scratch=""
+id=""
+outdir=""
+histdir=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --histdir)
+            histdir=$2
+            shift 2
+            ;;
+        *)
+            if [[ -z $scratch ]]; then
+                scratch=$1
+            elif [[ -z $id ]]; then
+                id=$1
+            elif [[ -z $outdir ]]; then
+                outdir=$1
+            else
+                echo "Usage: $0 <scratch> <id> [outdir] [--histdir DIR]"
+                exit 1
+            fi
+            shift
+            ;;
+    esac
+done
+
+if [[ -z $scratch || -z $id ]]; then
+    echo "Usage: $0 <scratch> <id> [outdir] [--histdir DIR]"
     exit 1
 fi
 
-scratch=$1
-id=$2
-cmddir=$3
+scendir=$scratch/$id/index/data
+outdir=${outdir:-$scratch/index/$id}
 
-scenidxdir=$scratch/$id/index/data
-
-if [[ $# -eq 4 ]]; then
-    histidxdir=$4
-else
+if [[ -z $histdir ]]; then
     ## Historical run is named by convention: <model>-hist
     histid=${id%-*}-hist
 
@@ -40,18 +63,19 @@ else
         exit 1
     fi
 
-    histidxdir=$scratch/$histid/index/data
+    histdir=$scratch/$histid/index/data
 fi
 
-for d in "$scenidxdir" "$histidxdir"; do
+for d in "$scendir" "$histdir"; do
     if [[ ! -d $d ]]; then
         echo "Error: index directory not found: $d"
         exit 1
     fi
 done
 
-outdir=$scratch/index/$id
-catdir=$outdir/cat
+cmddir=$outdir/cmd
+datadir=$outdir/data
+catdir=$datadir/cat
 mkdir -p "$catdir" "$cmddir"
 
 concatcmd=$cmddir/concat.cmd
@@ -91,7 +115,7 @@ parse_fname() {
 
 nconcat=0 nrun21=0 nrun31=0
 
-for scenfile in "$scenidxdir"/*/{ann,seas,mon}/*.nc; do
+for scenfile in "$scendir"/*/{ann,seas,mon}/*.nc; do
     [[ -e $scenfile ]] || continue
     fname=${scenfile##*/}
 
@@ -108,7 +132,7 @@ for scenfile in "$scenidxdir"/*/{ann,seas,mon}/*.nc; do
     freq=${scenfile%/*}
     freq=${freq##*/}
     histfile=""
-    for cand in "$histidxdir/$idx/$freq"/*.nc; do
+    for cand in "$histdir/$idx/$freq"/*.nc; do
         [[ -e $cand ]] || continue
         if hfields=$(parse_fname "${cand##*/}"); then
             IFS=$'\t' read -r hidx hmiddle htstart htend hseas <<<"$hfields"
@@ -135,7 +159,7 @@ for scenfile in "$scenidxdir"/*/{ann,seas,mon}/*.nc; do
 
     outbase=${idx}_${middle}
     tag="${htstart}-${tend}${seas:+_$seas}"
-    freqdir=$outdir/$idx/$freq
+    freqdir=$datadir/$idx/$freq
     mkdir -p "$freqdir"
 
     out21=$freqdir/${outbase}_21yr_${tag}.nc
@@ -155,3 +179,4 @@ echo
 echo "Commandfile generation complete."
 echo "  Concat: $nconcat  Run21: $nrun21  Run31: $nrun31"
 echo "  Commandfiles: $cmddir"
+echo "  Output files: $datadir"
