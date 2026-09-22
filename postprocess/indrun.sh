@@ -50,14 +50,13 @@ catdir=$outdir/cat
 mkdir -p "$catdir"
 
 ## Parse an index.py output filename into its fields:
-##   {idx}_{middle}_{tstart}-{tend}[_{seas}].nc
-## e.g. NAM-12_MPI-ESM1-2-HR_ssp245_r1i1p1f1_NCAR_WRF461S-SN_v1-r1 for middle,
-## and an optional trailing DJF/MAM/JJA/SON season tag.
-## On success prints "idx<TAB>middle<TAB>tstart<TAB>tend<TAB>seas" (seas may
-## be empty) and returns 0; returns 1 on filenames that don't match.
+##   {idx}_{middle}_{tstart}-{tend}[_{period}].nc
+## where period is a 3-letter season or 2-digit month.
+## On sucesss, prints parsed fields separated by tabs
+## and returns 0; returns 1 on filenames that don't match.
 parse_fname() {
     local fname=$1
-    if [[ $fname =~ ^([^_]+)_(.+)_([0-9]{4})-([0-9]{4})(_([A-Z]{3}))?\.nc$ ]]; then
+    if [[ $fname =~ ^([^_]+)_(.+)_([0-9]{8})-([0-9]{8})(_([A-Z]{3}|[0-9]{2}))?\.nc$ ]]; then
         printf '%s\t%s\t%s\t%s\t%s\n' \
             "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}" \
             "${BASH_REMATCH[4]}" "${BASH_REMATCH[6]}"
@@ -66,42 +65,49 @@ parse_fname() {
     return 1
 }
 
-for scenfile in "$scenidxdir"/*.nc; do
+for scenfile in "$scenidxdir"/*/{ann,seas,mon}/*.nc; do
+    [[ -e $scenfile ]] || continue
     fname=${scenfile##*/}
 
     if ! fields=$(parse_fname "$fname"); then
         echo "  WARNING: unrecognized filename pattern: $fname; skipping" >&2
         continue
     fi
-    IFS=$'\t' read -r idx middle tstart tend seas <<<"$fields"
+    IFS=$'\t' read -r idx middle tstart tend period <<<"$fields"
 
-    ## Find the matching historical file: same index, same season (both
-    ## empty for annual). Excludes other seasons/indexes that plain
-    ## "${idx}_*.nc" globbing would otherwise also match.
+    ## Files are organized by <index>/<freq> (ann/mon/seas).
+    ## Find matching historical file: same index & period, but
+    ## middle & timespan differ (e.g., historical vs ssp245).
+    freq=${scenfile%/*}
+    freq=${freq##*/}
     histfile=""
-    for cand in "$histidxdir"/"${idx}"_*.nc; do
-        [[ -e $cand ]] || continue
-        if hfields=$(parse_fname "${cand##*/}"); then
-            IFS=$'\t' read -r hidx hmiddle htstart htend hseas <<<"$hfields"
-            if [[ "$hidx" == "$idx" && "$hseas" == "$seas" ]]; then
-                histfile=$cand
+    for file in "$histidxdir/$idx/$freq"/*.nc; do
+        [[ -e $file ]] || continue
+        if hfields=$(parse_fname "${file##*/}"); then
+            IFS=$'\t' read -r hidx hmiddle htstart htend hperiod <<<"$hfields"
+            if [[ "$hperiod" == "$period" ]]; then
+                histfile=$file
                 break
             fi
         fi
     done
 
     if [[ -z "$histfile" ]]; then
-        echo "  WARNING: no historical file for $idx${seas:+ ($seas)}; skipping" >&2
+        echo "  WARNING: no historical file for $idx${period:+ ($period)}; skipping" >&2
         continue
     fi
 
     echo "$idx${seas:+ ($seas)}"
 
-    catfile=$catdir/${idx}${seas:+_$seas}.nc
+    catsubdir=$catdir/$idx/$freq
+    mkdir -p "$catsubdir"
+    catfile=$catsubdir/${idx}${seas:+_$seas}.nc
     ncrcat -O "$histfile" "$scenfile" "$catfile"
 
     outbase=${idx}_${middle}
     tag="${htstart}-${tend}${seas:+_$seas}"
-    cdo runmean,21 "$catfile" "$outdir/${outbase}_21yr_${tag}.nc"
-    cdo runmean,31 "$catfile" "$outdir/${outbase}_31yr_${tag}.nc"
+    freqdir=$outdir/$idx/$freq
+    mkdir -p "$freqdir"
+    cdo runmean,21 "$catfile" "$freqdir/${outbase}_21yr_${tag}.nc"
+    cdo runmean,31 "$catfile" "$freqdir/${outbase}_31yr_${tag}.nc"
 done
