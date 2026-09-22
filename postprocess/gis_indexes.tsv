@@ -65,8 +65,8 @@ TX	yearmean				TX	Mean daily Tmax	Mean of daily maximum near-surface air tempera
 TXn	yearmin				TX	Coolest daytime high	Coldest daily maximum temperature	air_temperature	time: maximum within days time: minimum over days	temperature: on_scale	~
 TXx	yearmax				TX	Hottest daytime high	Hottest daily maximum temperature	air_temperature	time: maximum within days time: maximum over days	temperature: on_scale	~
 ETR	sub				TXx+TNn	Extreme temperature range	Max of Tmax minus min of Tmin over the period	air_temperature	time: range within years	temperature: difference	~
-WBGT	yearmean			degF	wbgt	Mean WBGT	Mean wet-bulb globe temperature		time: mean		~
-WBGT82F	yearsum -gec,$threshold	82	degF	days	wbgt	Green flag days	Count of elevated threat days (WBGT > 82 °F)				~
-WBGT85F	yearsum -gec,$threshold	85	degF	days	wbgt	Yellow flag days	Count of moderate threat days (WBGT > 85 °F)				~
-WBGT88F	yearsum -gec,$threshold	88	degF	days	wbgt	Red flag days	Count of high threat days (WBGT > 88 °F)				~
-WBGT90F	yearsum -gec,$threshold	90	degF	days	wbgt	Black flag days	Count of extreme threat days (WBGT > 90 °F)				~
+WBGT	yearmean			degF	WBGT	Mean WBGT	Mean wet-bulb globe temperature		time: mean		~
+WBGT82F	yearsum -gec,$threshold	82	degF	days	WBGT	Green flag days	Count of elevated threat days (WBGT > 82 °F)				~
+WBGT85F	yearsum -gec,$threshold	85	degF	days	WBGT	Yellow flag days	Count of moderate threat days (WBGT > 85 °F)				~
+WBGT88F	yearsum -gec,$threshold	88	degF	days	WBGT	Red flag days	Count of high threat days (WBGT > 88 °F)				~
+WBGT90F	yearsum -gec,$threshold	90	degF	days	WBGT	Black flag days	Count of extreme threat days (WBGT > 90 °F)				~

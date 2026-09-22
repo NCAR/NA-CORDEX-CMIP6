@@ -23,12 +23,13 @@ to add new indexes is most easily done in a spreadsheet.)  Use
 
 Generates six commandfiles that must be run in this order:
 
-  concat.cmd   - ncrcat's each variable's per-simulation input files into
-                 a single file per variable+simulation.
+  units.cmd    - Changes units (temp -> degC,degF; pr -> in/mm day-1)
+                 to those needed by various indexes.  Variables in
+                 original units are passed through with symlinks.
 
-  units.cmd    - Converts base variables into the unit-variants used by
-                 some indexes (see UNIT_VARS below for details) via
-                 ncap2's udunits function.  Also computes DTR = TX - TN.
+  concat.cmd   - ncrcat's each variable's per-simulation units.cmd
+                 outputs (or passthrough symlinks) into a single file
+                 per variable+simulation.
 
   split.cmd    - `cdo splitseas` / `cdo splitmon` on each units.cmd
                  output, producing DJF/MAM/JJA/SON and 01-12 files
@@ -36,32 +37,36 @@ Generates six commandfiles that must be run in this order:
 
   indexes.cmd  - Runs each index's `formula` against the annual,
                  seasonal, and monthly versions of its input variable(s).
-                 Writes final index files directly to OUTDIR.  Commands
-                 are bundled by (index, tag) into indexes/<idx>.<tag>.cmd
-                 subfiles (one command per simulation each); indexes.cmd
-                 itself just contains one `csh <subfile>` line per bundle,
-                 to stay under the scheduler's total-task limit.
+                 Writes final index files directly to OUTDIR.
 
   derived.cmd  - Indexes computed from other indexes rather than
-                 from a base variable: ETR = TXx - TNn, SDII = PTOT / R1mm.
-                 Also writes directly to OUTDIR.
+                 from a base variable, e.g. ETR = TXx - TNn,
+                 SDII = PTOT / R1mm. Also writes directly to OUTDIR.
 
   cleanup.cmd  - Applies corrected CF metadata to each indexes.cmd/
                  derived.cmd output file IN PLACE via clean_index.sh.
-                 (No separate raw/clean copy needed anymore, since
-                 extracting a specific variable is no longer required.)
-                 Bundled the same way, into cleanup/<idx>.<tag>.cmd.
+
+Note: to stay under the scheduler's limit on total tasks, some steps have
+tasks bundled together into sub-commandfiles that are run serially.
+Commands are bundled by (index, tag) into <step>/<index>.<tag>.cmd, and
+<step>.cmd just contains one `csh <subfile>` line per bundle.
 
 Directory layout under OUTDIR:
-  tmp/               All intermediate files (concat, units, split) --
-                      can be removed once cleanup.cmd is done.
+  tmp/units/<var>/   Per-input-file, unit-converted (or symlinked)
+                      files, keyed by OUTPUT var name.
+  tmp/concat/<var>/  Per-simulation concatenated files, keyed by var.
+  tmp/split/<var>/{seas,mon}/
+                      Per-simulation seasonal/monthly split files.
+  tmp/               (all of the above) -- can be removed once
+                      cleanup.cmd is done.
   <idx>/<freq>/      Outputs grouped by index & annual/seasonal/monthly
 
 Directory layout under CMDDIR:
-  indexes.cmd, cleanup.cmd  - dispatcher files: one `csh <subfile>` line
-                              per (index, tag) bundle.
-  indexes/, cleanup/        - the bundled subfiles themselves, one command
-                              per simulation for that (index, tag).
+  units.cmd, indexes.cmd, cleanup.cmd
+                              - dispatcher files: one `csh <subfile>`
+                              line per bundle (units: (outvar, middle);
+                              indexes/cleanup: (index, tag)).
+  units/, indexes/, cleanup/ - the bundled subfiles themselves.
 
 See gis_indexes.tsv in SETUPDIR for TSV column documentation.
 
@@ -383,8 +388,8 @@ def main():
     # concat/units/split/derived stay flat, one commandfile each.
     # indexes/cleanup get bundled by (index, tag) to stay under PBS's
     # total-task limit -- see Bundler.
-    FLAT_CMDFILES = ["concat", "units", "split", "derived"]
-    BUNDLED_CMDFILES = ["indexes", "cleanup"]
+    FLAT_CMDFILES = ["concat", "split", "derived"]
+    BUNDLED_CMDFILES = ["units", "indexes", "cleanup"]
 
     cmd_paths = {name: cmddir / f"{name}.cmd" for name in FLAT_CMDFILES}
     cmd_files = {k: open(v, "w") for k, v in cmd_paths.items()}
@@ -450,12 +455,70 @@ def process_simulation(middle, varfiles, active_rows, active_derived,
     all_files = [f for files in varfiles.values() for f in files]
     ts = sim_timespan(sorted(all_files, key=lambda f: f.stem.split("_")[-1]))
 
-    # -- concat: one file per raw variable actually present --------------
-    concat_files = {}
-    for var, files in varfiles.items():
-        out = tmpdir / f"{var}_{middle}_{ts}.nc"
+    # -- units: per-input-file unit conversion happens before concat
+    #    to avoid memory problems.
+    #
+    # units_dir[outvar] == list of converted per-file Paths, file-index-
+    #    aligned with varfiles[basevar], used by concat step
+
+    # If concat output already exists, we don't need to redo units
+    def concat_done(outvar):
+        out = tmpdir / "concat" / outvar / f"{outvar}_{middle}_{ts}.nc"
+        return not FORCE and out.exists()
+
+    # units_dir[outvar] contains the paths used in the concat step below,
+    # which needs them to tell whether or not to generate the units &
+    # concat commands.
+    units_dir = {}
+    for basevar, outs in UNIT_VARS.items():
+        if basevar not in varfiles:
+            continue
+        relabel = RELABEL_UNITS.get(basevar)
+
+        for outvar, unit in outs:
+            vardir = tmpdir / "units" / outvar
+            outfiles = [vardir / f.name for f in varfiles[basevar]]
+            units_dir[outvar] = outfiles
+
+            if concat_done(outvar):
+                continue
+            vardir.mkdir(parents=True, exist_ok=True)
+            for f, out in zip(varfiles[basevar], outfiles):
+                script_parts = []
+                if relabel:
+                    script_parts.append(f'{basevar}@units="{relabel}"')
+                script_parts.append(f'{outvar}=udunits({basevar},"{unit}")')
+                script_parts.append(f'{outvar}@units="{unit}"')
+                script = "; ".join(script_parts)
+                # Note: output file still has basevar; -v in concat drops it
+                if FORCE or not out.exists():
+                    cmd_files["units"].add(
+                        outvar, middle, f"ncap2 -O -s '{script}' {f} {out}")
+
+    # Symlink files that don't need units conversion
+    for var in PASSTHROUGH_VARS:
+        if var not in varfiles:
+            continue
+        vardir = tmpdir / "units" / var
+        links = [vardir / f.name for f in varfiles[var]]
+        units_dir[var] = links
+
+        if concat_done(var):
+            continue
+        vardir.mkdir(parents=True, exist_ok=True)
+        for f, link in zip(varfiles[var], links):
+            if not link.exists():
+                link.symlink_to(f.resolve())
+
+    # -- concat: one file per output variable actually present -----------
+    # -v drops the original input variable still hanging around after units
+    unit_files = {}
+    for outvar, files in units_dir.items():
+        cdir = tmpdir / "concat" / outvar
+        cdir.mkdir(parents=True, exist_ok=True)
+        out = cdir / f"{outvar}_{middle}_{ts}.nc"
         indir = files[0].parent
-        concat = f"ncrcat -O -p {indir} -o {out}"
+        concat = f"ncrcat -O -v {outvar} -p {indir} -o {out}"
         loop = nco_loop_spec(files)
         if loop:
             first, n, ndigits = loop
@@ -464,35 +527,7 @@ def process_simulation(middle, varfiles, active_rows, active_derived,
         else:
             filenames = " ".join(f.name for f in files)
             emit(cmd_files["concat"], out, f"{concat} {filenames}")
-        concat_files[var] = out
-
-    # -- units: derive index-native variables -----------------------
-    # unit_files[outvar] -> path to the annual (unsplit) units-converted file
-
-    unit_files = {}
-    for basevar, outs in UNIT_VARS.items():
-        if basevar not in concat_files:
-            continue
-        cfile = concat_files[basevar]
-        relabel = RELABEL_UNITS.get(basevar)
-        outfiles = [tmpdir / f"{vout}_{middle}_{ts}.nc" for vout, unit in outs]
-
-        parts = []
-        if relabel:
-            parts.append(f'ncatted -a units,{basevar},o,c,"{relabel}" {cfile}')
-        for (outvar, unit), out in zip(outs, outfiles):
-            script = (f'{outvar}=udunits({basevar},"{unit}");' +
-                      f'{outvar}@units="{unit}"')
-            parts.append(f"ncap2 -O -v -s '{script}' {cfile} {out}")
-
-        emit_multi(cmd_files["units"], outfiles, "; ".join(parts))
-
-        for (outvar, _unit), unitfile in zip(outs, outfiles):
-            unit_files[outvar] = unitfile
-
-    for var in PASSTHROUGH_VARS:
-        if var in concat_files:
-            unit_files[var] = concat_files[var]
+        unit_files[outvar] = out
 
 
     # -- split: splitseas/splitmon on each units.cmd output ---------------
