@@ -118,16 +118,24 @@ ncks -h -O -7 --hdr_pad $padding "$outfile" "$outfile"
 ncatted -h -a tracking_id,global,d,, "$outfile"
 
 # ---------------------------------------------------------------------------
-# Step 3: Add threshold scalar coordinate, if applicable.  th_units is
-# recorded explicitly in the TSV, so no unit-guessing is needed here.
+# Step 3: Add threshold scalar coordinate(s), if applicable.
 # ---------------------------------------------------------------------------
 
-if [[ -n "$threshold" ]]; then
-    ncap2 -h -A -s "threshold=double(${threshold})" "$outfile"
-    ncatted -h -a units,threshold,o,c,"${th_units}" "$outfile"
+## TODO: get stdname of input_var and set as stdname of threshold/range
+## (but currently, some of them don't have a stdname)
 
-    # Append "threshold" to the data variable's coordinates attribute
-    ncatted -h -a coordinates,"${raw_var}",a,c," threshold" "$outfile"
+if [[ -n "$threshold" ]]; then
+    if [[ "$threshold" == *,* ]]; then
+       # if there's a comma, it's actually a range
+       IFS=, read -r rmin rmax <<< "${threshold}"
+       ncap2 -h -A -s "rmin=double(${rmin});rmax=double(${rmax})" "$outfile"
+       ncatted -h -a units,'^(rmin|rmax)$',o,c,"${th_units}" "$outfile"
+       ncatted -h -a coordinates,"${raw_var}",a,c," rmin rmax" "$outfile"
+    else
+      ncap2 -h -A -s "threshold=double(${threshold})" "$outfile"
+      ncatted -h -a units,threshold,o,c,"${th_units}" "$outfile"
+      ncatted -h -a coordinates,"${raw_var}",a,c," threshold" "$outfile"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
