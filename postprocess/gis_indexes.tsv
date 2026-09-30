@@ -12,9 +12,9 @@ TPCP	yearsum			inches	precip	Total precipitation	Total precipitation (all days)	
 PP	yearmean				psl	Sea level pressure	Mean sea level pressure	air_pressure_at_mean_sea_level	time: mean		~
 SDII	div	1	mm/day	mm/day	PTOT+R1mm	Simple daily intensity index	Mean precipitation on wet days (RR >= 1 mm)	lwe_precipitation_rate	time: average over days (wet days)		~
 CDD	yearmax -consects -ltc,$threshold	1	mm/day	days	RR	Consecutive dry days	Longest run of consecutive days with RR < 1 mm	spell_length_of_days_with_lwe_thickness_of_precipitation_amount_below_threshold			~
-CDDn	yearsum -gtc 5 -consects -ltc,$threshold	1	mm/day	1	RR	Dry spells	Count of runs of > 5 consecutive days with RR < 1 mm				~
+CDDn	yearsum -gtc,5 -consects -ltc,$threshold	1	mm/day	1	RR	Dry spells	Count of runs of > 5 consecutive days with RR < 1 mm				~
 CWD	yearmax -consects -gec,$threshold	1	mm/day	days	RR	Consecutive wet days	Longest run of consecutive days with RR >= 1 mm	spell_length_of_days_with_lwe_thickness_of_precipitation_amount_above_threshold			~
-CWDn	yearsum -gtc 5 -consects -gec,$threshold	1	mm/day	1	RR	Wet spells	Count of runs of > 5 consecutive days with RR >= 1mm				~
+CWDn	yearsum -gtc,5 -consects -gec,$threshold	1	mm/day	1	RR	Wet spells	Count of runs of > 5 consecutive days with RR >= 1mm				~
 PTOT	yearsum -setrtomiss,,$threshold	1	mm/day	mm	RR	Total wet-day precipitation	Sum of precipitation on days with RR >= 1mm 	lwe_precipitation_amount	time: sum within days time: sum over days (wet days)		~
 R10mm	yearsum -gec,$threshold	10	mm/day	days	RR	Heavy precipitation days	Count of days with RR >= 10 mm	number_of_days_with_lwe_thickness_of_precipitation_amount_above_threshold	time: sum within days time: sum over days		~
 R1mm	yearsum -gec,$threshold	1	mm/day	days	RR	Precipitation days	Count of days with RR >= 1 mm	number_of_days_with_lwe_thickness_of_precipitation_amount_above_threshold	time: sum within days time: sum over days		~
@@ -51,14 +51,14 @@ TN70F	yearsum -gtc,$threshold	70	degF	days	Tmin	Nights above 70°F	Count of days
 TN75F	yearsum -gtc,$threshold	75	degF	days	Tmin	Nights above 75°F	Count of days with Tmin > 75°F	number_of_days_with_air_temperature_above_threshold			~
 TN80F	yearsum -gtc,$threshold	80	degF	days	Tmin	Nights above 80°F	Count of days with Tmin > 80°F	number_of_days_with_air_temperature_above_threshold			~
 CFD	yearmax -consects -ltc,$threshold	0	degC	days	TN	Consecutive frost days	Longest run of consecutive days with Tmin < 0°C	spell_length_of_days_with_air_temperature_below_threshold	time: minimum within days time: maximum over days		~
-CFDn	yearsum -gtc 5 -consects -ltc,$threshold	0	degC	1	TN	Frost spells	Count of runs of > 5 consecutive days with Tmin < 0°C				~
+CFDn	yearsum -gtc,5 -consects -ltc,$threshold	0	degC	1	TN	Frost spells	Count of runs of > 5 consecutive days with Tmin < 0°C				~
 FD	yearsum -ltc,$threshold	0	degC	days	TN	Frost days	Count of days with Tmin < freezing (0°C / 32°F)	number_of_days_with_air_temperature_below_threshold	time: minimum within days time: sum over days		~
 TN	yearmean				TN	Mean daily Tmin	Mean daily minimum near-surface air temperature	air_temperature	time: minimum within days time: mean over days	temperature: on_scale	~
 TNn	yearmin				TN	Coldest nighttime low	Coldest daily minimum temperature	air_temperature	time: minimum within days time: minimum over days	temperature: on_scale	~
 TNx	yearmax				TN	Warmest nightime low	Hottest daily minimum temperature	air_temperature	time: minimum within days time: maximum over days	temperature: on_scale	~
 TR	yearsum -gtc,$threshold	20	degC	days	TN	Tropical nights	Count of nights with Tmin > 20°C	number_of_days_with_air_temperature_above_threshold	time: minimum within days time: sum over days		~
 CSU	yearmax -consects -gtc,$threshold	25	degC	days	TX	Consecutive summer days	Longest run of consecutive days with Tmax > 25°C	spell_length_of_days_with_air_temperature_above_threshold	time: minimum within days time: maximum over days		~
-CSUn	yearsum -gtc 5 -consects -gtc,$threshold	25	degC	1	TX	Summer heat spells	Count of runs of > 5 consecutive days with Tmax > 25°C				~
+CSUn	yearsum -gtc,5 -consects -gtc,$threshold	25	degC	1	TX	Summer heat spells	Count of runs of > 5 consecutive days with Tmax > 25°C				~
 ID	yearsum -ltc,$threshold	0	degC	days	TX	Ice days	Count of days with Tmax < 0°C	number_of_days_with_air_temperature_below_threshold	time: maximum within days time: sum over days		~
 SU	yearsum -gtc,$threshold	25	degC	days	TX	Summer days	Count of days with Tmax > 25°C	number_of_days_with_air_temperature_above_threshold	time: maximum within days time: sum over days		~
 TX	yearmean				TX	Mean daily Tmax	Mean of daily maximum near-surface air temperature (°C)	air_temperature	time: maximum within days time: mean over days	temperature: on_scale	~
