@@ -19,6 +19,9 @@
 #   --copy FILE         Additional file/dir to copy (can be repeated)
 #   --chain             Submit jobs as a dependency chain (each waits for previous)
 #   --final FILE        Submit FILE as a final job dependent on all others (mutually exclusive with --chain)
+#   --skip-missing      Drop any missing or empty commandfiles (including
+#                       --final) before proceeding, with a message for each.
+#                       Useful for chains where some steps are already done.
 #   --dry               Print commands without executing
 #   --sleep N           Delay in seconds between job submissions (default: 1)
 #   --wall TIME         Walltime (default: 00:20:00)
@@ -57,6 +60,7 @@ passthrough=()
 queue="casper"
 runpath=""
 scripts_dir="$(dirname "$(realpath "$0")")"
+skipmissing=0
 sleep=1
 walltime="00:20:00"
 
@@ -181,6 +185,10 @@ while [[ $# -gt 0 ]]; do
             join="$2"
             shift 2
             ;;
+        --skip-missing)
+            skipmissing=1
+            shift
+            ;;
         --dry)
             dry=1
             shift
@@ -201,6 +209,33 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# With --skip-missing, drop missing or empty commandfiles up front, so
+# that later validation and the dependency chain only see what will run.
+# prev_jobid is only set by submitted jobs, so chains stay correct.
+if [[ $skipmissing -eq 1 ]]; then
+    nreq=${#cmdfiles[@]}
+    kept=()
+    for cf in "${cmdfiles[@]}"; do
+        if [[ -s "$cf" ]]; then
+            kept+=("$cf")
+        else
+            echo "Skipping missing/empty commandfile: $cf" >&2
+        fi
+    done
+    cmdfiles=("${kept[@]}")
+
+    if [[ -n "$finalfile" && ! -s "$finalfile" ]]; then
+        echo "Skipping missing/empty final commandfile: $finalfile" >&2
+        finalfile=""
+    fi
+
+    # Nothing left to run is not an error; the final job is moot too
+    if [[ $nreq -gt 0 && ${#cmdfiles[@]} -eq 0 ]]; then
+        echo "No commandfiles left to submit." >&2
+        exit 0
+    fi
+fi
 
 # Validate required arguments
 [[ -z "$runpath" ]] && die "--run is required"
