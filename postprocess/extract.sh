@@ -26,13 +26,13 @@
 
 set -euo pipefail
 
-# Pressure-level variables are run as '+'-joined groups (one job per
-# field per year, all 13 levels); postproc_engine.py loads the WRF files
-# once per group and writes each level to its own <var>.6hr directory.
+# Pressure-level variables: one job per level per year.  (A '+'-joined
+# group, e.g. ta1000+ta925, would run several levels in one job that
+# loads the WRF files once, but takes proportionally longer.)
 PLEVS="1000 925 850 750 700 600 500 400 300 250 200 150 100"
-plev_group() {
+plev_list() {
     local v="$1" out="" lev
-    for lev in $PLEVS; do out+="${out:++}${v}${lev}"; done
+    for lev in $PLEVS; do out+="${out:+,}${v}${lev}"; done
     echo "$out"
 }
 
@@ -49,8 +49,8 @@ clt,hfls,hfss,rlds,rlus,rsus,\
 rsdt,rsut,rlut,rsdsdiff,rsdsdir,alb,ts,zmla,ustar,\
 hfso,lai,clivi,capemu,cinmu,li,zlfc,\
 ua50m,va50m,ua100m,va100m,ua150m,va150m,\
-$(plev_group ua),$(plev_group va),$(plev_group ta),\
-$(plev_group zg),$(plev_group hus),$(plev_group hur),\
+$(plev_list ua),$(plev_list va),$(plev_list ta),\
+$(plev_list zg),$(plev_list hus),$(plev_list hur),\
 wbgt"
 
 usage() {
