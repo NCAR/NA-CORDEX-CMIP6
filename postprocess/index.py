@@ -21,6 +21,11 @@ are read from gis_indexes.tsv in SETUPDIR.  (Note: modifying the TSV
 to add new indexes is most easily done in a spreadsheet.)  Use
 --indexes or --preset to generate a subset of indexes.
 
+Presets are defined in the TSV: every column to the left of 'index' is
+a preset, named by its column header.  A row belongs to a preset if its
+cell in that column is non-blank (any non-whitespace content counts).
+Preset columns with a blank header are ignored with a warning.
+
 Generates six commandfiles that must be run in this order:
 
   units.cmd    - Changes units (temp -> degC,degF; pr -> in/mm day-1)
@@ -121,27 +126,16 @@ DERIVED = {
 SEASONS = ["DJF", "MAM", "JJA", "SON"]
 MONTHS  = [f"{m:02d}" for m in range(1, 13)]
 
-# Named subsets of indexes selectable via --preset.  Add new presets here.
-PRESETS = {
-    "gis": {"CDD", "CWD", "PTOT", "R10mm", "R1mm", "R20mm",
-            "Rx1day", "Rx5day", "Rx5dayN", "SDII",
-            "HMDX", "TAVG", "CD65F", "HD65F", "FD", "ID",
-            "TMAX", "TX90F", "TX95F", "TX100F", "TX105F",
-            "TMIN", "FD", "TN65F", "TN70F", "TN75F", "TN80F",
-            "WBGT", "WFDnon", "WFDwht", "WFDgrn",
-            "WFDyel", "WFDred", "WFDblk"},
-    "denver": { "DP01", "DP100", "DP200", "DP300", "TPCP",
-                "CDD", "CDDn", "CWD", "CWDn", "Rx1day", "Rx5day",
-                "TAVG", "CD65F", "HD65F",
-                "TMAX", "TX90F", "TX95F", "TX100F",
-                "HW90F", "HW95F", "LHW90F", "LHW95F",
-                "TMIN", "FD", "HFD", "ID",
-                "HW68F", "HW70F", "TN68F", "TN70F"},
-}
-
 CMDFILES = ["concat", "units", "split", "indexes", "derived", "cleanup"]
 
 END_SENTINEL = "~"  # value for the '_end' guard column
+
+# Columns that must be present in the TSV header.  Some are used only by
+# clean_index.sh, but are checked here so problems surface before any
+# commandfiles are run.
+REQUIRED_COLS = ["index", "formula", "threshold", "th_units", "out_units",
+                 "input_vars", "long_name", "description", "standard_name",
+                 "cell_methods", "units_metadata", "_end"]
 
 # Set after argument parsing; effectively read-only thereafter.
 FORCE = False
@@ -168,6 +162,66 @@ def check_end_column(path):
                 sys.exit(f"Error: {path} line {reader.line_num}: '_end' "
                          f"guard column missing or corrupted (row may be "
                          f"missing trailing columns)")
+
+
+def load_tsv(path):
+    """Read and validate the index TSV.  Returns (rows, presets).
+
+    rows:    list of dicts, values whitespace-stripped.
+    presets: {name: set of index names}, from columns left of 'index'.
+    """
+    check_end_column(path)
+    with open(path, newline="") as fh:
+        reader = csv.DictReader(fh, delimiter="\t")
+        cols = reader.fieldnames
+        rows = list(reader)
+    for row in rows:
+        for k in row:
+            if row[k] is not None:
+                row[k] = row[k].strip()
+
+    missing = [c for c in REQUIRED_COLS if c not in cols]
+    if missing:
+        sys.exit(f"Error: {path} missing required column(s): "
+                 f"{', '.join(missing)}")
+
+    # Blank headers all collapse to the same "" key in DictReader, so they
+    # can't be told apart; only named duplicates are an error.
+    named = [c.strip() for c in cols if c.strip()]
+    dups = sorted({c for c in named if named.count(c) > 1})
+    if dups:
+        sys.exit(f"Error: {path} has duplicate column name(s): "
+                 f"{', '.join(dups)}")
+
+    names = [row["index"] for row in rows]
+    if "" in names:
+        sys.exit(f"Error: {path} has row(s) with a blank 'index' value")
+    dups = sorted({n for n in names if names.count(n) > 1})
+    if dups:
+        sys.exit(f"Error: {path} has duplicate index name(s): "
+                 f"{', '.join(dups)}")
+
+    # threshold must be blank, a number, or a "min,max" range (see
+    # clean_index.sh); otherwise it would only fail late, in cleanup.cmd.
+    for row in rows:
+        th = row["threshold"]
+        try:
+            vals = [float(v) for v in th.split(",")] if th else []
+        except ValueError:
+            vals = None
+        if vals is None or len(vals) > 2:
+            sys.exit(f"Error: {path} index {row['index']}: invalid "
+                     f"threshold {th!r} (expected number or min,max)")
+
+    pcols = cols[:cols.index("index")]
+    for i, c in enumerate(pcols):
+        if not c.strip():
+            print(f"Warning: {path} preset column {i + 1} has a blank "
+                  f"header; ignoring it", file=sys.stderr)
+    presets = {c.strip(): {row["index"] for row in rows if row[c].strip()}
+               for c in pcols if c.strip()}
+
+    return rows, presets
 
 
 # ---------------------------------------------------------------------------
@@ -327,8 +381,9 @@ def main():
     sel.add_argument("--indexes", metavar="ind1,ind2,...",
                     help="Only generate these indexes (comma-separated, "
                          "matching the 'index' column). Default: all rows.")
-    sel.add_argument("--preset", choices=sorted(PRESETS),
-                    help="Only generate a named preset subset of indexes.")
+    sel.add_argument("--preset", metavar="NAME",
+                    help="Only generate a named preset subset of indexes "
+                         "(a column left of 'index' in the TSV).")
     args = ap.parse_args()
 
     indir    = args.indir.resolve()
@@ -342,18 +397,18 @@ def main():
         sys.exit(f"Error: SETUPDIR not found: {setupdir}")
     if not tsv.is_file():
         sys.exit(f"Error: gis_indexes.tsv not found in SETUPDIR: {tsv}")
-    check_end_column(tsv)
-
-    with open(tsv, newline="") as fh:
-        rows = list(csv.DictReader(fh, delimiter="\t"))
-    for row in rows:
-        for k in row:
-            if row[k] is not None:
-                row[k] = row[k].strip()
+    rows, presets = load_tsv(tsv)
 
     # Resolve which indexes to generate.  selected=None means "all rows".
     if args.preset:
-        selected = set(PRESETS[args.preset])
+        if args.preset not in presets:
+            avail = ", ".join(sorted(presets)) or "(none defined)"
+            sys.exit(f"Error: unknown preset {args.preset!r}; "
+                     f"available: {avail}")
+        selected = presets[args.preset]
+        if not selected:
+            print(f"Warning: preset {args.preset!r} selects no indexes",
+                  file=sys.stderr)
     elif args.indexes:
         selected = {s.strip() for s in args.indexes.split(",") if s.strip()}
     else:

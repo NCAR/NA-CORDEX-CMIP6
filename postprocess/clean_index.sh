@@ -54,25 +54,41 @@ indexes_tsv="$setupdir/gis_indexes.tsv"
 # ---------------------------------------------------------------------------
 # Look up the row for INDEX in gis_indexes.tsv
 # ---------------------------------------------------------------------------
-# Columns: index, formula, threshold, th_units, out_units, input_vars,
-#          long_name, description, standard_name, cell_methods,
-#          units_metadata, _end
+# Columns are located by header name, not position, since the TSV may have
+# extra columns (e.g., preset columns left of 'index').
 
-row="$(awk -F'\t' -v i="$index" 'NR>1 && $1==i {print; exit}' "$indexes_tsv")"
+declare -A col
+while IFS=$'\t' read -r name num; do
+    col[$name]=$num
+done < <(awk -F'\t' 'NR==1 {for (i=1; i<=NF; i++) if ($i != "") print $i "\t" i; exit}' \
+             "$indexes_tsv")
+
+for c in index threshold th_units out_units long_name description \
+         standard_name cell_methods units_metadata; do
+    if [[ -z "${col[$c]}" ]]; then
+        echo "Error: column '$c' missing from header of $indexes_tsv" >&2
+        exit 1
+    fi
+done
+
+row="$(awk -F'\t' -v i="$index" -v c="${col[index]}" \
+           'NR>1 && $c==i {print; exit}' "$indexes_tsv")"
 
 [[ -z "$row" ]] && {
     echo "Error: Index '$index' not found in gis_indexes.tsv" >&2
     exit 1
 }
 
-threshold=$(     echo "$row" | cut -f3)
-th_units=$(      echo "$row" | cut -f4)
-out_units=$(     echo "$row" | cut -f5)
-long_name=$(     echo "$row" | cut -f7)
-description=$(   echo "$row" | cut -f8)
-standard_name=$( echo "$row" | cut -f9)
-cell_methods=$(  echo "$row" | cut -f10)
-units_metadata=$(echo "$row" | cut -f11)
+field() { echo "$row" | cut -f"${col[$1]}"; }
+
+threshold=$(     field threshold)
+th_units=$(      field th_units)
+out_units=$(     field out_units)
+long_name=$(     field long_name)
+description=$(   field description)
+standard_name=$( field standard_name)
+cell_methods=$(  field cell_methods)
+units_metadata=$(field units_metadata)
 
 # ---------------------------------------------------------------------------
 # Discover the file's data variable name (expected: exactly one).
