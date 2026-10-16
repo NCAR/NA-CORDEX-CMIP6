@@ -1,0 +1,1518 @@
+diff --git a/postprocess/NCAR-CORDEX-CMIP6_1hr.json b/postprocess/NCAR-CORDEX-CMIP6_1hr.json
+index 70b8cf7..f0ea4fc 100644
+--- a/postprocess/NCAR-CORDEX-CMIP6_1hr.json
++++ b/postprocess/NCAR-CORDEX-CMIP6_1hr.json
+@@ -79,7 +79,7 @@
+         },
+         "wchill": {
+             "frequency": "1hr",
+-	    "standard_name": "wind_chill_of_air_temperature",
++            "standard_name": "wind_chill_of_air_temperature",
+             "units": "K",
+             "cell_methods": "area: mean time: point",
+             "cell_measures": "area: areacella",
+@@ -96,7 +96,7 @@
+         },
+         "heatidx": {
+             "frequency": "1hr",
+-	    "standard_name": "heat_index_of_air_temperature",
++            "standard_name": "heat_index_of_air_temperature",
+             "units": "K",
+             "cell_methods": "area: mean time: point",
+             "cell_measures": "area: areacella",
+@@ -158,6 +158,74 @@
+             "valid_max": "",
+             "ok_min_mean_abs": "",
+             "ok_max_mean_abs": ""
++        },
++        "capemu": {
++            "frequency": "1hr",
++            "standard_name": "atmosphere_convective_available_potential_energy",
++            "units": "J kg-1",
++            "cell_methods": "area: mean time: point",
++            "cell_measures": "area: areacella",
++            "long_name": "Most Unstable Convective Available Potential Energy",
++            "comment": "CAPE of the most unstable parcel in the lowest 180 hPa, from WRF AFWA diagnostics (AFWA_CAPE_MU).",
++            "dimensions": "longitude latitude time1",
++            "out_name": "capemu",
++            "type": "real",
++            "positive": "",
++            "valid_min": "",
++            "valid_max": "",
++            "ok_min_mean_abs": "",
++            "ok_max_mean_abs": ""
++        },
++        "cinmu": {
++            "frequency": "1hr",
++            "standard_name": "atmosphere_convective_inhibition",
++            "units": "J kg-1",
++            "cell_methods": "area: mean time: point",
++            "cell_measures": "area: areacella",
++            "long_name": "Most Unstable Convective Inhibition",
++            "comment": "CIN of the most unstable parcel in the lowest 180 hPa, from WRF AFWA diagnostics (AFWA_CIN_MU). Values are negative (WRF sign convention, matching cin); fully inhibited points are set to missing.",
++            "dimensions": "longitude latitude time1",
++            "out_name": "cinmu",
++            "type": "real",
++            "positive": "",
++            "valid_min": "",
++            "valid_max": "",
++            "ok_min_mean_abs": "",
++            "ok_max_mean_abs": ""
++        },
++        "alb": {
++            "frequency": "1hr",
++            "standard_name": "surface_albedo",
++            "units": "1",
++            "cell_methods": "area: mean time: point",
++            "cell_measures": "area: areacella",
++            "long_name": "Surface Albedo",
++            "comment": "Instantaneous surface albedo from WRF output (ALBEDO).",
++            "dimensions": "longitude latitude time1",
++            "out_name": "alb",
++            "type": "real",
++            "positive": "",
++            "valid_min": "",
++            "valid_max": "",
++            "ok_min_mean_abs": "",
++            "ok_max_mean_abs": ""
++        },
++        "rsdsdiff": {
++            "frequency": "1hr",
++            "standard_name": "surface_diffuse_downwelling_shortwave_flux_in_air",
++            "units": "W m-2",
++            "cell_methods": "area: mean time: point",
++            "cell_measures": "area: areacella",
++            "long_name": "Surface Diffuse Downwelling Shortwave Radiation",
++            "comment": "Instantaneous diffuse downwelling shortwave flux at the surface, from WRF output (SWDDIF).",
++            "dimensions": "longitude latitude time1",
++            "out_name": "rsdsdiff",
++            "type": "real",
++            "positive": "down",
++            "valid_min": "",
++            "valid_max": "",
++            "ok_min_mean_abs": "",
++            "ok_max_mean_abs": ""
+         }
+     }
+ }
+diff --git a/postprocess/NCAR-CORDEX-CMIP6_6hr.json b/postprocess/NCAR-CORDEX-CMIP6_6hr.json
+index c26031a..23c2503 100644
+--- a/postprocess/NCAR-CORDEX-CMIP6_6hr.json
++++ b/postprocess/NCAR-CORDEX-CMIP6_6hr.json
+@@ -10,40 +10,6 @@
+         "Conventions": "CF-1.11"
+     },
+     "variable_entry": {
+-        "rsus": {
+-            "frequency": "6hr",
+-            "standard_name": "surface_upwelling_shortwave_flux_in_air",
+-            "units": "W m-2",
+-            "cell_methods": "area: mean time: point",
+-            "cell_measures": "area: areacella",
+-            "long_name": "Surface Upwelling Shortwave Radiation",
+-            "comment": "Instantaneous upwelling shortwave flux at the surface, from WRF output (SWUPB).",
+-            "dimensions": "longitude latitude time1",
+-            "out_name": "rsus",
+-            "type": "real",
+-            "positive": "up",
+-            "valid_min": "",
+-            "valid_max": "",
+-            "ok_min_mean_abs": "",
+-            "ok_max_mean_abs": ""
+-        },
+-        "rlus": {
+-            "frequency": "6hr",
+-            "standard_name": "surface_upwelling_longwave_flux_in_air",
+-            "units": "W m-2",
+-            "cell_methods": "area: mean time: point",
+-            "cell_measures": "area: areacella",
+-            "long_name": "Surface Upwelling Longwave Radiation",
+-            "comment": "Instantaneous upwelling longwave flux at the surface, from WRF output (LWUPB).",
+-            "dimensions": "longitude latitude time1",
+-            "out_name": "rlus",
+-            "type": "real",
+-            "positive": "up",
+-            "valid_min": "",
+-            "valid_max": "",
+-            "ok_min_mean_abs": "",
+-            "ok_max_mean_abs": ""
+-        },
+         "hfls": {
+             "frequency": "6hr",
+             "standard_name": "surface_upward_latent_heat_flux",
+@@ -61,23 +27,6 @@
+             "ok_min_mean_abs": "",
+             "ok_max_mean_abs": ""
+         },
+-        "hfss": {
+-            "frequency": "6hr",
+-            "standard_name": "surface_upward_sensible_heat_flux",
+-            "units": "W m-2",
+-            "cell_methods": "area: mean time: point",
+-            "cell_measures": "area: areacella",
+-            "long_name": "Surface Upward Sensible Heat Flux",
+-            "comment": "Instantaneous surface upward sensible heat flux, from WRF output (HFX).",
+-            "dimensions": "longitude latitude time1",
+-            "out_name": "hfss",
+-            "type": "real",
+-            "positive": "up",
+-            "valid_min": "",
+-            "valid_max": "",
+-            "ok_min_mean_abs": "",
+-            "ok_max_mean_abs": ""
+-        },
+         "snm": {
+             "frequency": "6hr",
+             "standard_name": "surface_snow_melt_flux",
+@@ -196,6 +145,380 @@
+             "valid_max": "",
+             "ok_min_mean_abs": "",
+             "ok_max_mean_abs": ""
++        },
++        "hfso": {
++            "frequency": "6hr",
++            "standard_name": "downward_heat_flux_in_soil",
++            "units": "W m-2",
++            "cell_methods": "area: mean time: point",
++            "cell_measures": "area: areacella",
++            "long_name": "Downward Heat Flux at Land Surface",
++            "comment": "Instantaneous ground heat flux from WRF output (GRDFLX), positive downward into the soil.",
++            "dimensions": "longitude latitude time1",
++            "out_name": "hfso",
++            "type": "real",
++            "positive": "down",
++            "valid_min": "",
++            "valid_max": "",
++            "ok_min_mean_abs": "",
++            "ok_max_mean_abs": ""
++        },
++        "zlfc": {
++            "frequency": "6hr",
++            "standard_name": "atmosphere_level_of_free_convection_wrt_surface",
++            "units": "m",
++            "cell_methods": "area: mean time: point",
++            "cell_measures": "area: areacella",
++            "long_name": "Height of Level of Free Convection",
++            "comment": "Level of free convection above ground level, from WRF AFWA diagnostics (AFWA_ZLFC). Points with no LFC are set to missing.",
++            "dimensions": "longitude latitude time1",
++            "out_name": "zlfc",
++            "type": "real",
++            "positive": "",
++            "valid_min": "",
++            "valid_max": "",
++            "ok_min_mean_abs": "",
++            "ok_max_mean_abs": ""
++        },
++        "lai": {
++            "frequency": "6hr",
++            "standard_name": "leaf_area_index",
++            "units": "1",
++            "cell_methods": "area: mean where land time: point",
++            "cell_measures": "area: areacella",
++            "long_name": "Leaf Area Index",
++            "comment": "Leaf area index from WRF output (LAI).",
++            "dimensions": "longitude latitude time1",
++            "out_name": "lai",
++            "type": "real",
++            "positive": "",
++            "valid_min": "",
++            "valid_max": "",
++            "ok_min_mean_abs": "",
++            "ok_max_mean_abs": ""
++        },
++        "ustar": {
++            "frequency": "6hr",
++            "standard_name": "magnitude_of_surface_friction_velocity_in_air",
++            "units": "m s-1",
++            "cell_methods": "area: mean time: point",
++            "cell_measures": "area: areacella",
++            "long_name": "Surface Friction Velocity",
++            "comment": "Instantaneous friction velocity from WRF surface layer similarity theory (UST).",
++            "dimensions": "longitude latitude time1",
++            "out_name": "ustar",
++            "type": "real",
++            "positive": "",
++            "valid_min": "",
++            "valid_max": "",
++            "ok_min_mean_abs": "",
++            "ok_max_mean_abs": ""
++        },
++        "hur1000": {
++            "frequency": "6hr",
++            "standard_name": "relative_humidity",
++            "units": "%",
++            "cell_methods": "area: mean time: point",
++            "cell_measures": "area: areacella",
++            "long_name": "Relative Humidity at 1000hPa",
++            "comment": "Relative humidity at 1000 hPa from WRF pressure-level diagnostics (RH_PL).",
++            "dimensions": "longitude latitude time1 p1000",
++            "out_name": "hur1000",
++            "type": "real",
++            "positive": "",
++            "valid_min": "",
++            "valid_max": "",
++            "ok_min_mean_abs": "",
++            "ok_max_mean_abs": ""
++        },
++        "hur925": {
++            "frequency": "6hr",
++            "standard_name": "relative_humidity",
++            "units": "%",
++            "cell_methods": "area: mean time: point",
++            "cell_measures": "area: areacella",
++            "long_name": "Relative Humidity at 925hPa",
++            "comment": "Relative humidity at 925 hPa from WRF pressure-level diagnostics (RH_PL).",
++            "dimensions": "longitude latitude time1 p925",
++            "out_name": "hur925",
++            "type": "real",
++            "positive": "",
++            "valid_min": "",
++            "valid_max": "",
++            "ok_min_mean_abs": "",
++            "ok_max_mean_abs": ""
++        },
++        "hur850": {
++            "frequency": "6hr",
++            "standard_name": "relative_humidity",
++            "units": "%",
++            "cell_methods": "area: mean time: point",
++            "cell_measures": "area: areacella",
++            "long_name": "Relative Humidity at 850hPa",
++            "comment": "Relative humidity at 850 hPa from WRF pressure-level diagnostics (RH_PL).",
++            "dimensions": "longitude latitude time1 p850",
++            "out_name": "hur850",
++            "type": "real",
++            "positive": "",
++            "valid_min": "",
++            "valid_max": "",
++            "ok_min_mean_abs": "",
++            "ok_max_mean_abs": ""
++        },
++        "hur750": {
++            "frequency": "6hr",
++            "standard_name": "relative_humidity",
++            "units": "%",
++            "cell_methods": "area: mean time: point",
++            "cell_measures": "area: areacella",
++            "long_name": "Relative Humidity at 750hPa",
++            "comment": "Relative humidity at 750 hPa from WRF pressure-level diagnostics (RH_PL).",
++            "dimensions": "longitude latitude time1 p750",
++            "out_name": "hur750",
++            "type": "real",
++            "positive": "",
++            "valid_min": "",
++            "valid_max": "",
++            "ok_min_mean_abs": "",
++            "ok_max_mean_abs": ""
++        },
++        "hur700": {
++            "frequency": "6hr",
++            "standard_name": "relative_humidity",
++            "units": "%",
++            "cell_methods": "area: mean time: point",
++            "cell_measures": "area: areacella",
++            "long_name": "Relative Humidity at 700hPa",
++            "comment": "Relative humidity at 700 hPa from WRF pressure-level diagnostics (RH_PL).",
++            "dimensions": "longitude latitude time1 p700",
++            "out_name": "hur700",
++            "type": "real",
++            "positive": "",
++            "valid_min": "",
++            "valid_max": "",
++            "ok_min_mean_abs": "",
++            "ok_max_mean_abs": ""
++        },
++        "hur600": {
++            "frequency": "6hr",
++            "standard_name": "relative_humidity",
++            "units": "%",
++            "cell_methods": "area: mean time: point",
++            "cell_measures": "area: areacella",
++            "long_name": "Relative Humidity at 600hPa",
++            "comment": "Relative humidity at 600 hPa from WRF pressure-level diagnostics (RH_PL).",
++            "dimensions": "longitude latitude time1 p600",
++            "out_name": "hur600",
++            "type": "real",
++            "positive": "",
++            "valid_min": "",
++            "valid_max": "",
++            "ok_min_mean_abs": "",
++            "ok_max_mean_abs": ""
++        },
++        "hur500": {
++            "frequency": "6hr",
++            "standard_name": "relative_humidity",
++            "units": "%",
++            "cell_methods": "area: mean time: point",
++            "cell_measures": "area: areacella",
++            "long_name": "Relative Humidity at 500hPa",
++            "comment": "Relative humidity at 500 hPa from WRF pressure-level diagnostics (RH_PL).",
++            "dimensions": "longitude latitude time1 p500",
++            "out_name": "hur500",
++            "type": "real",
++            "positive": "",
++            "valid_min": "",
++            "valid_max": "",
++            "ok_min_mean_abs": "",
++            "ok_max_mean_abs": ""
++        },
++        "hur400": {
++            "frequency": "6hr",
++            "standard_name": "relative_humidity",
++            "units": "%",
++            "cell_methods": "area: mean time: point",
++            "cell_measures": "area: areacella",
++            "long_name": "Relative Humidity at 400hPa",
++            "comment": "Relative humidity at 400 hPa from WRF pressure-level diagnostics (RH_PL).",
++            "dimensions": "longitude latitude time1 p400",
++            "out_name": "hur400",
++            "type": "real",
++            "positive": "",
++            "valid_min": "",
++            "valid_max": "",
++            "ok_min_mean_abs": "",
++            "ok_max_mean_abs": ""
++        },
++        "hur300": {
++            "frequency": "6hr",
++            "standard_name": "relative_humidity",
++            "units": "%",
++            "cell_methods": "area: mean time: point",
++            "cell_measures": "area: areacella",
++            "long_name": "Relative Humidity at 300hPa",
++            "comment": "Relative humidity at 300 hPa from WRF pressure-level diagnostics (RH_PL).",
++            "dimensions": "longitude latitude time1 p300",
++            "out_name": "hur300",
++            "type": "real",
++            "positive": "",
++            "valid_min": "",
++            "valid_max": "",
++            "ok_min_mean_abs": "",
++            "ok_max_mean_abs": ""
++        },
++        "hur250": {
++            "frequency": "6hr",
++            "standard_name": "relative_humidity",
++            "units": "%",
++            "cell_methods": "area: mean time: point",
++            "cell_measures": "area: areacella",
++            "long_name": "Relative Humidity at 250hPa",
++            "comment": "Relative humidity at 250 hPa from WRF pressure-level diagnostics (RH_PL).",
++            "dimensions": "longitude latitude time1 p250",
++            "out_name": "hur250",
++            "type": "real",
++            "positive": "",
++            "valid_min": "",
++            "valid_max": "",
++            "ok_min_mean_abs": "",
++            "ok_max_mean_abs": ""
++        },
++        "hur200": {
++            "frequency": "6hr",
++            "standard_name": "relative_humidity",
++            "units": "%",
++            "cell_methods": "area: mean time: point",
++            "cell_measures": "area: areacella",
++            "long_name": "Relative Humidity at 200hPa",
++            "comment": "Relative humidity at 200 hPa from WRF pressure-level diagnostics (RH_PL).",
++            "dimensions": "longitude latitude time1 p200",
++            "out_name": "hur200",
++            "type": "real",
++            "positive": "",
++            "valid_min": "",
++            "valid_max": "",
++            "ok_min_mean_abs": "",
++            "ok_max_mean_abs": ""
++        },
++        "hur150": {
++            "frequency": "6hr",
++            "standard_name": "relative_humidity",
++            "units": "%",
++            "cell_methods": "area: mean time: point",
++            "cell_measures": "area: areacella",
++            "long_name": "Relative Humidity at 150hPa",
++            "comment": "Relative humidity at 150 hPa from WRF pressure-level diagnostics (RH_PL).",
++            "dimensions": "longitude latitude time1 p150",
++            "out_name": "hur150",
++            "type": "real",
++            "positive": "",
++            "valid_min": "",
++            "valid_max": "",
++            "ok_min_mean_abs": "",
++            "ok_max_mean_abs": ""
++        },
++        "hur100": {
++            "frequency": "6hr",
++            "standard_name": "relative_humidity",
++            "units": "%",
++            "cell_methods": "area: mean time: point",
++            "cell_measures": "area: areacella",
++            "long_name": "Relative Humidity at 100hPa",
++            "comment": "Relative humidity at 100 hPa from WRF pressure-level diagnostics (RH_PL).",
++            "dimensions": "longitude latitude time1 p100",
++            "out_name": "hur100",
++            "type": "real",
++            "positive": "",
++            "valid_min": "",
++            "valid_max": "",
++            "ok_min_mean_abs": "",
++            "ok_max_mean_abs": ""
++        },
++        "ua750": {
++            "frequency": "6hr",
++            "standard_name": "eastward_wind",
++            "units": "m s-1",
++            "cell_methods": "area: mean time: point",
++            "cell_measures": "area: areacella",
++            "long_name": "Eastward Wind at 750hPa",
++            "comment": "Copied from the CORDEX-CMIP6 6hr table: 750 hPa levels are not in the data request, and setup.py would otherwise pick up the day-table entry.",
++            "dimensions": "longitude latitude time1 p750",
++            "out_name": "ua750",
++            "type": "real",
++            "positive": "",
++            "valid_min": "",
++            "valid_max": "",
++            "ok_min_mean_abs": "",
++            "ok_max_mean_abs": ""
++        },
++        "va750": {
++            "frequency": "6hr",
++            "standard_name": "northward_wind",
++            "units": "m s-1",
++            "cell_methods": "area: mean time: point",
++            "cell_measures": "area: areacella",
++            "long_name": "Northward Wind at 750hPa",
++            "comment": "Copied from the CORDEX-CMIP6 6hr table: 750 hPa levels are not in the data request, and setup.py would otherwise pick up the day-table entry.",
++            "dimensions": "longitude latitude time1 p750",
++            "out_name": "va750",
++            "type": "real",
++            "positive": "",
++            "valid_min": "",
++            "valid_max": "",
++            "ok_min_mean_abs": "",
++            "ok_max_mean_abs": ""
++        },
++        "ta750": {
++            "frequency": "6hr",
++            "standard_name": "air_temperature",
++            "units": "K",
++            "cell_methods": "area: mean time: point",
++            "cell_measures": "area: areacella",
++            "long_name": "Air Temperature at 750hPa",
++            "comment": "Copied from the CORDEX-CMIP6 6hr table: 750 hPa levels are not in the data request, and setup.py would otherwise pick up the day-table entry.",
++            "dimensions": "longitude latitude time1 p750",
++            "out_name": "ta750",
++            "type": "real",
++            "positive": "",
++            "valid_min": "",
++            "valid_max": "",
++            "ok_min_mean_abs": "",
++            "ok_max_mean_abs": ""
++        },
++        "zg750": {
++            "frequency": "6hr",
++            "standard_name": "geopotential_height",
++            "units": "m",
++            "cell_methods": "area: mean time: point",
++            "cell_measures": "area: areacella",
++            "long_name": "Geopotential Height at 750hPa",
++            "comment": "Copied from the CORDEX-CMIP6 6hr table: 750 hPa levels are not in the data request, and setup.py would otherwise pick up the day-table entry.",
++            "dimensions": "longitude latitude time1 p750",
++            "out_name": "zg750",
++            "type": "real",
++            "positive": "",
++            "valid_min": "",
++            "valid_max": "",
++            "ok_min_mean_abs": "",
++            "ok_max_mean_abs": ""
++        },
++        "hus750": {
++            "frequency": "6hr",
++            "standard_name": "specific_humidity",
++            "units": "1",
++            "cell_methods": "area: mean time: point",
++            "cell_measures": "area: areacella",
++            "long_name": "Specific Humidity at 750hPa",
++            "comment": "Copied from the CORDEX-CMIP6 6hr table: 750 hPa levels are not in the data request, and setup.py would otherwise pick up the day-table entry.",
++            "dimensions": "longitude latitude time1 p750",
++            "out_name": "hus750",
++            "type": "real",
++            "positive": "",
++            "valid_min": "",
++            "valid_max": "",
++            "ok_min_mean_abs": "",
++            "ok_max_mean_abs": ""
+         }
+     }
+ }
+diff --git a/postprocess/WORKFLOW.md b/postprocess/WORKFLOW.md
+index 2cc5647..3481e0a 100644
+--- a/postprocess/WORKFLOW.md
++++ b/postprocess/WORKFLOW.md
+@@ -230,16 +230,26 @@ https://cmiphub.dkrz.de/info/display_qc_results.html
+ ## day files get a WARN for chunksize 1 along time, which is necessary
+ ## b/c leap years + xarray can't handle different chunk sizes in a dataset
+ 
+-## Some of the variables in the NCAR-CORDEX-CMIP6_1hr.json files (fzra
+-## heatidz humidex wchill) aren't in the controlled vocabulary CMOR
+-## tables, which means that the CORDEX-CMIP6 plugin can't identify the
+-## main variable, which gives FAILs for [CDXT001] Time Chunking and
+-## [FILE003] Compression.
++## Some of the variables in the NCAR-CORDEX-CMIP6_*.json files aren't
++## in the controlled vocabulary CMOR tables, which means that the
++## CORDEX-CMIP6 plugin can't identify the main variable, which gives
++## FAILs for [CDXT001] Time Chunking and [FILE003] Compression:
++##   1hr: fzra heatidx humidex wchill wbgt utci capemu cinmu alb rsdsdiff
++##   6hr: zlfc lai ustar hur{1000..100}
+ 
+ ## We also get [CDXT001] Time Chunking FAILs for the variables that we
+-## are providing 6-hourly but are requested 1-hourly (hfls hfss rlus
+-## fsus [ua,va][50,100,150]m), because it can't find an entry for that
+-## var+freq in the CMOR tables.
++## are providing 6-hourly but are requested 1-hourly (hfls hfso li clivi
++## mrsos [ua,va][50,100,150]m), because it can't find an entry for that
++## var+freq in the CMOR tables.  (rsus, rlus and hfss are now hourly.)
++
++## Instantaneous fields labeled with CORDEX "time: mean" cell_methods,
++## because the data request takes precedence over the local tables:
++## hfls hfss rlut rsdsdir.
++
++## When re-running extract on a simulation processed before the
++## 2026-10 variable batch, delete the old rsus.6hr, rlus.6hr and
++## hfss.6hr directories (extract, format, aggregate data) first, or both
++## the 6hr and 1hr versions will flow downstream.
+ 
+ ## fzra & humidex don't have a CF standard_name (yet)
+ 
+diff --git a/postprocess/extract.sh b/postprocess/extract.sh
+index 2481441..b489935 100755
+--- a/postprocess/extract.sh
++++ b/postprocess/extract.sh
+@@ -26,20 +26,31 @@
+ 
+ set -euo pipefail
+ 
++# Pressure-level variables are run as '+'-joined groups (one job per
++# field per year, all 13 levels); postproc_engine.py loads the WRF files
++# once per group and writes each level to its own <var>.6hr directory.
++PLEVS="1000 925 850 750 700 600 500 400 300 250 200 150 100"
++plev_group() {
++    local v="$1" out="" lev
++    for lev in $PLEVS; do out+="${out:++}${v}${lev}"; done
++    echo "$out"
++}
++
+ # Default variable list for NA-CORDEX-CMIP6 postprocessing.
+ #
+ # Note: utci is produced automatically when wbgt runs; submitting utci as
+ # a standalone job will cause a file conflict. Use --vars wbgt to get both.
+ # Note also: tasmin & tasmax are produced automatically when tas is run.
+-
+ DEFAULT_VARS="fx,pr,tas,\
+ hurs,huss,ps,psl,rsds,sfcWind,uas,vas,\
+ cape,cin,prw,fzra,wchill,heatidx,humidex,\
+-evspsbl,mrro,mrros,mrso,mrsol,snw,snd,snm,\
++evspsbl,mrro,mrros,mrso,mrsol,mrsos,snw,snd,snm,snc,\
+ clt,hfls,hfss,rlds,rlus,rsus,\
++rsdt,rsut,rlut,rsdsdiff,rsdsdir,alb,ts,zmla,ustar,\
++hfso,lai,clivi,capemu,cinmu,li,zlfc,\
+ ua50m,va50m,ua100m,va100m,ua150m,va150m,\
+-ua700,ua500,ua250,va700,va500,va250,\
+-hus700,hus500,hus250,ta700,ta500,ta250,zg700,zg500,zg250,\
++$(plev_group ua),$(plev_group va),$(plev_group ta),\
++$(plev_group zg),$(plev_group hus),$(plev_group hur),\
+ wbgt"
+ 
+ usage() {
+@@ -57,7 +68,9 @@ Arguments:
+ 
+ Options:
+   --vars VAR[,VAR,...]  Comma-separated list of variables to process
+-                        (default: all supported variables)
++                        (default: all supported variables).  A '+'-joined
++                        item (e.g. ta1000+ta925) runs as one job per year
++                        that loads the WRF files once.
+   --scripts PATH        Directory containing the postprocess scripts
+                         (default: directory containing extract.sh)
+   --force               Overwrite existing output (default: skip variables
+@@ -231,7 +244,12 @@ for var in "${VARLIST[@]}"; do
+         continue
+     fi
+ 
+-    cmdfile="$CMDDIR/${var}.cmd"
++    # Grouped items get a short commandfile name: first-last member
++    if [[ "$var" == *+* ]]; then
++        cmdfile="$CMDDIR/${var%%+*}-${var##*+}.cmd"
++    else
++        cmdfile="$CMDDIR/${var}.cmd"
++    fi
+     > "$cmdfile"
+ 
+     if [[ "$var" == "fx" ]]; then
+diff --git a/postprocess/postproc_engine.py b/postprocess/postproc_engine.py
+index 78e1a82..8767013 100644
+--- a/postprocess/postproc_engine.py
++++ b/postprocess/postproc_engine.py
+@@ -15,13 +15,16 @@
+ # -----
+ 
+ # 1. This script processes a single year of data for one variable,
+-#    specified via commandline arguments.
++#    specified via commandline arguments.  Argument 4 may also be a
++#    '+'-joined group of variables (e.g. ta1000+ta925+ta850) that share
++#    a source file, accumulation flag, and cell_methods; the WRF files
++#    are then loaded once and each variable is written to its own file.
+ 
+ # argument 1 : Setup directory (contains sim.env and var_table.tsv,
+ #              generated by setup.py)
+ # argument 2 : Path to wrfoutput files (chunk directory)
+ # argument 3 : Year (int)
+-# argument 4 : Variable (CMORized var name)
++# argument 4 : Variable (CMORized var name), or '+'-joined group
+ # argument 5 : Output directory (where variable subdirs are created)
+ 
+ # 2. It creates variable subdirectories under OUTDIR (argument 5) named
+@@ -70,7 +73,7 @@ t0 = time.perf_counter()
+ setupdir    = sys.argv[1]  # setup directory (contains sim.env and var_table.tsv)
+ wrfout_path = sys.argv[2]  # path to wrf output
+ year        = sys.argv[3]  # year
+-variable    = sys.argv[4]  # variable (cmorized syntax)
++variable    = sys.argv[4]  # variable (cmorized syntax), or var1+var2+...
+ outdir      = sys.argv[5]  # output directory (variable subdirs created here)
+ 
+ os.makedirs(outdir, exist_ok=True)
+@@ -503,19 +506,20 @@ _FREQ_HOURS = {'1hr': 1, '6hr': 6, 'day': 24}
+ 
+ # Variables whose WRF fields are accumulated totals requiring
+ # differencing; the day-before file is prepended before loading.
+-_ACCUMULATED = {'pr', 'rsds', 'rlds', 'mrro', 'mrros', 'snm', 'fzra'}
++_ACCUMULATED = {'pr', 'rsds', 'rlds', 'mrro', 'mrros', 'snm', 'fzra',
++                'rsdt', 'rsut', 'rsus', 'rlus'}
+ 
+ # Which kind of file to find the variables in.  Variables not
+ # listed here default to wrfout_hour_fname (non-accumulated).
+ _FILE_VARS = {
+-    wrfout_afwa_fname: {'psl', 'cape', 'cin', 'prw', 'fzra', 'heatidx', 'wchill'},
+-    wrfout_6hr_fname:  {'snw', 'snd', 'mrso', 'mrsol', 'mrros', 'mrro',
+-                        'rsus', 'rlus', 'hfls', 'hfss', 'snm'},
+-    wrfout_pres_fname: {'ua700', 'ua500', 'ua250',
+-                        'va700', 'va500', 'va250',
+-                        'ta700', 'ta500', 'ta250',
+-                        'zg700', 'zg500', 'zg250',
+-                        'hus700', 'hus500', 'hus250'},
++    wrfout_afwa_fname: {'psl', 'cape', 'cin', 'prw', 'fzra', 'heatidx', 'wchill',
++                        'capemu', 'cinmu'},
++    wrfout_6hr_fname:  {'snw', 'snd', 'mrso', 'mrsol', 'mrsos', 'mrros', 'mrro',
++                        'hfls', 'snm', 'li', 'zlfc', 'hfso', 'clivi', 'lai',
++                        'snc', 'ustar'},
++    # all pressure-level variables (levels defined in postproc_vars.py)
++    wrfout_pres_fname: {f'{v}{lev}' for v in ('ua', 'va', 'ta', 'zg', 'hus', 'hur')
++                        for lev in _OUT_LEVELS_HPA},
+     wrfout_zlev_fname: {'ua50m', 'ua100m', 'ua150m',
+                         'va50m', 'va100m', 'va150m'},
+ }
+@@ -570,41 +574,63 @@ def get_loader(var):
+ 
+ # Call functions
+ # --------------
+-if variable in _DERIVED_FROM_TAS:
++# variable may be a single name or a '+'-joined group sharing one load.
++
++def _fail(msg):
++    print(f'Error: {msg}')
++    sys.exit(1)
++
++variables = variable.split('+')
++
++if len(variables) == 1 and variable in _DERIVED_FROM_TAS:
+     print(f'{variable} is derived from tas; run tas instead.')
+     sys.exit(0)
+ 
+-if variable not in _ALL_VARS:
+-    print(f'Error: {variable} not found in var_table')
++for v in variables:
++    if v not in _ALL_VARS:
++        _fail(f'{v} not found in var_table')
++    if get_extract_fn(v) is None:
++        _fail(f'no extract function found for {v}')
++    if len(variables) > 1 and (v in _SELF_LOADING or v in _DERIVED_FROM_TAS):
++        _fail(f'{v} cannot be run as part of a group')
++
++if variables[0] in _SELF_LOADING:
++    write_vars(get_extract_fn(variables[0])(), _PREFIX_FREQ[wrfout_hour_fname],
++               None, None)
+ else:
+-    extract_fn = get_extract_fn(variable)
+-    if extract_fn is None:
+-        print(f'Warning: no extract function found for {variable}')
+-    else:
+-        prefix    = _VAR_PREFIX.get(variable, wrfout_hour_fname)
+-        freq      = _PREFIX_FREQ[prefix]
+-        cm  = _var_table.loc[variable, 'cell_methods'] if variable not in _SELF_LOADING else None
+-        ext = is_extensive(cm)
+-        if _output_needed(variable, freq, make_fname(variable, freq, ext)):
+-            if variable in _SELF_LOADING:
+-                write_vars(extract_fn(), freq, None, None)
+-            else:
+-                _, freq_hours, accumulated = get_loader(variable)
+-                ds       = load_wrf(prefix, year, accumulated)
+-                time_da, bnds_da = _build_time_coord(year, freq_hours, cm)
+-                midx, mgaps  = _missing_time_indices(ds, freq, accumulated)
+-                write_vars(extract_fn(ds), freq, time_da, bnds_da, midx, mgaps, ext)
+-                ds.close()
+-
+-        # Derive tasmin/tasmax from the tas file.  Runs whether or not
+-        # tas was just regenerated (each derive does its own existence
+-        # check), so missing tasmin/tasmax can be filled in without
+-        # forcing tas to be rebuilt.
+-        if variable == 'tas':
+-            tas_path = os.path.join(outdir, 'tas.1hr',
+-                                    make_fname('tas', '1hr', ext))
+-            derive_tasmin(tas_path)
+-            derive_tasmax(tas_path)
++    # Every member of a group must share loader settings and cell_methods,
++    # since the dataset and time coordinate are built once.
++    loaders = {get_loader(v) for v in variables}
++    cms     = {_var_table.loc[v, 'cell_methods'] for v in variables}
++    if len(loaders) > 1 or len(cms) > 1:
++        _fail(f'group members differ in source file, accumulation, or '
++              f'cell_methods: {variable}')
++
++    prefix, freq_hours, accumulated = loaders.pop()
++    cm   = cms.pop()
++    freq = _PREFIX_FREQ[prefix]
++    ext  = is_extensive(cm)
++
++    todo = [v for v in variables
++            if _output_needed(v, freq, make_fname(v, freq, ext))]
++    if todo:
++        ds               = load_wrf(prefix, year, accumulated)
++        time_da, bnds_da = _build_time_coord(year, freq_hours, cm)
++        midx, mgaps      = _missing_time_indices(ds, freq, accumulated)
++        for v in todo:
++            write_vars(get_extract_fn(v)(ds), freq, time_da, bnds_da,
++                       midx, mgaps, ext)
++        ds.close()
++
++    # Derive tasmin/tasmax from the tas file.  Runs whether or not
++    # tas was just regenerated (each derive does its own existence
++    # check), so missing tasmin/tasmax can be filled in without
++    # forcing tas to be rebuilt.
++    if 'tas' in variables:
++        tas_path = os.path.join(outdir, 'tas.1hr',
++                                make_fname('tas', '1hr', ext))
++        derive_tasmin(tas_path)
++        derive_tasmax(tas_path)
+ 
+ print(f'postproc time: {time.perf_counter() - t0:.1f} sec')
+ mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+diff --git a/postprocess/postproc_vars.py b/postprocess/postproc_vars.py
+index 4e50949..692620a 100644
+--- a/postprocess/postproc_vars.py
++++ b/postprocess/postproc_vars.py
+@@ -353,13 +353,23 @@ def extract_mrro(ds):
+     return [('mrro', mrro)]
+ # ---------------------------------------------------
+ 
++# Hourly-accumulated radiation with integer bucket (bucket_J = 1e9)
++# ---------------------------------------------------
++def _bucket_flux(ds, acc, bucket):
++    """Mean flux (W m-2) over each hour from an accumulated WRF field
++    (J m-2) and its integer bucket counter.  Requires the day-before
++    timestep (accumulated=True in the engine), so diff gives full length."""
++    total = (ds[bucket] * 1e9) + ds[acc]
++    return total.diff(dim='time') / 3600
++
+ # Surface upwelling shortwave radiation
+ # ---------------------------------------------------
+ def extract_rsus(ds):
+-    # SWUPB units : W m-2
+-    # SWUPB description : INSTANTANEOUS UPWELLING SHORTWAVE FLUX AT BOTTOM
++    # ACSWUPB/I_ACSWUPB units: J m-2 (hourly file)
++    # ACSWUPB description: ACCUMULATED UPWELLING SHORTWAVE FLUX AT BOTTOM
++    # Replaces the former 6hr instantaneous SWUPB source.
+ 
+-    rsus = ds['SWUPB']
++    rsus = _bucket_flux(ds, 'ACSWUPB', 'I_ACSWUPB')
+ 
+     rsus = rsus.to_dataset(name='rsus').drop_attrs()
+     return [('rsus', rsus)]
+@@ -368,10 +378,11 @@ def extract_rsus(ds):
+ # Surface upwelling longwave radiation
+ # ---------------------------------------------------
+ def extract_rlus(ds):
+-    # LWUPB units : W m-2
+-    # LWUPB description : INSTANTANEOUS UPWELLING LONGWAVE FLUX AT BOTTOM
++    # ACLWUPB/I_ACLWUPB units: J m-2 (hourly file)
++    # ACLWUPB description: ACCUMULATED UPWELLING LONGWAVE FLUX AT BOTTOM
++    # Replaces the former 6hr instantaneous LWUPB source.
+ 
+-    rlus = ds['LWUPB']
++    rlus = _bucket_flux(ds, 'ACLWUPB', 'I_ACLWUPB')
+ 
+     rlus = rlus.to_dataset(name='rlus').drop_attrs()
+     return [('rlus', rlus)]
+@@ -394,6 +405,9 @@ def extract_hfls(ds):
+ def extract_hfss(ds):
+     # HFX units : W m-2
+     # HFX description : UPWARD HEAT FLUX AT THE SURFACE
++    # Now read from the hourly file (was 6hr).  Still instantaneous.
++    # Do not switch to ACHFX: float32 accumulator with no bucket loses
++    # precision late in long chunks.
+ 
+     hfss = ds['HFX']
+ 
+@@ -416,6 +430,137 @@ def extract_snm(ds):
+     return [('snm', snm)]
+ # ---------------------------------------------------
+ 
++# TOA radiation
++# ---------------------------------------------------
++def extract_rsdt(ds):
++    # ACSWDNT/I_ACSWDNT units: J m-2 (hourly file)
++    # ACSWDNT description: ACCUMULATED DOWNWELLING SHORTWAVE FLUX AT TOP
++    rsdt = _bucket_flux(ds, 'ACSWDNT', 'I_ACSWDNT')
++
++    rsdt = rsdt.to_dataset(name='rsdt').drop_attrs()
++    return [('rsdt', rsdt)]
++
++def extract_rsut(ds):
++    # ACSWUPT/I_ACSWUPT units: J m-2 (hourly file)
++    # ACSWUPT description: ACCUMULATED UPWELLING SHORTWAVE FLUX AT TOP
++    rsut = _bucket_flux(ds, 'ACSWUPT', 'I_ACSWUPT')
++
++    rsut = rsut.to_dataset(name='rsut').drop_attrs()
++    return [('rsut', rsut)]
++
++def extract_rlut(ds):
++    # OLR units: W m-2
++    # OLR description: TOA OUTGOING LONG WAVE
++    # Instantaneous (no ACLWUPT in output); CORDEX labels rlut time: mean.
++    rlut = ds['OLR']
++
++    rlut = rlut.to_dataset(name='rlut').drop_attrs()
++    return [('rlut', rlut)]
++# ---------------------------------------------------
++
++# Surface shortwave components and albedo
++# ---------------------------------------------------
++def extract_rsdsdiff(ds):
++    # SWDDIF units: W m-2
++    # SWDDIF description: Shortwave surface downward diffuse irradiance
++    rsdsdiff = ds['SWDDIF']
++
++    rsdsdiff = rsdsdiff.to_dataset(name='rsdsdiff').drop_attrs()
++    return [('rsdsdiff', rsdsdiff)]
++
++def extract_rsdsdir(ds):
++    # SWDOWN, SWDDIF units: W m-2 (instantaneous)
++    # CORDEX rsdsdir is direct radiation on a horizontal surface, so use
++    # SWDOWN - SWDDIF.  SWDDNI is direct *normal* irradiance and is not
++    # used (SWDDNI * COSZEN should approximately equal this result).
++    rsdsdir = ds['SWDOWN'] - ds['SWDDIF']
++
++    rsdsdir = rsdsdir.to_dataset(name='rsdsdir').drop_attrs()
++    return [('rsdsdir', rsdsdir)]
++
++def extract_alb(ds):
++    # ALBEDO units: 1
++    # ALBEDO description: ALBEDO
++    alb = ds['ALBEDO']
++
++    alb = alb.to_dataset(name='alb').drop_attrs()
++    return [('alb', alb)]
++# ---------------------------------------------------
++
++# Surface temperature, boundary layer, friction velocity
++# ---------------------------------------------------
++def extract_ts(ds):
++    # TSK units: K
++    # TSK description: SURFACE SKIN TEMPERATURE
++    ts = ds['TSK']
++
++    ts = ts.to_dataset(name='ts').drop_attrs()
++    return [('ts', ts)]
++
++def extract_zmla(ds):
++    # PBLH units: m
++    # PBLH description: PBL HEIGHT
++    zmla = ds['PBLH']
++
++    zmla = zmla.to_dataset(name='zmla').drop_attrs()
++    return [('zmla', zmla)]
++
++def extract_ustar(ds):
++    # UST units: m s-1
++    # UST description: U* IN SIMILARITY THEORY
++    ustar = ds['UST']
++
++    ustar = ustar.to_dataset(name='ustar').drop_attrs()
++    return [('ustar', ustar)]
++# ---------------------------------------------------
++
++# Land surface: ground heat flux, LAI, snow cover, surface soil moisture
++# ---------------------------------------------------
++def extract_hfso(ds):
++    # GRDFLX units: W m-2 (instantaneous, positive downward into soil)
++    # GRDFLX description: GROUND HEAT FLUX
++    hfso = ds['GRDFLX']
++
++    hfso = hfso.to_dataset(name='hfso').drop_attrs()
++    return [('hfso', hfso)]
++
++def extract_lai(ds):
++    # LAI units: m2 m-2 (time-varying)
++    # LAI description: LEAF AREA INDEX
++    lai = ds['LAI']
++
++    lai = lai.to_dataset(name='lai').drop_attrs()
++    return [('lai', lai)]
++
++def extract_snc(ds):
++    # SNOWC units: 1 (fraction)
++    # SNOWC description: FLAG INDICATING SNOW COVERAGE (1 FOR SNOW COVER)
++    snc = ds['SNOWC'] * 100  # fraction -> %
++
++    snc = snc.to_dataset(name='snc').drop_attrs()
++    return [('snc', snc)]
++
++def extract_mrsos(ds):
++    # SMOIS layer 1 (0-0.1 m), m3 m-3, includes frozen water
++    mrsos = ds['SMOIS'][:, 0] * _SOIL_DZ[0] * 1000  # -> kg m-2
++
++    mrsos = _apply_landmask(mrsos)
++
++    mrsos = mrsos.to_dataset(name='mrsos').drop_attrs()
++    return [('mrsos', mrsos)]
++# ---------------------------------------------------
++
++# Cloud ice water path
++# ---------------------------------------------------
++def extract_clivi(ds):
++    # IWP_TOT units: kg m-2
++    # IWP_TOT description: ICE CLOUD WATER PATH RESOLVED + UNRESOLVED
++    clivi = ds['IWP_TOT']
++
++    clivi = clivi.to_dataset(name='clivi').drop_attrs()
++    return [('clivi', clivi)]
++# ---------------------------------------------------
++
+ # Humidex
+ # ---------------------------------------------------
+ 
+@@ -446,26 +591,37 @@ _PRESS_LEVELS_PA = [100000, 92500, 85000, 75000, 70000, 60000, 50000,
+ # Map level in hPa to dimension index
+ _PLEV_INDEX = {lev // 100: i for i, lev in enumerate(_PRESS_LEVELS_PA)}
+ 
+-# Threshold below which surface pressure masking is applied (Pa).
+-# Cells where PSFC <= this value are underground at that pressure level.
+-# Only needed for 700 hPa; 500 hPa and 250 hPa are never underground
+-# given the model domain's maximum elevation (~3000 m).  
++# Levels written out (70 hPa is in the file but not requested)
++_OUT_LEVELS_HPA = [1000, 925, 850, 750, 700, 600, 500,
++                   400, 300, 250, 200, 150, 100]
++
++# WRF fills pressure-level points that are below ground with -999.
++# Anything below this threshold is treated as fill.
++_WRF_PL_FILL_THRESHOLD = -998.0
+ 
++# Surface-pressure masking for levels that can intersect terrain.
++# 500 hPa and above are never underground given the domain's maximum
++# elevation (~3000 m).
++#
+ # Pressure-level interpolation operates on the lowest model level,
+ # which is tens of meters above ground level, so it can differ from
+ # the surface pressure level by a few hPa, or more over steep
+-# terrain.  We bump the threshold up to 705 mb to be sure we're
+-# masking out all the bad pixels.
++# terrain.  Cells are masked where PSFC <= level + 5 hPa to be sure we
++# mask out all the bad pixels.
++_PSFC_MASK_LEVELS_HPA = {1000, 925, 850, 750, 700, 600}
++_PSFC_MASK_OFFSET_PA  = 500.0
+ 
+-_PSFC_MASK_THRESHOLD_700 = 70500.0
++_psfc_cache = {}
+ 
+ def _load_psfc(yr):
+     """Load surface pressure (PSFC, Pa) from wrfout_d01 files for yr.
+ 
+     wrfout_d01 is the 6-hourly file, matching the cadence of pressure-level
+     outputs.  Filenames correspond exactly to wrfout_pres_d01 except for
+-    the prefix.
++    the prefix.  Cached per year so grouped jobs load it once.
+     """
++    if yr in _psfc_cache:
++        return _psfc_cache[yr]
+     files = sorted(glob.glob(f'{wrfout_path}/{wrfout_6hr_fname}{yr}-*'))
+     if not files:
+         raise FileNotFoundError(
+@@ -485,37 +641,52 @@ def _load_psfc(yr):
+     # not the dimension itself.  This prevents the unlabelled time dimension on
+     # psfc from conflicting with the CFTimeIndex on the pressure-level data
+     # during .where().
+-    return ds_psfc.rename(dname_map_xyt).drop_vars('time', errors='ignore')
++    psfc = ds_psfc.rename(dname_map_xyt).drop_vars('time', errors='ignore')
++    _psfc_cache[yr] = psfc
++    return psfc
+ 
+-def _mask_underground_700(da, yr):
+-    """Mask gridcells underground at 700 hPa using surface pressure.
++def _mask_pres(da, raw_fields, level_hPa, yr):
++    """Set da to 1e20 wherever any raw WRF field is -999 (underground fill)
++    and, for low levels, wherever PSFC <= level + 5 hPa.
+ 
+-    Sets values to 1e20 where PSFC <= 70000 Pa (i.e., surface is at or
+-    above 700 hPa).  Called only for 700-hPa variables.
++    raw_fields are the unconverted inputs at this level, so fill points
++    are identified before conversion or rotation can disguise them.
+     """
+-    psfc = _load_psfc(yr)
+-    return da.where(psfc > _PSFC_MASK_THRESHOLD_700, 1.e20)
+-
+-# function factory for extracting generic pressure-level variables
+-def _make_pres_extract(outvar, wrf_var, level_hPa):
++    valid = raw_fields[0] > _WRF_PL_FILL_THRESHOLD
++    for raw in raw_fields[1:]:
++        valid = valid & (raw > _WRF_PL_FILL_THRESHOLD)
++    if level_hPa in _PSFC_MASK_LEVELS_HPA:
++        psfc = _load_psfc(yr)
++        valid = valid & (psfc > level_hPa * 100.0 + _PSFC_MASK_OFFSET_PA)
++    return da.where(valid, 1.e20)
++
++# function factory for extracting scalar pressure-level variables
++# convert: optional function applied to the raw field (e.g. q -> hus)
++def _make_pres_extract(outvar, wrf_var, level_hPa, convert=None):
+     idx = _PLEV_INDEX[level_hPa]
+     def extract(ds):
+-        da = ds[wrf_var].isel(num_press_levels_stag=idx)
+-        if level_hPa == 700:
+-            da = _mask_underground_700(da, year)
++        raw = ds[wrf_var].isel(num_press_levels_stag=idx)
++        da = convert(raw) if convert else raw
++        da = _mask_pres(da, [raw], level_hPa, year)
+ 
+         da = da.to_dataset(name=outvar).drop_attrs()
+         return [(outvar, da)]
+     return extract
+ 
+-# generate extract functions for zg & ta vars
+-for _var, _wrf, _levels in [
+-    ('ta',  'T_PL',   [700, 500, 250]),
+-    ('zg',  'GHT_PL', [700, 500, 250]),
++def _q_to_hus(q):
++    """Mixing ratio (kg/kg) -> specific humidity."""
++    return q / (1 + q)
++
++# generate extract functions for ta, zg, hus & hur vars
++for _var, _wrf, _conv in [
++    ('ta',  'T_PL',   None),
++    ('zg',  'GHT_PL', None),
++    ('hus', 'Q_PL',   _q_to_hus),
++    ('hur', 'RH_PL',  None),
+ ]:
+-    for _lev in _levels:
++    for _lev in _OUT_LEVELS_HPA:
+         _name = f'{_var}{_lev}'
+-        globals()[f'extract_{_name}'] = _make_pres_extract(_name, _wrf, _lev)
++        globals()[f'extract_{_name}'] = _make_pres_extract(_name, _wrf, _lev, _conv)
+ 
+ 
+ # function factory for extracting pressure-level winds
+@@ -527,8 +698,7 @@ def _make_pres_wind_extract(outvar, level_hPa, component):
+         v = ds['V_PL'].isel(num_press_levels_stag=idx)
+         uas, vas = _wind_components(u, v)
+         rotated = uas if component == 'u' else vas
+-        if level_hPa == 700:
+-            rotated = _mask_underground_700(rotated, year)
++        rotated = _mask_pres(rotated, [u, v], level_hPa, year)
+ 
+         rotated = rotated.to_dataset(name=outvar).drop_attrs()
+         return [(outvar, rotated)]
+@@ -536,29 +706,10 @@ def _make_pres_wind_extract(outvar, level_hPa, component):
+ 
+ # generate extract functions for ua & va vars
+ for _comp in ['ua', 'va']:
+-    for _lev in [700, 500, 250]:
++    for _lev in _OUT_LEVELS_HPA:
+         _name = f'{_comp}{_lev}'
+         globals()[f'extract_{_name}'] = _make_pres_wind_extract(_name, _lev, _comp[0])
+ 
+-# function factory for extracting specific humidity at pressure levels
+-def _make_pres_hus_extract(outvar, level_hPa):
+-    idx = _PLEV_INDEX[level_hPa]
+-    def extract(ds):
+-        q = ds['Q_PL'].isel(num_press_levels_stag=idx)
+-        # Convert mixing ratio (kg/kg) to specific humidity: hus = q / (1 + q)
+-        hus = (q / (1 + q))
+-        if level_hPa == 700:
+-            hus = _mask_underground_700(hus, year)
+-
+-        hus = hus.to_dataset(name=outvar).drop_attrs()
+-        return [(outvar, hus)]
+-    return extract
+-
+-# generate extract functions for hus vars
+-for _lev in [700, 500, 250]:
+-    _name = f'hus{_lev}'
+-    globals()[f'extract_{_name}'] = _make_pres_hus_extract(_name, _lev)
+-
+ # ---------------------------------------------------
+ 
+ # AGL height data
+@@ -638,4 +789,34 @@ def extract_wchill(ds):
+     wchill = ds['AFWA_WCHILL'].to_dataset(name='wchill').drop_attrs()
+     return [('wchill', wchill)]
+ 
++def extract_capemu(ds):
++    # AFWA_CAPE_MU units : J kg-1
++    # AFWA_CAPE_MU description : Most unstable CAPE 0-180mb
++    # Mask any large-negative flag values defensively (as for CIN).
++    capemu = ds['AFWA_CAPE_MU'].where(ds['AFWA_CAPE_MU'] >= -1.e30, 1.e20)
++    capemu = capemu.to_dataset(name='capemu').drop_attrs()
++    return [('capemu', capemu)]
++
++def extract_cinmu(ds):
++    # AFWA_CIN_MU units : J kg-1 (negative, WRF sign kept to match cin)
++    # AFWA_CIN_MU description : Most unstable CIN 0-180mb
++    # -9.9999e+30 flags "fully inhibited"; mask as missing.
++    cinmu = ds['AFWA_CIN_MU'].where(ds['AFWA_CIN_MU'] >= -1.e30, 1.e20)
++    cinmu = cinmu.to_dataset(name='cinmu').drop_attrs()
++    return [('cinmu', cinmu)]
++
++def extract_li(ds):
++    # AFWA_LIDX units : K
++    # AFWA_LIDX description : AFWA Diagnostic: Surface Lifted Index
++    li = ds['AFWA_LIDX'].to_dataset(name='li').drop_attrs()
++    return [('li', li)]
++
++def extract_zlfc(ds):
++    # AFWA_ZLFC units : m (above ground level; WRF subtracts HT)
++    # AFWA_ZLFC description : AFWA Diagnostic: Level of Free Convection
++    # WRF writes -1 where there is no LFC; mask as missing.
++    zlfc = ds['AFWA_ZLFC'].where(ds['AFWA_ZLFC'] >= 0, 1.e20)
++    zlfc = zlfc.to_dataset(name='zlfc').drop_attrs()
++    return [('zlfc', zlfc)]
++
+ # ---------------------------------------------------
+diff --git a/postprocess/var_specs.yml b/postprocess/var_specs.yml
+index 11c3c18..6d8d442 100644
+--- a/postprocess/var_specs.yml
++++ b/postprocess/var_specs.yml
+@@ -132,7 +132,8 @@ snm:
+   <<: *defaults
+   quant: '.6'
+ 
+-# --- Surface radiation and heat flux variables (6-hourly) ---
++# --- Surface radiation and heat flux variables ---
++# rsus, rlus (accumulated) and hfss are hourly; hfls is 6-hourly.
+ rsus:
+   <<: *defaults
+   quant: '.1'
+@@ -146,6 +147,70 @@ hfss:
+   <<: *defaults
+   quant: '.1'
+ 
++# --- New single-level variables (2026-10 batch) ---
++# TOA radiation (hourly; rsdt/rsut accumulated, rlut instantaneous OLR)
++rsdt:
++  <<: *defaults
++  quant: '.1'
++rsut:
++  <<: *defaults
++  quant: '.1'
++rlut:
++  <<: *defaults
++  quant: '.1'
++
++# Surface shortwave components and albedo (hourly)
++rsdsdiff:
++  <<: *defaults
++  quant: '.1'
++rsdsdir:
++  <<: *defaults
++  quant: '.1'
++alb:
++  <<: *defaults
++  quant: '.3'
++
++# Surface temperature, boundary layer, friction velocity
++ts:
++  <<: *defaults
++zmla:
++  <<: *defaults
++  quant: '.0'
++ustar:
++  <<: *defaults
++  quant: '.3'
++
++# Land surface (6-hourly)
++hfso:
++  <<: *defaults
++  quant: '.1'
++lai:
++  <<: *defaults
++  quant: '.2'
++snc:
++  <<: *defaults
++  quant: '.0'
++mrsos:
++  <<: *defaults
++  quant: '.1'
++clivi:
++  <<: *defaults
++  quant: '.4'
++
++# AFWA convective diagnostics (capemu/cinmu hourly; li/zlfc 6-hourly)
++capemu:
++  <<: *defaults
++  quant: '.1'
++cinmu:
++  <<: *defaults
++  quant: '.1'
++li:
++  <<: *defaults
++  quant: '.1'
++zlfc:
++  <<: *defaults
++  quant: '.0'
++
+ # --- Height-AGL wind variables (6-hourly, supplemental local CMOR table) ---
+ ua50m: &zlev_specs
+   <<: *defaults
+@@ -221,6 +286,236 @@ hus250:
+   plev: 25000
+   quant: '.6'
+ 
++# Additional pressure levels (2026-10 batch).  hur is new at all 13 levels.
++
++ta1000:
++  <<: *pres_specs
++  plev: 100000
++ta925:
++  <<: *pres_specs
++  plev: 92500
++ta850:
++  <<: *pres_specs
++  plev: 85000
++ta750:
++  <<: *pres_specs
++  plev: 75000
++ta600:
++  <<: *pres_specs
++  plev: 60000
++ta400:
++  <<: *pres_specs
++  plev: 40000
++ta300:
++  <<: *pres_specs
++  plev: 30000
++ta200:
++  <<: *pres_specs
++  plev: 20000
++ta150:
++  <<: *pres_specs
++  plev: 15000
++ta100:
++  <<: *pres_specs
++  plev: 10000
++
++ua1000:
++  <<: *pres_specs
++  plev: 100000
++ua925:
++  <<: *pres_specs
++  plev: 92500
++ua850:
++  <<: *pres_specs
++  plev: 85000
++ua750:
++  <<: *pres_specs
++  plev: 75000
++ua600:
++  <<: *pres_specs
++  plev: 60000
++ua400:
++  <<: *pres_specs
++  plev: 40000
++ua300:
++  <<: *pres_specs
++  plev: 30000
++ua200:
++  <<: *pres_specs
++  plev: 20000
++ua150:
++  <<: *pres_specs
++  plev: 15000
++ua100:
++  <<: *pres_specs
++  plev: 10000
++
++va1000:
++  <<: *pres_specs
++  plev: 100000
++va925:
++  <<: *pres_specs
++  plev: 92500
++va850:
++  <<: *pres_specs
++  plev: 85000
++va750:
++  <<: *pres_specs
++  plev: 75000
++va600:
++  <<: *pres_specs
++  plev: 60000
++va400:
++  <<: *pres_specs
++  plev: 40000
++va300:
++  <<: *pres_specs
++  plev: 30000
++va200:
++  <<: *pres_specs
++  plev: 20000
++va150:
++  <<: *pres_specs
++  plev: 15000
++va100:
++  <<: *pres_specs
++  plev: 10000
++
++zg1000:
++  <<: *pres_specs
++  plev: 100000
++  quant: '.0'
++zg925:
++  <<: *pres_specs
++  plev: 92500
++  quant: '.0'
++zg850:
++  <<: *pres_specs
++  plev: 85000
++  quant: '.0'
++zg750:
++  <<: *pres_specs
++  plev: 75000
++  quant: '.0'
++zg600:
++  <<: *pres_specs
++  plev: 60000
++  quant: '.0'
++zg400:
++  <<: *pres_specs
++  plev: 40000
++  quant: '.0'
++zg300:
++  <<: *pres_specs
++  plev: 30000
++  quant: '.0'
++zg200:
++  <<: *pres_specs
++  plev: 20000
++  quant: '.0'
++zg150:
++  <<: *pres_specs
++  plev: 15000
++  quant: '.0'
++zg100:
++  <<: *pres_specs
++  plev: 10000
++  quant: '.0'
++
++hus1000:
++  <<: *pres_specs
++  plev: 100000
++  quant: '.6'
++hus925:
++  <<: *pres_specs
++  plev: 92500
++  quant: '.6'
++hus850:
++  <<: *pres_specs
++  plev: 85000
++  quant: '.6'
++hus750:
++  <<: *pres_specs
++  plev: 75000
++  quant: '.6'
++hus600:
++  <<: *pres_specs
++  plev: 60000
++  quant: '.6'
++hus400:
++  <<: *pres_specs
++  plev: 40000
++  quant: '.6'
++hus300:
++  <<: *pres_specs
++  plev: 30000
++  quant: '.6'
++hus200:
++  <<: *pres_specs
++  plev: 20000
++  quant: '.6'
++hus150:
++  <<: *pres_specs
++  plev: 15000
++  quant: '.6'
++hus100:
++  <<: *pres_specs
++  plev: 10000
++  quant: '.6'
++
++hur1000:
++  <<: *pres_specs
++  plev: 100000
++  quant: '.1'
++hur925:
++  <<: *pres_specs
++  plev: 92500
++  quant: '.1'
++hur850:
++  <<: *pres_specs
++  plev: 85000
++  quant: '.1'
++hur750:
++  <<: *pres_specs
++  plev: 75000
++  quant: '.1'
++hur700:
++  <<: *pres_specs
++  plev: 70000
++  quant: '.1'
++hur600:
++  <<: *pres_specs
++  plev: 60000
++  quant: '.1'
++hur500:
++  <<: *pres_specs
++  plev: 50000
++  quant: '.1'
++hur400:
++  <<: *pres_specs
++  plev: 40000
++  quant: '.1'
++hur300:
++  <<: *pres_specs
++  plev: 30000
++  quant: '.1'
++hur250:
++  <<: *pres_specs
++  plev: 25000
++  quant: '.1'
++hur200:
++  <<: *pres_specs
++  plev: 20000
++  quant: '.1'
++hur150:
++  <<: *pres_specs
++  plev: 15000
++  quant: '.1'
++hur100:
++  <<: *pres_specs
++  plev: 10000
++  quant: '.1'
++
+ # --- Time-invariant variables (no compression) ---
+ sftlf:
+   levels: fixed

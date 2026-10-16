@@ -230,16 +230,26 @@ https://cmiphub.dkrz.de/info/display_qc_results.html
 ## day files get a WARN for chunksize 1 along time, which is necessary
 ## b/c leap years + xarray can't handle different chunk sizes in a dataset
 
-## Some of the variables in the NCAR-CORDEX-CMIP6_1hr.json files (fzra
-## heatidz humidex wchill) aren't in the controlled vocabulary CMOR
-## tables, which means that the CORDEX-CMIP6 plugin can't identify the
-## main variable, which gives FAILs for [CDXT001] Time Chunking and
-## [FILE003] Compression.
+## Some of the variables in the NCAR-CORDEX-CMIP6_*.json files aren't
+## in the controlled vocabulary CMOR tables, which means that the
+## CORDEX-CMIP6 plugin can't identify the main variable, which gives
+## FAILs for [CDXT001] Time Chunking and [FILE003] Compression:
+##   1hr: fzra heatidx humidex wchill wbgt utci capemu cinmu alb rsdsdiff
+##   6hr: zlfc lai ustar hur{1000..100}
 
 ## We also get [CDXT001] Time Chunking FAILs for the variables that we
-## are providing 6-hourly but are requested 1-hourly (hfls hfss rlus
-## fsus [ua,va][50,100,150]m), because it can't find an entry for that
-## var+freq in the CMOR tables.
+## are providing 6-hourly but are requested 1-hourly (hfls hfso li clivi
+## mrsos [ua,va][50,100,150]m), because it can't find an entry for that
+## var+freq in the CMOR tables.  (rsus, rlus and hfss are now hourly.)
+
+## Instantaneous fields labeled with CORDEX "time: mean" cell_methods,
+## because the data request takes precedence over the local tables:
+## hfls hfss rlut rsdsdir.
+
+## When re-running extract on a simulation processed before the
+## 2026-10 variable batch, delete the old rsus.6hr, rlus.6hr and
+## hfss.6hr directories (extract, format, aggregate data) first, or both
+## the 6hr and 1hr versions will flow downstream.
 
 ## fzra & humidex don't have a CF standard_name (yet)
 

@@ -26,20 +26,31 @@
 
 set -euo pipefail
 
+# Pressure-level variables are run as '+'-joined groups (one job per
+# field per year, all 13 levels); postproc_engine.py loads the WRF files
+# once per group and writes each level to its own <var>.6hr directory.
+PLEVS="1000 925 850 750 700 600 500 400 300 250 200 150 100"
+plev_group() {
+    local v="$1" out="" lev
+    for lev in $PLEVS; do out+="${out:++}${v}${lev}"; done
+    echo "$out"
+}
+
 # Default variable list for NA-CORDEX-CMIP6 postprocessing.
 #
 # Note: utci is produced automatically when wbgt runs; submitting utci as
 # a standalone job will cause a file conflict. Use --vars wbgt to get both.
 # Note also: tasmin & tasmax are produced automatically when tas is run.
-
 DEFAULT_VARS="fx,pr,tas,\
 hurs,huss,ps,psl,rsds,sfcWind,uas,vas,\
 cape,cin,prw,fzra,wchill,heatidx,humidex,\
-evspsbl,mrro,mrros,mrso,mrsol,snw,snd,snm,\
+evspsbl,mrro,mrros,mrso,mrsol,mrsos,snw,snd,snm,snc,\
 clt,hfls,hfss,rlds,rlus,rsus,\
+rsdt,rsut,rlut,rsdsdiff,rsdsdir,alb,ts,zmla,ustar,\
+hfso,lai,clivi,capemu,cinmu,li,zlfc,\
 ua50m,va50m,ua100m,va100m,ua150m,va150m,\
-ua700,ua500,ua250,va700,va500,va250,\
-hus700,hus500,hus250,ta700,ta500,ta250,zg700,zg500,zg250,\
+$(plev_group ua),$(plev_group va),$(plev_group ta),\
+$(plev_group zg),$(plev_group hus),$(plev_group hur),\
 wbgt"
 
 usage() {
@@ -57,7 +68,9 @@ Arguments:
 
 Options:
   --vars VAR[,VAR,...]  Comma-separated list of variables to process
-                        (default: all supported variables)
+                        (default: all supported variables).  A '+'-joined
+                        item (e.g. ta1000+ta925) runs as one job per year
+                        that loads the WRF files once.
   --scripts PATH        Directory containing the postprocess scripts
                         (default: directory containing extract.sh)
   --force               Overwrite existing output (default: skip variables
@@ -231,7 +244,12 @@ for var in "${VARLIST[@]}"; do
         continue
     fi
 
-    cmdfile="$CMDDIR/${var}.cmd"
+    # Grouped items get a short commandfile name: first-last member
+    if [[ "$var" == *+* ]]; then
+        cmdfile="$CMDDIR/${var%%+*}-${var##*+}.cmd"
+    else
+        cmdfile="$CMDDIR/${var}.cmd"
+    fi
     > "$cmdfile"
 
     if [[ "$var" == "fx" ]]; then
