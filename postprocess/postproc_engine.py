@@ -509,7 +509,7 @@ _ACCUMULATED = {'pr', 'rsds', 'rlds', 'mrro', 'mrros', 'snm', 'fzra'}
 # listed here default to wrfout_hour_fname (non-accumulated).
 _FILE_VARS = {
     wrfout_afwa_fname: {'psl', 'cape', 'cin', 'prw', 'fzra', 'heatidx', 'wchill'},
-    wrfout_6hr_fname:  {'snw', 'snd', 'mrso', 'mrros', 'mrro',
+    wrfout_6hr_fname:  {'snw', 'snd', 'mrso', 'mrsol', 'mrros', 'mrro',
                         'rsus', 'rlus', 'hfls', 'hfss', 'snm'},
     wrfout_pres_fname: {'ua700', 'ua500', 'ua250',
                         'va700', 'va500', 'va250',

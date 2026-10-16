@@ -63,6 +63,12 @@ print(f'Loading {infile}')
 ds = xr.open_dataset(infile)
 da = ds[var]
 
+# Soil-layer variables (mrsol) have a depth axis; plot the deepest layer,
+# since the top layer duplicates mrsos.
+if 'depth' in da.dims:
+    da = da.isel(depth=-1)
+    print(f'  {var} has a depth axis; plotting layer at {float(da.depth):.2f} m')
+
 static = (freq == 'fx')
 
 if static:

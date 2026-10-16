@@ -287,6 +287,38 @@ def extract_mrso(ds):
     return [('mrso', mrso)]
 # ---------------------------------------------------
 
+# Soil moisture content per layer
+# ---------------------------------------------------
+# Noah-MP layer thicknesses (DZS) and bounds (m below surface).
+# Layer midpoints are used as the depth coordinate values.
+_SOIL_DZ   = np.array([0.10, 0.30, 0.60, 1.00])
+_SOIL_BNDS = np.array([[0.0, 0.1], [0.1, 0.4], [0.4, 1.0], [1.0, 2.0]])
+_SOIL_MID  = _SOIL_BNDS.mean(axis=1)
+
+def extract_mrsol(ds):
+    # SMOIS units: m3 m-3 (volumetric, includes frozen water)
+    # SMOIS description: SOIL MOISTURE
+    # Output: mrsol(time, depth, y, x) in kg m-2 per layer, matching
+    # CORDEX 6hr mrsol (dimensions: longitude latitude sdepth time1).
+    # Coordinate metadata (units, bounds, positive, etc.) is written by
+    # cmorize.sh; here we only supply the values.
+
+    smois = ds['SMOIS']
+    smois = smois.rename({smois.dims[1]: 'depth'})  # soil_layers_stag -> depth
+
+    dz = xr.DataArray(_SOIL_DZ, dims=['depth'])
+    mrsol = smois * dz * 1000  # m3 m-3 * m * kg m-3 -> kg m-2
+
+    mrsol = _apply_landmask(mrsol)
+
+    mrsol = mrsol.to_dataset(name='mrsol').drop_attrs()
+    mrsol = mrsol.assign_coords(depth=('depth', _SOIL_MID))
+    mrsol['depth_bnds'] = (('depth', 'bnds'), _SOIL_BNDS)
+    mrsol['depth'].encoding = {'_FillValue': None, 'dtype': np.float64}
+    mrsol['depth_bnds'].encoding = {'_FillValue': None, 'dtype': np.float64}
+    return [('mrsol', mrsol)]
+# ---------------------------------------------------
+
 # Surface runoff
 # ---------------------------------------------------
 def extract_mrros(ds):

@@ -35,7 +35,7 @@ set -euo pipefail
 DEFAULT_VARS="fx,pr,tas,\
 hurs,huss,ps,psl,rsds,sfcWind,uas,vas,\
 cape,cin,prw,fzra,wchill,heatidx,humidex,\
-evspsbl,mrro,mrros,mrso,snw,snd,snm,\
+evspsbl,mrro,mrros,mrso,mrsol,snw,snd,snm,\
 clt,hfls,hfss,rlds,rlus,rsus,\
 ua50m,va50m,ua100m,va100m,ua150m,va150m,\
 ua700,ua500,ua250,va700,va500,va250,\

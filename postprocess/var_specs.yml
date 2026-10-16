@@ -5,7 +5,7 @@
 # variables not in the upstream data request.
 #
 # Fields:
-#   levels: vertical level type (single, fixed, pressure)
+#   levels: vertical level type (single, fixed, pressure, soil)
 #   refh:   reference height in meters (omit if not applicable; used for
 #           single-level vars at a fixed height above ground, e.g. tas at 2m,
 #           sfcWind at 10m, ua100m at 100m)
@@ -115,6 +115,12 @@ mrros:
   quant: '.6'
 mrso:
   <<: *defaults
+  quant: '.1'
+# mrsol has a soil depth axis (4 Noah-MP layers); levels: soil tells
+# cmorize.sh to write depth/depth_bnds coordinate metadata.
+mrsol:
+  <<: *defaults
+  levels: soil
   quant: '.1'
 snw:
   <<: *defaults
