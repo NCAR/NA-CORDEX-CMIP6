@@ -15,7 +15,7 @@ each step, you need to run that step, wait for it to finish, check
 whether everything processed correctly, and fix any errors before
 moving on to the next one.
 
-All shell syntax below is written for bash.
+The shell syntax below is for bash; for tcsh, see [WORKFLOW.md](WORKFLOW.md).
 
 The workflow steps are:
 
@@ -279,17 +279,18 @@ cd $topdir
 ################
 # Step 10: generate climate indexes for GIS
 
+## all indexes:
 python $post/index.py $indir10 $outdir10 $sdir $cmddir10
 
+## GIS indexes only:
+python $post/index.py --preset gis $indir10 $outdir10 $sdir $cmddir10
 
-# launch jobs as dependent chain
+$post/launch_multi --run $rundir10 --wall 00:30:00 --mem 50GB\
+                   --copy $post/clean_index.sh --chain --skip-missing\
+                   $cmddir10/units.cmd $cmddir10/concat.cmd \
+                   $cmddir10/split.cmd $cmddir10/indexes.cmd \
+                   $cmddir10/derived.cmd $cmddir10/cleanup.cmd
 
-$post/launch_multi --run $rundir10 --wall 00:30:00 --mem 50GB \
-		   --copy $post/clean_index.sh --chain \
-		   $cmddir10/concat.cmd $cmddir10/minmax.cmd \
-		   $cmddir10/pctile.cmd  $cmddir10/indices.cmd \
-		   $cmddir10/annual.cmd $cmddir10/merge.cmd \
-		   $cmddir10/cleanup.cmd
 
 ## check everything ran correctly
 
@@ -312,12 +313,34 @@ cd $topdir
 # Step 10.5: climate index running-means for GIS
 
 # If this is a future run, also generate 21- and 31-year running means
-# for use in GIS. (Only future runs, since we concatenate historical
-# & future runs to make them.) These get put in $scratch/index/$id.
-# Runs fast enough it can run interactively. Requires corresponding
-# -hist directory to exist alongside $topdir .
+# for use in GIS. (Only future runs, since we concatenate historical &
+# future runs to make them.) These get put in $scratch/index/$id.
+# Requires corresponding -hist directory to exist alongside $topdir .
 
 $post/indrun.sh $scratch $id
+
+indrundir=$scratch/index/$id
+rundiri=$indrundir/run
+cmddiri=$indrundir/cmd
+
+$post/launch_multi --run $rundiri --wall 00:10:00 --mem 50GB\
+                   --chain $cmddiri/concat.cmd \
+                   $cmddiri/run21.cmd $cmddiri/run31.cmd
+
+cd $rundiri
+
+for i in *; do
+  echo =====================
+  echo $i
+  wc -l $i/$i.cmd
+  grep Done $i/*.o* | wc -l
+  wc $i/stdout*/* | tail -1
+  grep Done $i/*.o* | cut -f 2 -d = | cut -f 3-4 -d ' ' | sort -n | uniq -c
+done
+
+cd $topdir
+
+
 ```
 
 ## Installing the ESGF compliance checker
