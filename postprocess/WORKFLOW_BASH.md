@@ -322,6 +322,7 @@ $post/indrun.sh $scratch $id
 
 ## Installing the ESGF compliance checker
 
+```
 https://github.com/ESGF/esgf-qa
 
 
@@ -355,3 +356,4 @@ cchecker.py -l
 
 # It spawns a whole mess of subprocesses; Be sure to run it on a
 # Casper interactive node, not on a login node.
+```
