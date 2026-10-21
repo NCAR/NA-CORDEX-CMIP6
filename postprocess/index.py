@@ -56,14 +56,16 @@ tasks bundled together into sub-commandfiles that are run serially.
 Commands are bundled by (index, tag) into <step>/<index>.<tag>.cmd, and
 <step>.cmd just contains one `csh <subfile>` line per bundle.
 
-Directory layout under OUTDIR:
-  tmp/units/<var>/   Per-input-file, unit-converted (or symlinked)
+Directory layout under TMPDIR (default OUTDIR/tmp; set with --tmpdir).
+Intermediates already present here are reused on later runs:
+  units/<var>/       Per-input-file, unit-converted (or symlinked)
                       files, keyed by OUTPUT var name.
-  tmp/concat/<var>/  Per-simulation concatenated files, keyed by var.
-  tmp/split/<var>/{seas,mon}/
+  concat/<var>/      Per-simulation concatenated files, keyed by var.
+  split/<var>/{seas,mon}/
                       Per-simulation seasonal/monthly split files.
-  tmp/               (all of the above) -- can be removed once
-                      cleanup.cmd is done.
+  TMPDIR can be removed once cleanup.cmd is done.
+
+Directory layout under OUTDIR:
   <idx>/<freq>/      Outputs grouped by index & annual/seasonal/monthly
 
 Directory layout under CMDDIR:
@@ -387,17 +389,18 @@ def main():
     ap.add_argument("cmddir", type=Path, nargs="?", default=Path("."),
                     help="Directory for commandfiles (default: .)")
     ap.add_argument("--doc", action=DocAction,
-                    help="Print the full documentation (module docstring) "
-                         "and exit")
+                    help="Print full documentation (module docstring) and exit")
+    ap.add_argument("--tmpdir", type=Path, metavar="DIR",
+                    help="Directory for intermediate files (default: OUTDIR/tmp)")
     ap.add_argument("--force", action="store_true",
                     help="Overwrite existing output files")
     sel = ap.add_mutually_exclusive_group()
-    sel.add_argument("--indexes", metavar="ind1,ind2,...",
+    sel.add_argument("--indexes", metavar="i1,i2,...",
                     help="Only generate these indexes (comma-separated, "
                          "matching the 'index' column). Default: all rows.")
     sel.add_argument("--preset", metavar="NAME",
                     help="Only generate a named preset subset of indexes "
-                         "(a column left of 'index' in the TSV).")
+                         "(defined in columns left of 'index' in the TSV).")
     args = ap.parse_args()
 
     indir    = args.indir.resolve()
@@ -438,8 +441,9 @@ def main():
     outdir = args.outdir
     outdir.mkdir(parents=True, exist_ok=True)
     outdir = outdir.resolve()
-    tmpdir = outdir / "tmp"
-    tmpdir.mkdir(exist_ok=True)
+    tmpdir = args.tmpdir if args.tmpdir else outdir / "tmp"
+    tmpdir.mkdir(parents=True, exist_ok=True)
+    tmpdir = tmpdir.resolve()
     cmddir.mkdir(parents=True, exist_ok=True)
     cmddir = cmddir.resolve()
 
