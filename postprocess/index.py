@@ -362,6 +362,17 @@ class Bundler:
 # Main
 # ---------------------------------------------------------------------------
 
+class DocAction(argparse.Action):
+    """Print the module docstring and exit, like --help."""
+    def __init__(self, option_strings, dest, **kw):
+        super().__init__(option_strings, dest, nargs=0,
+                         default=argparse.SUPPRESS, **kw)
+
+    def __call__(self, parser, ns, values, optstring=None):
+        print(__doc__)
+        parser.exit()
+
+
 def main():
     global FORCE
     ap = argparse.ArgumentParser(
@@ -375,6 +386,9 @@ def main():
                     help="Directory containing gis_indexes.tsv and clean_index.sh")
     ap.add_argument("cmddir", type=Path, nargs="?", default=Path("."),
                     help="Directory for commandfiles (default: .)")
+    ap.add_argument("--doc", action=DocAction,
+                    help="Print the full documentation (module docstring) "
+                         "and exit")
     ap.add_argument("--force", action="store_true",
                     help="Overwrite existing output files")
     sel = ap.add_mutually_exclusive_group()
