@@ -83,6 +83,7 @@ import argparse
 import csv
 import sys
 from collections import defaultdict
+from itertools import groupby
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -364,6 +365,69 @@ class Bundler:
 # Main
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Consolidated progress/warning messages
+# ---------------------------------------------------------------------------
+
+def shortlabels(ids):
+    """Shortest unique labels for '_'-delimited ids.
+
+    Fields common to all ids, or not needed to tell them apart, are dropped.
+    Returns (labels, template): labels maps id -> label; template shows the
+    constant fields, with '*' for varying ones (None if not shortened).
+    """
+    ids = sorted(ids)
+    parts = [i.split("_") for i in ids]
+    nf = len(parts[0]) if ids else 0
+    if len(ids) < 2 or any(len(p) != nf for p in parts):
+        return {i: i for i in ids}, None
+    cols = list(zip(*parts))
+    nuniq = [len(set(c)) for c in cols]
+    # varying fields, most distinct values first (ties: leftmost)
+    order = sorted((k for k in range(nf) if nuniq[k] > 1),
+                   key=lambda k: (-nuniq[k], k))
+    mklabels = lambda keep: ["_".join(p[k] for k in sorted(keep))
+                             for p in parts]
+    nkeep = next(j for j in range(1, len(order) + 1)
+                 if len(set(mklabels(order[:j]))) == len(ids))
+    labels = dict(zip(ids, mklabels(order[:nkeep])))
+    template = "_".join(c[0] if n == 1 else "*" for c, n in zip(cols, nuniq))
+    return labels, template
+
+
+def report_sims(sims, lab, template):
+    """Print which variables each simulation has, grouped by variable set.
+    A strict-majority group is given as a count only; others list names."""
+    n = len(sims)
+    keyed = sorted((tuple(sorted(vf)), lab[m]) for m, vf in sims.items())
+    groups = {k: [l for _, l in g]
+              for k, g in groupby(keyed, key=lambda t: t[0])}
+    if template:
+        print(f"  (names abbreviated from {template})")
+    for vs, names in sorted(groups.items(), key=lambda kv: -len(kv[1])):
+        head = f"  {len(names)} of {n} have: {', '.join(vs)}"
+        print(head if 2 * len(names) > n else f"{head}  ({', '.join(names)})")
+
+
+def report_skips(skips, lab, n=None):
+    """Print skipped-index warnings, grouped by missing variable (or by set
+    of skipped derived indexes).  skips: {middle: (by_var, derived)}.
+    If n (total simulation count) is given, a group covering all of them
+    is reported as 'all n simulations'."""
+    fmt = lambda names: (f"all {n} simulations" if n and len(names) == n
+                         else ", ".join(names))
+    byvar = sorted((v, tuple(sorted(ix)), lab[m])
+                   for m, (sbv, _) in skips.items() for v, ix in sbv.items())
+    for (v, ix), g in groupby(byvar, key=lambda t: t[:2]):
+        print(f"  WARNING: {v} not available for {fmt([t[2] for t in g])}; "
+              f"skipping {', '.join(ix)}", file=sys.stderr)
+    bydrv = sorted((tuple(sorted(d)), lab[m])
+                   for m, (_, d) in skips.items() if d)
+    for d, g in groupby(bydrv, key=lambda t: t[0]):
+        print(f"  WARNING: missing inputs for {fmt([t[1] for t in g])}; "
+              f"skipping derived {', '.join(d)}", file=sys.stderr)
+
+
 class DocAction(argparse.Action):
     """Print the module docstring and exit, like --help."""
     def __init__(self, option_strings, dest, **kw):
@@ -389,18 +453,23 @@ def main():
     ap.add_argument("cmddir", type=Path, nargs="?", default=Path("."),
                     help="Directory for commandfiles (default: .)")
     ap.add_argument("--doc", action=DocAction,
-                    help="Print full documentation (module docstring) and exit")
+                    help="Print the full documentation (module docstring) "
+                         "and exit")
     ap.add_argument("--tmpdir", type=Path, metavar="DIR",
-                    help="Directory for intermediate files (default: OUTDIR/tmp)")
+                    help="Directory for intermediate files, both written and "
+                         "checked for reuse (default: OUTDIR/tmp)")
+    ap.add_argument("-v", "--verbose", action="store_true",
+                    help="Report per simulation, with full names, instead "
+                         "of consolidated summaries")
     ap.add_argument("--force", action="store_true",
                     help="Overwrite existing output files")
     sel = ap.add_mutually_exclusive_group()
-    sel.add_argument("--indexes", metavar="i1,i2,...",
+    sel.add_argument("--indexes", metavar="ind1,ind2,...",
                     help="Only generate these indexes (comma-separated, "
                          "matching the 'index' column). Default: all rows.")
     sel.add_argument("--preset", metavar="NAME",
                     help="Only generate a named preset subset of indexes "
-                         "(defined in columns left of 'index' in the TSV).")
+                         "(a column left of 'index' in the TSV).")
     args = ap.parse_args()
 
     indir    = args.indir.resolve()
@@ -456,8 +525,13 @@ def main():
                  f"{indir} ({layout} layout)")
 
     print(f"Found {len(sims)} simulation(s) in {indir} ({layout} layout)")
-    for middle in sims:
-        print(f"  {middle}: {sorted(sims[middle])}")
+    lab, template = ({m: m for m in sims}, None) if args.verbose \
+        else shortlabels(sims)
+    if args.verbose:
+        for middle in sims:
+            print(f"  {middle}: {sorted(sims[middle])}")
+    else:
+        report_sims(sims, lab, template)
 
     # concat/units/split/derived stay flat, one commandfile each.
     # indexes/cleanup get bundled by (index, tag) to stay under PBS's
@@ -486,9 +560,15 @@ def main():
     active_derived = {k: v for k, v in DERIVED.items()
                        if selected is None or k in selected}
 
-    for middle, varfiles in sims.items():
-        process_simulation(middle, varfiles, active_rows, active_derived,
-                            outdir, tmpdir, setupdir, cmd_files)
+    skips = {middle: process_simulation(middle, varfiles, active_rows,
+                                        active_derived, outdir, tmpdir,
+                                        setupdir, cmd_files)
+             for middle, varfiles in sims.items()}
+    if args.verbose:
+        for m, sk in skips.items():
+            report_skips({m: sk}, lab)
+    else:
+        report_skips(skips, lab, len(sims))
 
     # Close flat commandfiles; remove any that are empty
     for name, fh in cmd_files.items():
@@ -525,7 +605,11 @@ def main():
 
 def process_simulation(middle, varfiles, active_rows, active_derived,
                         outdir, tmpdir, setupdir, cmd_files):
-    """Emit all commands for one simulation ('middle')."""
+    """Emit all commands for one simulation ('middle').
+
+    Returns (skipped_by_var, skipped_derived) for the caller to report:
+    {invar: [indexes skipped for lack of it]} and [derived indexes skipped].
+    """
     all_files = [f for files in varfiles.values() for f in files]
     ts = sim_timespan(sorted(all_files, key=lambda f: f.stem.split("_")[-1]))
 
@@ -630,7 +714,7 @@ def process_simulation(middle, varfiles, active_rows, active_derived,
     # raw_index_files[idx]["ann"|SEASON|MM] -> Path, for use by derived step
     raw_index_files = defaultdict(dict)
     needs_cleanup = set()  # (idx, tag) pairs whose file was (re)computed
-    skipped_by_var = defaultdict(list)  # invar -> [idx, ...], for one warning/var
+    skipped_by_var = defaultdict(list)  # invar -> [idx, ...]; returned for reporting
 
     for idx, row in active_rows.items():
         invar = row["input_vars"].split("+")[0]  # DTR's only input is itself
@@ -650,10 +734,6 @@ def process_simulation(middle, varfiles, active_rows, active_derived,
                 needs_cleanup.add((idx, tag))
             raw_index_files[idx][tag] = outfile
 
-    for invar, idxs in sorted(skipped_by_var.items()):
-        print(f"    WARNING: {middle}: {invar} not available; "
-              f"skipping {', '.join(sorted(idxs))}", file=sys.stderr)
-
     # -- derived: combine other indexes' outputs ---------------------------
     skipped_derived = []
     for idx, (op, inputs) in active_derived.items():
@@ -671,11 +751,6 @@ def process_simulation(middle, varfiles, active_rows, active_derived,
                 needs_cleanup.add((idx, tag))
             raw_index_files[idx][tag] = outfile
 
-    if skipped_derived:
-        print(f"    WARNING: {middle}: missing inputs; "
-              f"skipping derived {', '.join(sorted(skipped_derived))}",
-              file=sys.stderr)
-
     # -- cleanup: apply CF metadata, in place, one call per (index, tag) ---
     # Cleanup mutates its file in place, so its own output can't be used to
     # detect "already done" -- instead, piggyback on the indexes/derived
@@ -686,6 +761,8 @@ def process_simulation(middle, varfiles, active_rows, active_derived,
                 continue
             cmd = f"./clean_index.sh {idx} {f} {setupdir}"
             cmd_files["cleanup"].add(idx, tag, cmd)
+
+    return dict(skipped_by_var), skipped_derived
 
 
 def _freq(tag):
