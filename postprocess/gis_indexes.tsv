@@ -53,6 +53,8 @@ x		SDII	div	1	mm/day	mm/day	PTOT+R1mm	Simple daily intensity index	Mean precipit
 x	x	TAVG	yearmean			degF	Tavg	Mean temperature	Mean near-surface air temperature (°F)	air_temperature		temperature: on_scale	~
 x	x	TMAX	yearmean			degF	Tmax	Mean daily Tmax	Mean of daily maximum near-surface air temperature (°F)	air_temperature		temperature: on_scale	~
 x	x	TMIN	yearmin			degF	Tmin	Mean daily Tmin	Mean daily minimum near-surface air temperature	air_temperature			~
+	x	Tabv65F	yearsum -gtc,$threshold	65	degF	days	Tavg	Days above 65°F	Count of days with Tavg > 65°F	number_of_days_with_air_temperature_above_threshold			~
+	x	Tbel65F	yearsum -ltc,$threshold	65	degF	days	Tavg	Days below 65°F	Count of days with Tavg < 65°F	number_of_days_with_air_temperature_above_threshold			~
 		TG	yearmean			degC	TG	Mean temperature	Mean near-surface air temperature (°C)	air_temperature	time: mean	temperature: on_scale	~
 		TN	yearmean			degC	TN	Mean daily Tmin	Mean daily minimum near-surface air temperature	air_temperature	time: minimum within days time: mean over days	temperature: on_scale	~
 		TNn	yearmin			degC	TN	Coldest nighttime low	Coldest daily minimum temperature	air_temperature	time: minimum within days time: minimum over days	temperature: on_scale	~
