@@ -45,3 +45,6 @@ postprocess/old/
 
 clean.sh
 *.swp
+
+patch
+postprocess/shell_vars.bash

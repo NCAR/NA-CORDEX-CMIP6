@@ -287,6 +287,38 @@ def extract_mrso(ds):
     return [('mrso', mrso)]
 # ---------------------------------------------------
 
+# Soil moisture content per layer
+# ---------------------------------------------------
+# Noah-MP layer thicknesses (DZS) and bounds (m below surface).
+# Layer midpoints are used as the depth coordinate values.
+_SOIL_DZ   = np.array([0.10, 0.30, 0.60, 1.00])
+_SOIL_BNDS = np.array([[0.0, 0.1], [0.1, 0.4], [0.4, 1.0], [1.0, 2.0]])
+_SOIL_MID  = _SOIL_BNDS.mean(axis=1)
+
+def extract_mrsol(ds):
+    # SMOIS units: m3 m-3 (volumetric, includes frozen water)
+    # SMOIS description: SOIL MOISTURE
+    # Output: mrsol(time, depth, y, x) in kg m-2 per layer, matching
+    # CORDEX 6hr mrsol (dimensions: longitude latitude sdepth time1).
+    # Coordinate metadata (units, bounds, positive, etc.) is written by
+    # cmorize.sh; here we only supply the values.
+
+    smois = ds['SMOIS']
+    smois = smois.rename({smois.dims[1]: 'depth'})  # soil_layers_stag -> depth
+
+    dz = xr.DataArray(_SOIL_DZ, dims=['depth'])
+    mrsol = smois * dz * 1000  # m3 m-3 * m * kg m-3 -> kg m-2
+
+    mrsol = _apply_landmask(mrsol)
+
+    mrsol = mrsol.to_dataset(name='mrsol').drop_attrs()
+    mrsol = mrsol.assign_coords(depth=('depth', _SOIL_MID))
+    mrsol['depth_bnds'] = (('depth', 'bnds'), _SOIL_BNDS)
+    mrsol['depth'].encoding = {'_FillValue': None, 'dtype': np.float64}
+    mrsol['depth_bnds'].encoding = {'_FillValue': None, 'dtype': np.float64}
+    return [('mrsol', mrsol)]
+# ---------------------------------------------------
+
 # Surface runoff
 # ---------------------------------------------------
 def extract_mrros(ds):
@@ -321,13 +353,23 @@ def extract_mrro(ds):
     return [('mrro', mrro)]
 # ---------------------------------------------------
 
+# Hourly-accumulated radiation with integer bucket (bucket_J = 1e9)
+# ---------------------------------------------------
+def _bucket_flux(ds, acc, bucket):
+    """Mean flux (W m-2) over each hour from an accumulated WRF field
+    (J m-2) and its integer bucket counter.  Requires the day-before
+    timestep (accumulated=True in the engine), so diff gives full length."""
+    total = (ds[bucket] * 1e9) + ds[acc]
+    return total.diff(dim='time') / 3600
+
 # Surface upwelling shortwave radiation
 # ---------------------------------------------------
 def extract_rsus(ds):
-    # SWUPB units : W m-2
-    # SWUPB description : INSTANTANEOUS UPWELLING SHORTWAVE FLUX AT BOTTOM
+    # ACSWUPB/I_ACSWUPB units: J m-2 (hourly file)
+    # ACSWUPB description: ACCUMULATED UPWELLING SHORTWAVE FLUX AT BOTTOM
+    # Replaces the former 6hr instantaneous SWUPB source.
 
-    rsus = ds['SWUPB']
+    rsus = _bucket_flux(ds, 'ACSWUPB', 'I_ACSWUPB')
 
     rsus = rsus.to_dataset(name='rsus').drop_attrs()
     return [('rsus', rsus)]
@@ -336,10 +378,11 @@ def extract_rsus(ds):
 # Surface upwelling longwave radiation
 # ---------------------------------------------------
 def extract_rlus(ds):
-    # LWUPB units : W m-2
-    # LWUPB description : INSTANTANEOUS UPWELLING LONGWAVE FLUX AT BOTTOM
+    # ACLWUPB/I_ACLWUPB units: J m-2 (hourly file)
+    # ACLWUPB description: ACCUMULATED UPWELLING LONGWAVE FLUX AT BOTTOM
+    # Replaces the former 6hr instantaneous LWUPB source.
 
-    rlus = ds['LWUPB']
+    rlus = _bucket_flux(ds, 'ACLWUPB', 'I_ACLWUPB')
 
     rlus = rlus.to_dataset(name='rlus').drop_attrs()
     return [('rlus', rlus)]
@@ -362,6 +405,9 @@ def extract_hfls(ds):
 def extract_hfss(ds):
     # HFX units : W m-2
     # HFX description : UPWARD HEAT FLUX AT THE SURFACE
+    # Now read from the hourly file (was 6hr).  Still instantaneous.
+    # Do not switch to ACHFX: float32 accumulator with no bucket loses
+    # precision late in long chunks.
 
     hfss = ds['HFX']
 
@@ -382,6 +428,137 @@ def extract_snm(ds):
 
     snm = snm.to_dataset(name='snm').drop_attrs()
     return [('snm', snm)]
+# ---------------------------------------------------
+
+# TOA radiation
+# ---------------------------------------------------
+def extract_rsdt(ds):
+    # ACSWDNT/I_ACSWDNT units: J m-2 (hourly file)
+    # ACSWDNT description: ACCUMULATED DOWNWELLING SHORTWAVE FLUX AT TOP
+    rsdt = _bucket_flux(ds, 'ACSWDNT', 'I_ACSWDNT')
+
+    rsdt = rsdt.to_dataset(name='rsdt').drop_attrs()
+    return [('rsdt', rsdt)]
+
+def extract_rsut(ds):
+    # ACSWUPT/I_ACSWUPT units: J m-2 (hourly file)
+    # ACSWUPT description: ACCUMULATED UPWELLING SHORTWAVE FLUX AT TOP
+    rsut = _bucket_flux(ds, 'ACSWUPT', 'I_ACSWUPT')
+
+    rsut = rsut.to_dataset(name='rsut').drop_attrs()
+    return [('rsut', rsut)]
+
+def extract_rlut(ds):
+    # OLR units: W m-2
+    # OLR description: TOA OUTGOING LONG WAVE
+    # Instantaneous (no ACLWUPT in output); CORDEX labels rlut time: mean.
+    rlut = ds['OLR']
+
+    rlut = rlut.to_dataset(name='rlut').drop_attrs()
+    return [('rlut', rlut)]
+# ---------------------------------------------------
+
+# Surface shortwave components and albedo
+# ---------------------------------------------------
+def extract_rsdsdiff(ds):
+    # SWDDIF units: W m-2
+    # SWDDIF description: Shortwave surface downward diffuse irradiance
+    rsdsdiff = ds['SWDDIF']
+
+    rsdsdiff = rsdsdiff.to_dataset(name='rsdsdiff').drop_attrs()
+    return [('rsdsdiff', rsdsdiff)]
+
+def extract_rsdsdir(ds):
+    # SWDOWN, SWDDIF units: W m-2 (instantaneous)
+    # CORDEX rsdsdir is direct radiation on a horizontal surface, so use
+    # SWDOWN - SWDDIF.  SWDDNI is direct *normal* irradiance and is not
+    # used (SWDDNI * COSZEN should approximately equal this result).
+    rsdsdir = ds['SWDOWN'] - ds['SWDDIF']
+
+    rsdsdir = rsdsdir.to_dataset(name='rsdsdir').drop_attrs()
+    return [('rsdsdir', rsdsdir)]
+
+def extract_alb(ds):
+    # ALBEDO units: 1
+    # ALBEDO description: ALBEDO
+    alb = ds['ALBEDO']
+
+    alb = alb.to_dataset(name='alb').drop_attrs()
+    return [('alb', alb)]
+# ---------------------------------------------------
+
+# Surface temperature, boundary layer, friction velocity
+# ---------------------------------------------------
+def extract_ts(ds):
+    # TSK units: K
+    # TSK description: SURFACE SKIN TEMPERATURE
+    ts = ds['TSK']
+
+    ts = ts.to_dataset(name='ts').drop_attrs()
+    return [('ts', ts)]
+
+def extract_zmla(ds):
+    # PBLH units: m
+    # PBLH description: PBL HEIGHT
+    zmla = ds['PBLH']
+
+    zmla = zmla.to_dataset(name='zmla').drop_attrs()
+    return [('zmla', zmla)]
+
+def extract_ustar(ds):
+    # UST units: m s-1
+    # UST description: U* IN SIMILARITY THEORY
+    ustar = ds['UST']
+
+    ustar = ustar.to_dataset(name='ustar').drop_attrs()
+    return [('ustar', ustar)]
+# ---------------------------------------------------
+
+# Land surface: ground heat flux, LAI, snow cover, surface soil moisture
+# ---------------------------------------------------
+def extract_hfso(ds):
+    # GRDFLX units: W m-2 (instantaneous, positive downward into soil)
+    # GRDFLX description: GROUND HEAT FLUX
+    hfso = ds['GRDFLX']
+
+    hfso = hfso.to_dataset(name='hfso').drop_attrs()
+    return [('hfso', hfso)]
+
+def extract_lai(ds):
+    # LAI units: m2 m-2 (time-varying)
+    # LAI description: LEAF AREA INDEX
+    lai = ds['LAI']
+
+    lai = lai.to_dataset(name='lai').drop_attrs()
+    return [('lai', lai)]
+
+def extract_snc(ds):
+    # SNOWC units: 1 (fraction)
+    # SNOWC description: FLAG INDICATING SNOW COVERAGE (1 FOR SNOW COVER)
+    snc = ds['SNOWC'] * 100  # fraction -> %
+
+    snc = snc.to_dataset(name='snc').drop_attrs()
+    return [('snc', snc)]
+
+def extract_mrsos(ds):
+    # SMOIS layer 1 (0-0.1 m), m3 m-3, includes frozen water
+    mrsos = ds['SMOIS'][:, 0] * _SOIL_DZ[0] * 1000  # -> kg m-2
+
+    mrsos = _apply_landmask(mrsos)
+
+    mrsos = mrsos.to_dataset(name='mrsos').drop_attrs()
+    return [('mrsos', mrsos)]
+# ---------------------------------------------------
+
+# Cloud ice water path
+# ---------------------------------------------------
+def extract_clivi(ds):
+    # IWP_TOT units: kg m-2
+    # IWP_TOT description: ICE CLOUD WATER PATH RESOLVED + UNRESOLVED
+    clivi = ds['IWP_TOT']
+
+    clivi = clivi.to_dataset(name='clivi').drop_attrs()
+    return [('clivi', clivi)]
 # ---------------------------------------------------
 
 # Humidex
@@ -414,26 +591,37 @@ _PRESS_LEVELS_PA = [100000, 92500, 85000, 75000, 70000, 60000, 50000,
 # Map level in hPa to dimension index
 _PLEV_INDEX = {lev // 100: i for i, lev in enumerate(_PRESS_LEVELS_PA)}
 
-# Threshold below which surface pressure masking is applied (Pa).
-# Cells where PSFC <= this value are underground at that pressure level.
-# Only needed for 700 hPa; 500 hPa and 250 hPa are never underground
-# given the model domain's maximum elevation (~3000 m).  
+# Levels written out (70 hPa is in the file but not requested)
+_OUT_LEVELS_HPA = [1000, 925, 850, 750, 700, 600, 500,
+                   400, 300, 250, 200, 150, 100]
 
+# WRF fills pressure-level points that are below ground with -999.
+# Anything below this threshold is treated as fill.
+_WRF_PL_FILL_THRESHOLD = -998.0
+
+# Surface-pressure masking for levels that can intersect terrain.
+# 500 hPa and above are never underground given the domain's maximum
+# elevation (~3000 m).
+#
 # Pressure-level interpolation operates on the lowest model level,
 # which is tens of meters above ground level, so it can differ from
 # the surface pressure level by a few hPa, or more over steep
-# terrain.  We bump the threshold up to 705 mb to be sure we're
-# masking out all the bad pixels.
+# terrain.  Cells are masked where PSFC <= level + 5 hPa to be sure we
+# mask out all the bad pixels.
+_PSFC_MASK_LEVELS_HPA = {1000, 925, 850, 750, 700, 600}
+_PSFC_MASK_OFFSET_PA  = 500.0
 
-_PSFC_MASK_THRESHOLD_700 = 70500.0
+_psfc_cache = {}
 
 def _load_psfc(yr):
     """Load surface pressure (PSFC, Pa) from wrfout_d01 files for yr.
 
     wrfout_d01 is the 6-hourly file, matching the cadence of pressure-level
     outputs.  Filenames correspond exactly to wrfout_pres_d01 except for
-    the prefix.
+    the prefix.  Cached per year so grouped jobs load it once.
     """
+    if yr in _psfc_cache:
+        return _psfc_cache[yr]
     files = sorted(glob.glob(f'{wrfout_path}/{wrfout_6hr_fname}{yr}-*'))
     if not files:
         raise FileNotFoundError(
@@ -453,37 +641,52 @@ def _load_psfc(yr):
     # not the dimension itself.  This prevents the unlabelled time dimension on
     # psfc from conflicting with the CFTimeIndex on the pressure-level data
     # during .where().
-    return ds_psfc.rename(dname_map_xyt).drop_vars('time', errors='ignore')
+    psfc = ds_psfc.rename(dname_map_xyt).drop_vars('time', errors='ignore')
+    _psfc_cache[yr] = psfc
+    return psfc
 
-def _mask_underground_700(da, yr):
-    """Mask gridcells underground at 700 hPa using surface pressure.
+def _mask_pres(da, raw_fields, level_hPa, yr):
+    """Set da to 1e20 wherever any raw WRF field is -999 (underground fill)
+    and, for low levels, wherever PSFC <= level + 5 hPa.
 
-    Sets values to 1e20 where PSFC <= 70000 Pa (i.e., surface is at or
-    above 700 hPa).  Called only for 700-hPa variables.
+    raw_fields are the unconverted inputs at this level, so fill points
+    are identified before conversion or rotation can disguise them.
     """
-    psfc = _load_psfc(yr)
-    return da.where(psfc > _PSFC_MASK_THRESHOLD_700, 1.e20)
+    valid = raw_fields[0] > _WRF_PL_FILL_THRESHOLD
+    for raw in raw_fields[1:]:
+        valid = valid & (raw > _WRF_PL_FILL_THRESHOLD)
+    if level_hPa in _PSFC_MASK_LEVELS_HPA:
+        psfc = _load_psfc(yr)
+        valid = valid & (psfc > level_hPa * 100.0 + _PSFC_MASK_OFFSET_PA)
+    return da.where(valid, 1.e20)
 
-# function factory for extracting generic pressure-level variables
-def _make_pres_extract(outvar, wrf_var, level_hPa):
+# function factory for extracting scalar pressure-level variables
+# convert: optional function applied to the raw field (e.g. q -> hus)
+def _make_pres_extract(outvar, wrf_var, level_hPa, convert=None):
     idx = _PLEV_INDEX[level_hPa]
     def extract(ds):
-        da = ds[wrf_var].isel(num_press_levels_stag=idx)
-        if level_hPa == 700:
-            da = _mask_underground_700(da, year)
+        raw = ds[wrf_var].isel(num_press_levels_stag=idx)
+        da = convert(raw) if convert else raw
+        da = _mask_pres(da, [raw], level_hPa, year)
 
         da = da.to_dataset(name=outvar).drop_attrs()
         return [(outvar, da)]
     return extract
 
-# generate extract functions for zg & ta vars
-for _var, _wrf, _levels in [
-    ('ta',  'T_PL',   [700, 500, 250]),
-    ('zg',  'GHT_PL', [700, 500, 250]),
+def _q_to_hus(q):
+    """Mixing ratio (kg/kg) -> specific humidity."""
+    return q / (1 + q)
+
+# generate extract functions for ta, zg, hus & hur vars
+for _var, _wrf, _conv in [
+    ('ta',  'T_PL',   None),
+    ('zg',  'GHT_PL', None),
+    ('hus', 'Q_PL',   _q_to_hus),
+    ('hur', 'RH_PL',  None),
 ]:
-    for _lev in _levels:
+    for _lev in _OUT_LEVELS_HPA:
         _name = f'{_var}{_lev}'
-        globals()[f'extract_{_name}'] = _make_pres_extract(_name, _wrf, _lev)
+        globals()[f'extract_{_name}'] = _make_pres_extract(_name, _wrf, _lev, _conv)
 
 
 # function factory for extracting pressure-level winds
@@ -495,8 +698,7 @@ def _make_pres_wind_extract(outvar, level_hPa, component):
         v = ds['V_PL'].isel(num_press_levels_stag=idx)
         uas, vas = _wind_components(u, v)
         rotated = uas if component == 'u' else vas
-        if level_hPa == 700:
-            rotated = _mask_underground_700(rotated, year)
+        rotated = _mask_pres(rotated, [u, v], level_hPa, year)
 
         rotated = rotated.to_dataset(name=outvar).drop_attrs()
         return [(outvar, rotated)]
@@ -504,28 +706,9 @@ def _make_pres_wind_extract(outvar, level_hPa, component):
 
 # generate extract functions for ua & va vars
 for _comp in ['ua', 'va']:
-    for _lev in [700, 500, 250]:
+    for _lev in _OUT_LEVELS_HPA:
         _name = f'{_comp}{_lev}'
         globals()[f'extract_{_name}'] = _make_pres_wind_extract(_name, _lev, _comp[0])
-
-# function factory for extracting specific humidity at pressure levels
-def _make_pres_hus_extract(outvar, level_hPa):
-    idx = _PLEV_INDEX[level_hPa]
-    def extract(ds):
-        q = ds['Q_PL'].isel(num_press_levels_stag=idx)
-        # Convert mixing ratio (kg/kg) to specific humidity: hus = q / (1 + q)
-        hus = (q / (1 + q))
-        if level_hPa == 700:
-            hus = _mask_underground_700(hus, year)
-
-        hus = hus.to_dataset(name=outvar).drop_attrs()
-        return [(outvar, hus)]
-    return extract
-
-# generate extract functions for hus vars
-for _lev in [700, 500, 250]:
-    _name = f'hus{_lev}'
-    globals()[f'extract_{_name}'] = _make_pres_hus_extract(_name, _lev)
 
 # ---------------------------------------------------
 
@@ -605,5 +788,35 @@ def extract_wchill(ds):
 
     wchill = ds['AFWA_WCHILL'].to_dataset(name='wchill').drop_attrs()
     return [('wchill', wchill)]
+
+def extract_capemu(ds):
+    # AFWA_CAPE_MU units : J kg-1
+    # AFWA_CAPE_MU description : Most unstable CAPE 0-180mb
+    # Mask any large-negative flag values defensively (as for CIN).
+    capemu = ds['AFWA_CAPE_MU'].where(ds['AFWA_CAPE_MU'] >= -1.e30, 1.e20)
+    capemu = capemu.to_dataset(name='capemu').drop_attrs()
+    return [('capemu', capemu)]
+
+def extract_cinmu(ds):
+    # AFWA_CIN_MU units : J kg-1 (negative, WRF sign kept to match cin)
+    # AFWA_CIN_MU description : Most unstable CIN 0-180mb
+    # -9.9999e+30 flags "fully inhibited"; mask as missing.
+    cinmu = ds['AFWA_CIN_MU'].where(ds['AFWA_CIN_MU'] >= -1.e30, 1.e20)
+    cinmu = cinmu.to_dataset(name='cinmu').drop_attrs()
+    return [('cinmu', cinmu)]
+
+def extract_li(ds):
+    # AFWA_LIDX units : K
+    # AFWA_LIDX description : AFWA Diagnostic: Surface Lifted Index
+    li = ds['AFWA_LIDX'].to_dataset(name='li').drop_attrs()
+    return [('li', li)]
+
+def extract_zlfc(ds):
+    # AFWA_ZLFC units : m (above ground level; WRF subtracts HT)
+    # AFWA_ZLFC description : AFWA Diagnostic: Level of Free Convection
+    # WRF writes -1 where there is no LFC; mask as missing.
+    zlfc = ds['AFWA_ZLFC'].where(ds['AFWA_ZLFC'] >= 0, 1.e20)
+    zlfc = zlfc.to_dataset(name='zlfc').drop_attrs()
+    return [('zlfc', zlfc)]
 
 # ---------------------------------------------------
