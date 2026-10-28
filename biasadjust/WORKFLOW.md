@@ -9,9 +9,13 @@ Same pattern as `postprocess/WORKFLOW.md`: each step has `cmd`, `run`, and
 `data` directories; a script writes commandfiles, `launch_multi` runs them,
 and you check results before moving on.  Commands are bash.
 
-One run of this workflow = one **product** = one `ba_config/<id>.yml`
-(one driving model + one bias-adjustment calibration).  A product can
-contain several experiments (e.g. historical + ssp370).
+One run of this workflow = one driving model = one `ba_config/<model>.yml`
+(`ece`, `mpi`, `era`; `nor` and `cesm` are stubs until their output exists).
+Each config covers every experiment bias-adjusted for that model;
+historical is processed once and shared by all scenarios.  To add a
+scenario later, add its sources to the model's config and re-run from
+Step 0; files that already exist are skipped (except by repack.sh, which
+repacks everything again).
 
 Steps:
 
@@ -32,7 +36,7 @@ New in `biasadjust/`:
 
 | File | Purpose |
 |---|---|
-| `ba_config/<id>.yml` | Product config: source dirs, year-to-experiment mapping, filename components |
+| `ba_config/<model>.yml` | Per-model config: source dirs, year-to-experiment mapping, filename components |
 | `ba_attrs.yml` | Global attribute keep/drop/set rules and templates |
 | `ba_setup.py` | Step 0: builds SETUPDIR |
 | `ba_format.py` | Step 1: inventory, mapping, chunking, commandfiles, manifest |
@@ -55,7 +59,7 @@ setup directory (`raw_setupdir` in the config).
 ___
 
 ```bash
-source biasadjust/shell_vars.bash <id>    # e.g. ece-370
+source biasadjust/shell_vars.bash <model>    # e.g. ece
 conda activate nac6
 
 
@@ -127,7 +131,7 @@ $ba/relocate_ba.sh $indir4 $sdir $outdir4
 # Step 5: QA
 
 # qa.sh takes one DRS node (the level above frequency), so run it once
-# per experiment in the product.
+# per experiment.
 drsroot=$outdir4/$(grep '^drs_project=' $sdir/ba.env | cut -d= -f2)
 for node in $(find $drsroot -type d -name day -printf '%h\n' | sort -u); do
   exp=$(echo $node | awk -F/ '{print $(NF-4)}')

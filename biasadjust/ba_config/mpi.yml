@@ -1,20 +1,22 @@
-# Bias-adjusted product: MPI-ESM1-2-HR historical + ssp245 + ssp370,
+# Bias-adjusted output for MPI-ESM1-2-HR (historical, ssp245, ssp370),
 # ISIMIP3BASD calibrated on ERA5-Land 1985-2014.
 #
-# One config = one published product (one ba_id).  All experiments in the
-# product are processed together; filenames differ by experiment, so they
-# can share the flat <var>.day staging directories.
+# One config per driving model (short name: ece, mpi, era, ...).  It covers
+# every experiment bias-adjusted for that model; historical is processed
+# once and shared by all scenarios.  To add a scenario later, add its
+# sources below and re-run ba_setup.py and ba_format.py (existing outputs
+# are skipped).  Filenames differ by experiment, so all experiments share
+# the flat <var>.day staging directories.
 
 id: "mpi"
 
 # Root of the bias-adjusted tree for this driving model.
 source_root: "/lustre/desc1/p/nral0053/na-cordex-cmip6/biascorrection/isimip_basd/MPI-ESM1-2-HR"
 
-# A setup directory from the raw postprocessing of this simulation.
-# Provides var_table.tsv (refh, positive, quant) and the ncrepack-cordex
-# scripts.  Any of the simulation's setup dirs works (var_table is shared).
-# TODO: verify path.
-raw_setupdir: "/glade/derecho/scratch/mcginnis/jacob/na-cordex/mpi-hist/setup"
+# A setup directory from the raw postprocessing.  Provides var_table.tsv
+# (refh, positive, quant) and the ncrepack-cordex scripts.  var_table is
+# the same for every simulation, so all configs share this one.
+raw_setupdir: "/glade/derecho/scratch/mcginnis/jacob/na-cordex/ece-370/setup"
 
 # Short ID for the bias adjustment: goes in the DRS path and (prefixed
 # with version_realization and institution_id) in the id_attribute.

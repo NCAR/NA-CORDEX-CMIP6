@@ -1,0 +1,56 @@
+# Bias-adjusted output for NorESM2-MM.
+# STUB: no bias-adjusted output for this model yet; fill in `sources`
+# when it exists.  Values below are from postprocess/sim_config/sim-info.tsv.
+#
+# ISIMIP3BASD calibrated on ERA5-Land 1985-2014.
+#
+# One config per driving model (short name: ece, mpi, era, ...).  It covers
+# every experiment bias-adjusted for that model; historical is processed
+# once and shared by all scenarios.  To add a scenario later, add its
+# sources below and re-run ba_setup.py and ba_format.py (existing outputs
+# are skipped).  Filenames differ by experiment, so all experiments share
+# the flat <var>.day staging directories.
+
+id: "nor"
+
+# Root of the bias-adjusted tree for this driving model.
+source_root: "/lustre/desc1/p/nral0053/na-cordex-cmip6/biascorrection/isimip_basd/NorESM2-MM"
+
+# A setup directory from the raw postprocessing.  Provides var_table.tsv
+# (refh, positive, quant) and the ncrepack-cordex scripts.  var_table is
+# the same for every simulation, so all configs share this one.
+raw_setupdir: "/glade/derecho/scratch/mcginnis/jacob/na-cordex/ece-370/setup"
+
+# Short ID for the bias adjustment: goes in the DRS path and (prefixed
+# with version_realization and institution_id) in the id_attribute.
+ba_id: "ISIMIP3BASD-ERA5Land-1985-2014"
+
+# Filename / metadata components.  ba_cmorize.py checks these against the
+# input file attributes and stops on any mismatch.
+domain_id: "NAM-12i"
+driving_source_id: "NorESM2-MM"
+driving_variant_label: "r1i1p1f1"
+institution_id: "NCAR"
+source_id: "WRF461S-SN"
+version_realization: "v1-r1"
+calendar: "noleap"
+
+# DRS root components (relocate_ba.sh).  Convention choice; verify.
+drs_project: "CORDEX-Adjust"
+drs_activity: "DD"
+
+# Daily output file length in years; chunks end on years divisible by this
+# (same rule as postprocess/aggregate.sh).
+chunk_years: 5
+
+# Which years each source directory contributes to which experiment.
+# path is relative to source_root and ends at the simh-* level; every
+# simf-* directory under it is scanned.  Years found in a source but not
+# listed under any experiment are skipped (and recorded in the manifest).
+# Every listed year must be found, and no (experiment, var, year) may come
+# from more than one source.
+sources: []
+# Example (see ece.yml / mpi.yml):
+#  - path: "historical_vYYYYMMDD/obs-era5land_1985-2014/simh-1985-2014"
+#    experiments:
+#      historical: [1953, 2009]

@@ -1,11 +1,11 @@
-# source shell_vars.bash <id>
+# source shell_vars.bash <model>
 # Authors: Jacob Stuivenvolt-Allen, Seth McGinnis
 #
 # Bias-adjustment counterpart to postprocess/shell_vars.bash.
-# <id> is a product config name: biasadjust/ba_config/<id>.yml
+# <model> is a config name (ece, mpi, era, nor, cesm): biasadjust/ba_config/<model>.yml
 
 if [[ $# -ne 1 ]]; then
-    echo "Usage: source shell_vars.bash <id>"
+    echo "Usage: source shell_vars.bash <model>"
     return 1
 fi
 
@@ -32,7 +32,7 @@ fi
 
 ## Where the processing happens.  relocate_ba.sh hard-links, so the
 ## repack and DRS trees must be on the same filesystem.
-scratch=/glade/derecho/scratch/$USER/na-cordex-ba
+scratch=/glade/derecho/scratch/mcginnis/jacob/na-cordex-ba
 topdir=$scratch/$id
 
 # Step 0: setup

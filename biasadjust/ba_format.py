@@ -4,7 +4,7 @@
 ba_format.py - Generate commandfiles that reformat bias-adjusted output.
 
 Bias-adjustment counterpart to postprocess/format.sh + the concatenation
-half of aggregate.sh.  Reads the product config from SETUPDIR (written by
+half of aggregate.sh.  Reads the model config from SETUPDIR (written by
 ba_setup.py), inventories the annual bias-adjusted files, assigns each
 (variable, year) to an experiment, groups years into multi-year chunks,
 and writes one ba_cmorize.py command per output file.
@@ -73,6 +73,9 @@ def main():
 
     with open(os.path.join(setupdir, "ba_config.yml")) as f:
         cfg = yaml.safe_load(f)
+
+    if not cfg.get("sources"):
+        sys.exit(f"Error: no sources listed in config for {cfg['id']}")
 
     errors = []
     manifest = []   # rows: var, year, source, simf, file_exp, experiment, status, infile, outfile

@@ -3,11 +3,11 @@
 """
 ba_setup.py - One-time setup for reformatting bias-adjusted output.
 
-Bias-adjustment counterpart to postprocess/setup.py.  Run once per product
-(one product = one ba_config/<id>.yml).  Everything downstream reads from
-SETUPDIR, so the whole product uses one consistent set of inputs:
+Bias-adjustment counterpart to postprocess/setup.py.  Run once per driving model
+(one ba_config/<model>.yml).  Everything downstream reads from
+SETUPDIR, so the whole run uses one consistent set of inputs:
 
-  ba_config.yml     copy of the product config (provenance; read by ba_format.py)
+  ba_config.yml     copy of the model config (provenance; read by ba_format.py)
   ba_attrs.yml      copy of the attribute rules (read by ba_cmorize.py)
   ba_meta.yml       creation_date and driving_experiment long names
   ba.env            shell key=value pairs for relocate_ba.sh
@@ -50,7 +50,7 @@ def parse_args():
     here = os.path.dirname(os.path.realpath(__file__))
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     p.add_argument("setupdir", metavar="SETUPDIR")
-    p.add_argument("config", metavar="CONFIG", help="ba_config/<id>.yml")
+    p.add_argument("config", metavar="CONFIG", help="ba_config/<model>.yml")
     p.add_argument("--post", default=os.path.join(here, "..", "postprocess"),
                    help="postprocess directory (default: ../postprocess)")
     p.add_argument("--force", action="store_true",
