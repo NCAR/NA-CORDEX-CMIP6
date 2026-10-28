@@ -1,12 +1,11 @@
 #!/bin/bash
 # Authors: Seth McGinnis, Jacob Stuivenvolt-Allen
 #
-# launch_multi - Submit multiple MPMD commandfiles via launch_cf
+# launch_multi - Automates submission of MPMD commandfiles
 #
-
-# Creates a separate run directory for each commandfile to corral
-# output files, copies necessary config/scripts, and submits via
-# launch_cf.
+# For each commandfile, launch_multi creates a separate run directory
+# to corral output files, copies any necessary scripts or config
+# files, then submits the job via launch_cf.
 #
 # Usage: launch_multi [options] --run DIR cmdfile1 [cmdfile2 ...] [--final cmdfile]
 #
@@ -14,15 +13,20 @@
 #   --run DIR           Directory where run subdirectories are created (required)
 #   --workflow NAME     Apply a predefined workflow configuration (see below)
 #   --scripts PATH      Directory containing workflow scripts to copy
-#                       (default: directory containing launch_multi)
+#                         (default: directory containing launch_multi)
 #   --config FILE       Environment config file (default: ~/config_env.sh)
-#   --copy FILE         Additional file/dir to copy (can be repeated)
-#   --chain             Submit jobs as a dependency chain (each waits for previous)
-#   --final FILE        Submit FILE as a final job dependent on all others (mutually exclusive with --chain)
+#   --copy FILE         Additional file/dir to copy into each run directory;
+#                       directories are copied recursively (can be repeated)
+#   --chain             Submit jobs as a dependency chain
+#                         (each waits for the previous via afterok)
+#   --final FILE        Submit FILE as a final job dependent on all others
+#                         via afterok (mutually exclusive with --chain)
+#   --skip-missing      Ignore any missing or empty commandfiles
+#                         (Useful for chains with some steps already done)
 #   --dry               Print commands without executing
 #   --sleep N           Delay in seconds between job submissions (default: 1)
-#   --wall TIME         Walltime (default: 00:20:00)
-#   --mem MEM           Memory (e.g. 25GB)
+#   --wall TIME         Wallclock time limit (default: 00:20:00)
+#   --mem MEM           Memory (e.g. 25GB) (default: none; --mem is not passed)
 #   -A ACCOUNT          PBS account (default: $PROJECT)
 #   -N NAME             Job name or prefix (default: basename of cmdfile)
 #   -j JOIN             Join stdout/stderr (default: oe)
@@ -36,7 +40,10 @@
 #             needed by the workflow from SCRIPTS_DIR.
 #             All of these can be overridden by flags that follow --workflow.
 #
-# Any other arguments are passed through to launch_cf (and then to qsub).
+# Any other option is passed through to launch_cf (and then to qsub).  An
+# unrecognized option followed by a non-dash argument takes that argument as
+# its value, so a valueless passthrough flag placed directly before a
+# commandfile will swallow it; put such flags last or before another option.
 
 set -e
 
@@ -57,6 +64,7 @@ passthrough=()
 queue="casper"
 runpath=""
 scripts_dir="$(dirname "$(realpath "$0")")"
+skipmissing=0
 sleep=1
 walltime="00:20:00"
 
@@ -181,6 +189,10 @@ while [[ $# -gt 0 ]]; do
             join="$2"
             shift 2
             ;;
+        --skip-missing)
+            skipmissing=1
+            shift
+            ;;
         --dry)
             dry=1
             shift
@@ -201,6 +213,33 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# With --skip-missing, drop missing or empty commandfiles up front, so
+# that later validation and the dependency chain only see what will run.
+# prev_jobid is only set by submitted jobs, so chains stay correct.
+if [[ $skipmissing -eq 1 ]]; then
+    nreq=${#cmdfiles[@]}
+    kept=()
+    for cf in "${cmdfiles[@]}"; do
+        if [[ -s "$cf" ]]; then
+            kept+=("$cf")
+        else
+            echo "Skipping missing/empty commandfile: $cf" >&2
+        fi
+    done
+    cmdfiles=("${kept[@]}")
+
+    if [[ -n "$finalfile" && ! -s "$finalfile" ]]; then
+        echo "Skipping missing/empty final commandfile: $finalfile" >&2
+        finalfile=""
+    fi
+
+    # Nothing left to run is not an error; the final job is moot too
+    if [[ $nreq -gt 0 && ${#cmdfiles[@]} -eq 0 ]]; then
+        echo "No commandfiles left to submit." >&2
+        exit 0
+    fi
+fi
 
 # Validate required arguments
 [[ -z "$runpath" ]] && die "--run is required"

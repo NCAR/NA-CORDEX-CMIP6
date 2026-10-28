@@ -1,181 +1,306 @@
 #!/usr/bin/env python3
 # Authors: Seth McGinnis, Jacob Stuivenvolt-Allen
-"""
-index.py - Generate commandfiles for computing climate indices from
-compressed CORDEX-CMIP6 daily data.
+"""index.py - Generate commandfiles for computing climate indexes
 
-Operates on the output of compress.sh (Step 4), where data are organized
-into <var>.<freq> subdirectories (e.g., pr.day, tasmax.day).  Produces
-one NetCDF file per index covering all available years.
+Example: python index.py --preset gis $indir $outdir $sdir $cmddir
 
-Index definitions are read from gis_indexes.tsv and cleanup specs from
-gis_cleanup.tsv, both expected in SETUPDIR.  Modifying the TSVs is the
-intended way to add, remove, or change indices.  Use --indexes or --preset
-to generate only a subset of the TSV's rows without editing the TSV.
+Assumes that filenames follow the format <var>_<middle>_<timespan>.nc,
+where <middle> uniquely identifies all the files from a single
+simulation and that timespan lexically sorts into the correct ordering
+for ncrcat.
 
-Generates eight commandfiles that must be run in this order:
+Two input layouts are recognized automatically (see find_inputs):
+  flat:   INDIR/<var>_<middle>_<timespan>.nc  (e.g., yearly files)
+  nested: INDIR/<var>.day/<var>_<middle>_<timespan>.nc  (e.g., 5-year
+          files, as written by compress.sh)
+If INDIR contains any *.day subdirectories, the nested layout is used
+and only files in those subdirectories are read.
 
-  concat.cmd   - Concatenates per-variable decadal input files into a
-                 single file per variable using ncrcat.  Must be run
-                 first; all subsequent steps depend on its output.
+Index definitions (formulas, thresholds, units, and output metadata)
+are read from gis_indexes.tsv in SETUPDIR.  (Note: modifying the TSV
+to add new indexes is most easily done in a spreadsheet.)  Use
+--indexes or --preset to generate a subset of indexes.
 
-  minmax.cmd   - ydrunmin/ydrunmax/timmin/timmax over the baseline period.
-                 Computed in native input units (no conversion).
+Presets are defined in the TSV: every column to the left of 'index' is
+a preset, named by its column header.  A row belongs to a preset if its
+cell in that column is non-blank (any non-whitespace content counts).
+Preset columns with a blank header are ignored with a warning.
 
-  pctile.cmd   - ydrunpctl/ydrunmean/timpctl reference files, also in
-                 native units.
+Generates six commandfiles that must be run in this order:
 
-  indices.cmd  - Indices whose CDO operators natively output annual time
-                 steps.  Unit conversion applied here, not in prereqs.
+  units.cmd    - Changes units (temp -> degC,degF; pr -> in/mm day-1)
+                 to those needed by various indexes.  Variables in
+                 original units are passed through with symlinks.
 
-  seasonal.cmd - For indices.cmd indices whose cdo_operator starts with
-                 "year" (yearmean, yearsum, etc.), the seas* equivalent
-                 (seasmean, seassum, etc.) run via `cdo splitseas`,
-                 producing separate DJF/MAM/JJA/SON files alongside the
-                 annual output from indices.cmd (in addition to, not
-                 instead of).
+  concat.cmd   - ncrcat's each variable's per-simulation units.cmd
+                 outputs (or passthrough symlinks) into a single file
+                 per variable+simulation.
 
-  annual.cmd   - One command per year for operators that summarise over
-                 their entire input.  Each command operates on the single
-                 input file for that year.  Output goes to OUTDIR/annual/.
+  split.cmd    - `cdo splitseas` / `cdo splitmon` on each units.cmd
+                 output, producing DJF/MAM/JJA/SON and 01-12 files
+                 alongside annual versions of the indexes
 
-  merge.cmd    - One mergetime per annual-loop index assembling per-year
-                 files from OUTDIR/annual/ into OUTDIR/raw/.
+  indexes.cmd  - Runs each index's `formula` against the annual,
+                 seasonal, and monthly versions of its input variable(s).
+                 Writes final index files directly to OUTDIR.
 
-  cleanup.cmd  - Applies corrected CF metadata to each raw index file via
-                 clean_index.sh, writing final files to OUTDIR/.  Includes
-                 one call per season for indices with seasonal output.
+  derived.cmd  - Indexes computed from other indexes rather than
+                 from a base variable, e.g. ETR = TXx - TNn,
+                 SDII = PTOT / R1mm. Also writes directly to OUTDIR.
 
-Per-year temporary files in OUTDIR/annual/ can be removed after merge.cmd.
-Raw index files in OUTDIR/raw/ can be removed after cleanup.cmd.
+  cleanup.cmd  - Applies corrected CF metadata to each indexes.cmd/
+                 derived.cmd output file IN PLACE via clean_index.sh.
+
+Note: to stay under the scheduler's limit on total tasks, some steps have
+tasks bundled together into sub-commandfiles that are run serially.
+Commands are bundled by (index, tag) into <step>/<index>.<tag>.cmd, and
+<step>.cmd just contains one `csh <subfile>` line per bundle.
+
+Directory layout under TMPDIR (default OUTDIR/tmp; set with --tmpdir).
+Intermediates already present here are reused on later runs:
+  units/<var>/       Per-input-file, unit-converted (or symlinked)
+                      files, keyed by OUTPUT var name.
+  concat/<var>/      Per-simulation concatenated files, keyed by var.
+  split/<var>/{seas,mon}/
+                      Per-simulation seasonal/monthly split files.
+  TMPDIR can be removed once cleanup.cmd is done.
 
 Directory layout under OUTDIR:
-  concat/   Concatenated per-variable input files (intermediate)
-  pctl/     Baseline percentile/minmax reference files (intermediate)
-  annual/   Per-year files for annual_loop indices (intermediate)
-  raw/      Raw index files before metadata cleanup
-  (root)    Final cleaned index files
+  <idx>/<freq>/      Outputs grouped by index & annual/seasonal/monthly
 
-See gis_indexes.tsv and gis_cleanup.tsv in SETUPDIR for TSV column
-documentation.
+Directory layout under CMDDIR:
+  units.cmd, indexes.cmd, cleanup.cmd
+                              - dispatcher files: one `csh <subfile>`
+                              line per bundle (units: (outvar, middle);
+                              indexes/cleanup: (index, tag)).
+  units/, indexes/, cleanup/ - the bundled subfiles themselves.
+
+See gis_indexes.tsv in SETUPDIR for TSV column documentation.
+
 """
 
 import argparse
 import csv
-import re
 import sys
+from collections import defaultdict
+from itertools import groupby
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# Unit conversion rules.  Single source of truth: maps units string to the
-# CDO operator prepended to the input pipe in index commands (not prereqs).
+# Unit-conversion step: which output variable(s) to derive from which base
+# variable, and in what units.  Single source of truth for units.cmd.
+# Maps base variable -> list of (outvar, udunits_unit_string) pairs.
 # ---------------------------------------------------------------------------
-UNIT_CONV = {
-    "mm/day": "-mulc,86400",
-    "octas":  "-mulc,0.08",
-    "C":      "-subc,277.15",
+UNIT_VARS = {
+    "pr":      [("RR",   "mm/day"), ("precip", "in/day")],
+    "tas":     [("TG",   "degC"),   ("Tavg",   "degF")],
+    "tasmax":  [("TX",   "degC"),   ("Tmax",   "degF")],
+    "tasmin":  [("TN",   "degC"),   ("Tmin",   "degF")],
+    "wbgt":    [("WBGT", "degF")],
 }
 
-PCTL_WINDOW  = 5   # running-window width for ydrun* operators
-
-# Named subsets of indices selectable via --preset.  Add new presets here.
-PRESETS = {
-    "gis": {"TG", "TX", "TN", "RR", "HMDX", "WBGT",
-             "Rx5day", "R10mm", "R20mm", "CDD",
-             "TX90F", "TX95F", "TX100F", "TX105F"},
+# Model outputs have precip as flux (kg/m^2/s) but we want it as lwe
+# (mm/day); udunits won't do that conversion, so we do it manually by
+# changing the units to mm/s (1 kg H2O / m^2 == 1mm LWE).
+RELABEL_UNITS = {
+    "pr": "mm s-1",
 }
 
-# Commandfile each prereq operator writes to.  Also the single source of
-# truth for prereq operator names; used with CMDFILES to define all seven
-# commandfiles in their required run order.
-PREREQ_CMD = {
-    "ydrunmin":  "minmax",
-    "ydrunmax":  "minmax",
-    "ydrunmean": "minmax",
-    "timmin":    "minmax",
-    "timmax":    "minmax",
-    "ydrunpctl": "pctile",
-    "timpctl":   "pctile",
+# Variables that pass through unconverted (index formulas use them as-is,
+# under their native/CMIP6 name).  Anything referenced in gis_indexes.tsv
+# that isn't a UNIT_VARS output and isn't here is assumed to need concat
+# only, same as these.
+PASSTHROUGH_VARS = {"clt", "hurs", "humidex", "psl", "rsds", "sfcWind"}
+
+# Indexes that require percentile/norm prerequisites (ydrunpctl, timpctl,
+# etc.).  Dropped for now; kept as an explicit list so it's easy to bring
+# them back once the prereq machinery is reintroduced.
+SKIP_PREREQ_INDEXES = set()  # e.g. {"TX90p", "TN10p", ...} when reinstated
+
+# Derived indexes: computed from other indexes' outputs, not from a base
+# variable.  Maps output index name -> (operator, [input index names]).
+# input_vars in the TSV records the same info for documentation/lookup;
+# this dict is what actually drives derived.cmd's command construction.
+DERIVED = {
+    "ETR":  ("sub", ["TXx", "TNn"]),
+    "SDII": ("div", ["PTOT", "R1mm"]),
 }
 
-CMDFILES = ["concat", "minmax", "pctile", "indices", "seasonal",
-            "annual", "merge", "cleanup"]
-
-# Season tags as produced by `cdo splitseas` (appended directly to the
-# obase argument, so obase must supply its own trailing separator).
 SEASONS = ["DJF", "MAM", "JJA", "SON"]
+MONTHS  = [f"{m:02d}" for m in range(1, 13)]
 
-# Dependency tree for prerequisite operators.  Each operator lists the
-# operators whose output files it requires as additional inputs.
-PREREQ_DEPS = {
-    "ydrunmin":  [],
-    "ydrunmax":  [],
-    "ydrunmean": [],
-    "ydrunpctl": ["ydrunmin", "ydrunmax"],
-    "timmin":    [],
-    "timmax":    [],
-    "timpctl":   ["timmin", "timmax"],
-}
+CMDFILES = ["concat", "units", "split", "indexes", "derived", "cleanup"]
+
+END_SENTINEL = "~"  # value for the '_end' guard column
+
+# Columns that must be present in the TSV header.  Some are used only by
+# clean_index.sh, but are checked here so problems surface before any
+# commandfiles are run.
+REQUIRED_COLS = ["index", "formula", "threshold", "th_units", "out_units",
+                 "input_vars", "long_name", "description", "standard_name",
+                 "cell_methods", "units_metadata", "_end"]
 
 # Set after argument parsing; effectively read-only thereafter.
-FORCE      = False
-MIDDLE     = ""
-BL_TIMESPAN = ""
+FORCE = False
+
 
 # ---------------------------------------------------------------------------
 # TSV checker
 # ---------------------------------------------------------------------------
 
-END_SENTINEL = "~"  # value for the '_end' guard column
-
 def check_end_column(path):
     """Validate existence of _end guard column in TSV file.
 
-    TSVs are most easily edited in a spreadsheet; guard column
-    prevents silent loss of trailing empty cells when copy-pasting
-    to/from spreadsheet.
+    TSVs are most easily edited in a spreadsheet; guard column prevents
+    silent loss of trailing empty cells when copy-pasting to/from
+    spreadsheet.
     """
     with open(path, newline="") as fh:
         reader = csv.DictReader(fh, delimiter="\t")
         if reader.fieldnames[-1] != "_end":
             sys.exit(f"Error: {path} missing '_end' guard column as last "
-                      f"column (found: {reader.fieldnames[-1]!r})")
+                     f"column (found: {reader.fieldnames[-1]!r})")
         for row in reader:
             if row.get("_end") != END_SENTINEL:
                 sys.exit(f"Error: {path} line {reader.line_num}: '_end' "
-                          f"guard column missing or corrupted (row may be "
-                          f"missing trailing columns)")
+                         f"guard column missing or corrupted (row may be "
+                         f"missing trailing columns)")
+
+
+def load_tsv(path):
+    """Read and validate the index TSV.  Returns (rows, presets).
+
+    rows:    list of dicts, values whitespace-stripped.
+    presets: {name: set of index names}, from columns left of 'index'.
+    """
+    check_end_column(path)
+    with open(path, newline="") as fh:
+        reader = csv.DictReader(fh, delimiter="\t")
+        cols = reader.fieldnames
+        rows = list(reader)
+    for row in rows:
+        for k in row:
+            if row[k] is not None:
+                row[k] = row[k].strip()
+
+    missing = [c for c in REQUIRED_COLS if c not in cols]
+    if missing:
+        sys.exit(f"Error: {path} missing required column(s): "
+                 f"{', '.join(missing)}")
+
+    # Blank headers all collapse to the same "" key in DictReader, so they
+    # can't be told apart; only named duplicates are an error.
+    named = [c.strip() for c in cols if c.strip()]
+    dups = sorted({c for c in named if named.count(c) > 1})
+    if dups:
+        sys.exit(f"Error: {path} has duplicate column name(s): "
+                 f"{', '.join(dups)}")
+
+    names = [row["index"] for row in rows]
+    if "" in names:
+        sys.exit(f"Error: {path} has row(s) with a blank 'index' value")
+    dups = sorted({n for n in names if names.count(n) > 1})
+    if dups:
+        sys.exit(f"Error: {path} has duplicate index name(s): "
+                 f"{', '.join(dups)}")
+
+    # threshold must be blank, a number, or a "min,max" range (see
+    # clean_index.sh); otherwise it would only fail late, in cleanup.cmd.
+    for row in rows:
+        th = row["threshold"]
+        try:
+            vals = [float(v) for v in th.split(",")] if th else []
+        except ValueError:
+            vals = None
+        if vals is None or len(vals) > 2:
+            sys.exit(f"Error: {path} index {row['index']}: invalid "
+                     f"threshold {th!r} (expected number or min,max)")
+
+    pcols = cols[:cols.index("index")]
+    for i, c in enumerate(pcols):
+        if not c.strip():
+            print(f"Warning: {path} preset column {i + 1} has a blank "
+                  f"header; ignoring it", file=sys.stderr)
+    presets = {c.strip(): {row["index"] for row in rows if row[c].strip()}
+               for c in pcols if c.strip()}
+
+    return rows, presets
+
 
 # ---------------------------------------------------------------------------
-# File discovery helpers
+# File discovery / simulation grouping
 # ---------------------------------------------------------------------------
 
-def day_files(indir, var):
-    """Sorted list of all .nc files for <var>.day."""
-    d = indir / f"{var}.day"
-    return sorted(d.glob(f"{var}_*.nc")) if d.is_dir() else []
+def parse_fname(path):
+    """Split <var>_<middle>_<timespan>.nc into (var, middle, timespan).
+
+    middle may itself contain underscores; timespan is whatever's after
+    the last underscore before '.nc' (opaque -- not parsed further).
+    Returns None if the filename doesn't have at least var_middle_timespan.
+    """
+    stem = path.stem
+    parts = stem.split("_")
+    if len(parts) < 3:
+        return None
+    var, middle, timespan = parts[0], "_".join(parts[1:-1]), parts[-1]
+    return var, middle, timespan
 
 
-def file_years(path):
-    """Extract (start_year, end_year) from a CORDEX filename timespan."""
-    ts = path.stem.split("_")[-1]
-    return int(ts[:4]), int(ts[9:13])
+def find_inputs(indir):
+    """Return (layout, sorted list of .nc Paths) for indir.
+
+    layout is 'nested' if indir has *.day subdirectories (files are read
+    from those only), else 'flat' (files are read from indir itself).
+    """
+    if any(d.is_dir() for d in indir.glob("*.day")):
+        return "nested", sorted(indir.glob("*.day/*.nc"))
+    return "flat", sorted(indir.glob("*.nc"))
 
 
-def year_file(indir, var, yr):
-    """The single file for <var> that contains the given year."""
-    for f in day_files(indir, var):
-        sy, ey = file_years(f)
-        if sy <= yr <= ey:
-            return f
-    return None
+def group_simulations(files):
+    """Group <var>_<middle>_<timespan>.nc files (as found by find_inputs)
+    by middle.
+
+    Returns dict: middle -> {var: [sorted Paths]} (sorted lexically by
+    timespan, which is opaque but assumed sortable).
+    """
+    sims = defaultdict(lambda: defaultdict(list))
+    for f in files:
+        parsed = parse_fname(f)
+        if parsed is None:
+            print(f"    WARNING: skipping unparseable filename: {f.name}",
+                  file=sys.stderr)
+            continue
+        var, middle, _ts = parsed
+        sims[middle][var].append(f)
+    for middle in sims:
+        for var in sims[middle]:
+            sims[middle][var].sort()  # lexical == timespan order
+    return sims
 
 
-def sftlf_file(indir):
-    """First sftlf file found in sftlf.fx/."""
-    d = indir / "sftlf.fx"
-    files = sorted(d.glob("sftlf_*.nc")) if d.is_dir() else []
-    return files[0] if files else None
+def nco_loop_spec(files):
+    """If files are a contiguous run of single-year <YYYY>.nc timespans
+    (one year per file, step 1), return (first_filename, nfiles, ndigits)
+    for use with ncrcat's -n loop syntax.  Otherwise return None.
+    """
+    tss = [f.stem.split("_")[-1] for f in files]
+    if not all(len(t) == 4 and t.isdigit() for t in tss):
+        return None
+    years = [int(t) for t in tss]
+    if years != list(range(years[0], years[0] + len(years))):
+        return None
+    return files[0].name, len(files), 4
+
+
+def sim_timespan(files):
+    """Overall timespan tag for a simulation: first file's start through
+    last file's end, both taken as opaque strings split on '-'."""
+    first_ts = files[0].stem.split("_")[-1]
+    last_ts  = files[-1].stem.split("_")[-1]
+    start = first_ts.split("-")[0]
+    end   = last_ts.split("-")[-1]
+    return start if start == end else f"{start}-{end}"
 
 
 # ---------------------------------------------------------------------------
@@ -183,59 +308,174 @@ def sftlf_file(indir):
 # ---------------------------------------------------------------------------
 
 def emit(cmdfile, outfile, cmd):
-    """Write cmd to cmdfile unless --force is unset and outfile already exists."""
+    """Write cmd to cmdfile unless --force is unset and outfile already
+    exists. Returns True if the command was written."""
     if not FORCE and outfile.exists():
-        return
+        return False
     cmdfile.write(cmd + "\n")
+    return True
 
 
 def emit_multi(cmdfile, outfiles, cmd):
     """Like emit(), but for one command that produces several output files
-    (e.g. splitseas). Skips only if --force is unset and ALL outfiles exist."""
+    (e.g. splitseas/splitmon). Skips only if --force is unset and ALL
+    outfiles already exist."""
     if not FORCE and all(o.exists() for o in outfiles):
         return
     cmdfile.write(cmd + "\n")
+
+
+class Bundler:
+    """Collects commands into per-(index, tag) subfiles instead of writing
+    them straight to a single flat commandfile, to stay under the PBS
+    scheduler's total-task limit.  Used for indexes.cmd and cleanup.cmd,
+    each of which would otherwise have one line per simulation per index
+    per tag (thousands of tasks).
+
+    Call add(idx, tag, cmd) once per simulation's command; write_all()
+    then writes each bundle to CMDDIR/<name>/<idx>.<tag>.cmd (one command
+    per simulation) and writes a `csh <subfile>` dispatcher line for each
+    bundle into the top-level CMDDIR/<name>.cmd.
+    """
+
+    def __init__(self, name, cmddir):
+        self.name = name
+        self.subdir = cmddir / name
+        self.toplevel = cmddir / f"{name}.cmd"
+        self.bundles = defaultdict(list)  # (idx, tag) -> [cmd, ...]
+
+    def add(self, idx, tag, cmd):
+        self.bundles[(idx, tag)].append(cmd)
+
+    def write_all(self):
+        if not self.bundles:
+            return
+        self.subdir.mkdir(parents=True, exist_ok=True)
+        with open(self.toplevel, "w") as top:
+            for (idx, tag), cmds in sorted(self.bundles.items()):
+                subfile = self.subdir / f"{idx}.{tag}.cmd"
+                subfile.write_text("\n".join(cmds) + "\n")
+                top.write(f"csh {subfile}\n")
+
+    def count(self):
+        return sum(len(cmds) for cmds in self.bundles.values())
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Consolidated progress/warning messages
+# ---------------------------------------------------------------------------
+
+def shortlabels(ids):
+    """Shortest unique labels for '_'-delimited ids.
+
+    Fields common to all ids, or not needed to tell them apart, are dropped.
+    Returns (labels, template): labels maps id -> label; template shows the
+    constant fields, with '*' for varying ones (None if not shortened).
+    """
+    ids = sorted(ids)
+    parts = [i.split("_") for i in ids]
+    nf = len(parts[0]) if ids else 0
+    if len(ids) < 2 or any(len(p) != nf for p in parts):
+        return {i: i for i in ids}, None
+    cols = list(zip(*parts))
+    nuniq = [len(set(c)) for c in cols]
+    # varying fields, most distinct values first (ties: leftmost)
+    order = sorted((k for k in range(nf) if nuniq[k] > 1),
+                   key=lambda k: (-nuniq[k], k))
+    mklabels = lambda keep: ["_".join(p[k] for k in sorted(keep))
+                             for p in parts]
+    nkeep = next(j for j in range(1, len(order) + 1)
+                 if len(set(mklabels(order[:j]))) == len(ids))
+    labels = dict(zip(ids, mklabels(order[:nkeep])))
+    template = "_".join(c[0] if n == 1 else "*" for c, n in zip(cols, nuniq))
+    return labels, template
+
+
+def report_sims(sims, lab, template):
+    """Print which variables each simulation has, grouped by variable set.
+    A strict-majority group is given as a count only; others list names."""
+    n = len(sims)
+    keyed = sorted((tuple(sorted(vf)), lab[m]) for m, vf in sims.items())
+    groups = {k: [l for _, l in g]
+              for k, g in groupby(keyed, key=lambda t: t[0])}
+    if template:
+        print(f"  (names abbreviated from {template})")
+    for vs, names in sorted(groups.items(), key=lambda kv: -len(kv[1])):
+        head = f"  {len(names)} of {n} have: {', '.join(vs)}"
+        print(head if 2 * len(names) > n else f"{head}  ({', '.join(names)})")
+
+
+def report_skips(skips, lab, n=None):
+    """Print skipped-index warnings, grouped by missing variable (or by set
+    of skipped derived indexes).  skips: {middle: (by_var, derived)}.
+    If n (total simulation count) is given, a group covering all of them
+    is reported as 'all n simulations'."""
+    fmt = lambda names: (f"all {n} simulations" if n and len(names) == n
+                         else ", ".join(names))
+    byvar = sorted((v, tuple(sorted(ix)), lab[m])
+                   for m, (sbv, _) in skips.items() for v, ix in sbv.items())
+    for (v, ix), g in groupby(byvar, key=lambda t: t[:2]):
+        print(f"  WARNING: {v} not available for {fmt([t[2] for t in g])}; "
+              f"skipping {', '.join(ix)}", file=sys.stderr)
+    bydrv = sorted((tuple(sorted(d)), lab[m])
+                   for m, (_, d) in skips.items() if d)
+    for d, g in groupby(bydrv, key=lambda t: t[0]):
+        print(f"  WARNING: missing inputs for {fmt([t[1] for t in g])}; "
+              f"skipping derived {', '.join(d)}", file=sys.stderr)
+
+
+class DocAction(argparse.Action):
+    """Print the module docstring and exit, like --help."""
+    def __init__(self, option_strings, dest, **kw):
+        super().__init__(option_strings, dest, nargs=0,
+                         default=argparse.SUPPRESS, **kw)
+
+    def __call__(self, parser, ns, values, optstring=None):
+        print(__doc__)
+        parser.exit()
+
+
 def main():
-    global FORCE, MIDDLE, BL_TIMESPAN
+    global FORCE
     ap = argparse.ArgumentParser(
-        description="Generate commandfiles for computing climate indices.",
+        description="Generate commandfiles for computing climate indexes.",
         formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("indir",    type=Path, help="compress.sh output directory")
+    ap.add_argument("indir",    type=Path,
+                    help="Directory containing <var>_<middle>_<timespan>.nc input "
+                         "files, either directly or in <var>.day subdirectories")
     ap.add_argument("outdir",   type=Path, help="Output directory for index files")
-    ap.add_argument("setupdir", type=Path, help="Directory containing gis_indexes.tsv, "
-                                                 "gis_cleanup.tsv, and clean_index.sh")
+    ap.add_argument("setupdir", type=Path,
+                    help="Directory containing gis_indexes.tsv and clean_index.sh")
     ap.add_argument("cmddir", type=Path, nargs="?", default=Path("."),
                     help="Directory for commandfiles (default: .)")
-    ap.add_argument("--baseline", default="1991-2020",
-                    metavar="STARTYEAR-ENDYEAR",
-                    help="Reference period (default: 1991-2020)")
+    ap.add_argument("--doc", action=DocAction,
+                    help="Print the full documentation (module docstring) "
+                         "and exit")
+    ap.add_argument("--tmpdir", type=Path, metavar="DIR",
+                    help="Directory for intermediate files, both written and "
+                         "checked for reuse (default: OUTDIR/tmp)")
+    ap.add_argument("-v", "--verbose", action="store_true",
+                    help="Report per simulation, with full names, instead "
+                         "of consolidated summaries")
     ap.add_argument("--force", action="store_true",
                     help="Overwrite existing output files")
     sel = ap.add_mutually_exclusive_group()
     sel.add_argument("--indexes", metavar="ind1,ind2,...",
-                    help="Only generate these indices (comma-separated, "
+                    help="Only generate these indexes (comma-separated, "
                          "matching the 'index' column). Default: all rows.")
-    sel.add_argument("--preset", choices=sorted(PRESETS),
-                    help="Only generate a named preset subset of indices.")
+    sel.add_argument("--preset", metavar="NAME",
+                    help="Only generate a named preset subset of indexes "
+                         "(a column left of 'index' in the TSV).")
     args = ap.parse_args()
 
-    m = re.fullmatch(r"(\d{4})-(\d{4})", args.baseline)
-    if not m:
-        ap.error(f"--baseline must be STARTYEAR-ENDYEAR, got: {args.baseline}")
-    bstart, bend = int(m[1]), int(m[2])
-
     indir    = args.indir.resolve()
-    outdir   = args.outdir
     setupdir = args.setupdir.resolve()
     cmddir   = args.cmddir
     tsv      = setupdir / "gis_indexes.tsv"
-    cleanup_tsv = setupdir / "gis_cleanup.tsv"
 
     if not indir.is_dir():
         sys.exit(f"Error: INDIR not found: {indir}")
@@ -243,298 +483,317 @@ def main():
         sys.exit(f"Error: SETUPDIR not found: {setupdir}")
     if not tsv.is_file():
         sys.exit(f"Error: gis_indexes.tsv not found in SETUPDIR: {tsv}")
-    if not cleanup_tsv.is_file():
-        sys.exit(f"Error: gis_cleanup.tsv not found in SETUPDIR: {cleanup_tsv}")
-    check_end_column(tsv)
-    check_end_column(cleanup_tsv)
+    rows, presets = load_tsv(tsv)
 
-    # Resolve which indices to generate.  selected=None means "all rows"
-    # (the historical default); otherwise it's a set of index names checked
-    # against gis_indexes.tsv's 'index' column at each pass.
+    # Resolve which indexes to generate.  selected=None means "all rows".
     if args.preset:
-        selected = set(PRESETS[args.preset])
+        if args.preset not in presets:
+            avail = ", ".join(sorted(presets)) or "(none defined)"
+            sys.exit(f"Error: unknown preset {args.preset!r}; "
+                     f"available: {avail}")
+        selected = presets[args.preset]
+        if not selected:
+            print(f"Warning: preset {args.preset!r} selects no indexes",
+                  file=sys.stderr)
     elif args.indexes:
         selected = {s.strip() for s in args.indexes.split(",") if s.strip()}
     else:
         selected = None
 
+    known = {row["index"] for row in rows}
     if selected is not None:
-        with open(tsv, newline="") as fh:
-            known = {row["index"].strip()
-                     for row in csv.DictReader(fh, delimiter="\t")}
-        unknown = selected - known
+        unknown = selected - known - set(DERIVED)
         if unknown:
-            sys.exit(f"Error: unknown index/indices not in gis_indexes.tsv: "
+            sys.exit(f"Error: unknown index/indexes not in gis_indexes.tsv: "
                       f"{', '.join(sorted(unknown))}")
 
+    outdir = args.outdir
     outdir.mkdir(parents=True, exist_ok=True)
     outdir = outdir.resolve()
-    rawdir = outdir / "raw"
-    rawdir.mkdir(exist_ok=True)
+    tmpdir = args.tmpdir if args.tmpdir else outdir / "tmp"
+    tmpdir.mkdir(parents=True, exist_ok=True)
+    tmpdir = tmpdir.resolve()
     cmddir.mkdir(parents=True, exist_ok=True)
     cmddir = cmddir.resolve()
 
-    concatdir = outdir / "concat"
-    pctldir   = outdir / "pctl"
-    anndir    = outdir / "annual"
-    concatdir.mkdir(exist_ok=True)
-    pctldir.mkdir(exist_ok=True)
-    anndir.mkdir(exist_ok=True)
+    FORCE = args.force
 
-    all_nc = sorted(indir.glob("*.day/*.nc"))
-    if not all_nc:
-        sys.exit(f"Error: No *.nc files found under {indir}/*.day/")
-    sim_start = file_years(all_nc[0])[0]
-    sim_end   = file_years(all_nc[-1])[1]
-    timespan  = (f"{all_nc[0].stem.split('_')[-1][:4]}-"
-                 f"{all_nc[-1].stem.split('_')[-1][9:13]}")
+    layout, infiles = find_inputs(indir)
+    sims = group_simulations(infiles)
+    if not sims:
+        sys.exit(f"Error: no <var>_<middle>_<timespan>.nc files found in "
+                 f"{indir} ({layout} layout)")
 
-    FORCE       = args.force
-    MIDDLE      = "_".join(all_nc[0].stem.split("_")[1:8])
-    BL_TIMESPAN = f"{bstart}0101-{bend}1231"
+    print(f"Found {len(sims)} simulation(s) in {indir} ({layout} layout)")
+    lab, template = ({m: m for m in sims}, None) if args.verbose \
+        else shortlabels(sims)
+    if args.verbose:
+        for middle in sims:
+            print(f"  {middle}: {sorted(sims[middle])}")
+    else:
+        report_sims(sims, lab, template)
 
-    print(f"Baseline period: {bstart}-{bend}")
-    print(f"  Setup dir:  {setupdir}")
-    print(f"  DRS middle: {MIDDLE}")
-    print(f"  Timespan:   {timespan}  ({sim_start}-{sim_end})")
+    # concat/units/split/derived stay flat, one commandfile each.
+    # indexes/cleanup get bundled by (index, tag) to stay under PBS's
+    # total-task limit -- see Bundler.
+    FLAT_CMDFILES = ["concat", "split", "derived"]
+    BUNDLED_CMDFILES = ["units", "indexes", "cleanup"]
 
-    cmd_paths = {name: cmddir / f"{name}.cmd" for name in CMDFILES}
+    cmd_paths = {name: cmddir / f"{name}.cmd" for name in FLAT_CMDFILES}
     cmd_files = {k: open(v, "w") for k, v in cmd_paths.items()}
+    bundlers = {name: Bundler(name, cmddir) for name in BUNDLED_CMDFILES}
+    cmd_files.update(bundlers)
 
-    # ------------------------------------------------------------------
-    # Pass 1: collect all unique non-sftlf variables referenced in TSV,
-    # emit concat.cmd, and record which vars are available.
-    # ------------------------------------------------------------------
-    seen_vars = set()
-    all_vars  = []
-    with open(tsv, newline="") as fh:
-        for row in csv.DictReader(fh, delimiter="\t"):
-            if selected is not None and row["index"].strip() not in selected:
-                continue
-            for v in row["input_vars"].strip().split("+"):
-                if v != "sftlf" and v not in seen_vars:
-                    all_vars.append(v)
-                    seen_vars.add(v)
+    # rows actually in play, keyed by index name, honoring selection
+    active_rows = {
+        row["index"]: row for row in rows
+        if row["index"] not in SKIP_PREREQ_INDEXES
+        and row["index"] not in DERIVED
+        and (selected is None or row["index"] in selected)
+    }
 
-    concat_ok = set()   # vars successfully scheduled for concatenation
+    # Which base variables does each active formula-driven index need?
+    # (DERIVED indexes are handled separately, from other indexes' outputs.)
+    needed_vars = {v for row in active_rows.values()
+                   for v in row["input_vars"].split("+")}
 
-    for var in all_vars:
-        files = day_files(indir, var)
-        if not files:
-            print(f"    WARNING: {var}.day not found or empty; "
-                  f"dependent indices will be skipped", file=sys.stderr)
-            continue
-        out       = concatdir / f"{var}_{MIDDLE}_{timespan}.nc"
-        filenames = " ".join(f.name for f in files)
-        emit(cmd_files["concat"], out,
-             f"ncrcat -p {indir / f'{var}.day'} -o {out} {filenames}")
-        concat_ok.add(var)
+    active_derived = {k: v for k, v in DERIVED.items()
+                       if selected is None or k in selected}
 
-    # ------------------------------------------------------------------
-    # ensure(spec, var, bl_pipe) - closure over prereq_done and cmd_files.
-    # Recursively schedules prereq commands and returns the output Path.
-    # prereq_done is keyed on (spec, var) to avoid cross-variable collisions.
-    # ------------------------------------------------------------------
-    prereq_done = set()
+    skips = {middle: process_simulation(middle, varfiles, active_rows,
+                                        active_derived, outdir, tmpdir,
+                                        setupdir, cmd_files)
+             for middle, varfiles in sims.items()}
+    if args.verbose:
+        for m, sk in skips.items():
+            report_skips({m: sk}, lab)
+    else:
+        report_skips(skips, lab, len(sims))
 
-    # Index names whose cdo_operator starts with "year" -- these also get
-    # seasonal (splitseas) output in seasonal.cmd, and need matching
-    # per-season cleanup calls in Pass 3.
-    year_indexes = set()
-
-    def ensure(spec, var, bl_pipe):
-        key = (spec, var)
-        op  = spec.split(",")[0]
-        assert op in PREREQ_CMD, f"Unknown prereq operator: {op}"
-        out = pctldir / f"{var}_{spec.replace(',', '')}_{MIDDLE}_{BL_TIMESPAN}.nc"
-        if key in prereq_done:
-            return out
-
-        # Recursively ensure dependencies first.  ydrunpctl passes its window
-        # arg down to ydrunmin/ydrunmax; timpctl's deps (timmin/timmax) take no args.
-        dep_args  = spec.split(",")[-1] if op == "ydrunpctl" else ""
-        dep_files = [
-            ensure(f"{dep_op},{dep_args}" if dep_args else dep_op, var, bl_pipe)
-            for dep_op in PREREQ_DEPS[op]
-        ]
-        dep_str = " ".join(str(f) for f in dep_files)
-
-        if op in ("ydrunmin", "ydrunmax", "ydrunmean"):
-            cmd = f"cdo {spec} {bl_pipe} {out}"
-        elif op == "ydrunpctl":
-            cmd = f"cdo {spec} {bl_pipe} {dep_str} {out}"
-        elif op in ("timmin", "timmax"):
-            cmd = f"cdo {op} {bl_pipe} {out}"
-        else:  # timpctl; mask dry days in pr baseline before computing percentile
-            pipe = f"-setrtomiss,,1 {bl_pipe}" if var == "pr" else bl_pipe
-            cmd  = f"cdo {spec} {pipe} {dep_str} {out}"
-
-        emit(cmd_files[PREREQ_CMD[op]], out, cmd)
-        prereq_done.add(key)
-        return out
-
-    # ------------------------------------------------------------------
-    # Pass 2: emit indices / annual / merge commands
-    # ------------------------------------------------------------------
-    with open(tsv, newline="") as fh:
-        for row in csv.DictReader(fh, delimiter="\t"):
-            idx          = row["index"].strip()
-            if selected is not None and idx not in selected:
-                continue
-            op           = row["cdo_operator"].strip()
-            units        = row["units"].strip()
-            freq         = row["output_frequency"].strip()
-            prereq_specs = row["prereq_type"].strip()
-            vars_list    = row["input_vars"].strip().split("+")
-
-            primary_var = vars_list[0]
-
-            # Check all inputs are available
-            skip = False
-            for v in vars_list:
-                if v == "sftlf":
-                    if sftlf_file(indir) is None:
-                        print(f"    WARNING: sftlf.fx not found; skipping {idx}",
-                              file=sys.stderr)
-                        skip = True; break
-                elif v not in concat_ok:
-                    skip = True; break
-            if skip:
-                continue
-
-            bl_pipe   = (f"-selyear,{bstart}/{bend} "
-                         f"{concatdir}/{primary_var}_{MIDDLE}_{timespan}.nc")
-            final_out = rawdir / f"{idx}_{MIDDLE}_{timespan}.nc"
-
-            # Resolve prerequisites
-            prereq_str = " ".join(
-                str(ensure(spec, primary_var, bl_pipe))
-                for spec in prereq_specs.split("+")
-            ) if prereq_specs != "none" else ""
-
-            # Secondary inputs: vars beyond the primary (e.g. tasmin for DTR, sftlf for GSL)
-            def sec_inputs(yr=None):
-                parts = []
-                for v in vars_list[1:]:
-                    if v == "sftlf":
-                        parts.append(str(sftlf_file(indir)))
-                    elif yr is None:
-                        parts.append(f"{concatdir}/{v}_{MIDDLE}_{timespan}.nc")
-                    else:
-                        yf = year_file(indir, v, yr)
-                        parts.append(f"-selyear,{yr} {yf}" if yf else "MISSING")
-                return " ".join(parts)
-
-            # Shared trailing fragment: optional prereqs then output file
-            def tail(out):
-                return (f" {prereq_str}" if prereq_str else "") + f" {out}"
-
-            if freq == "annual":
-                c    = UNIT_CONV.get(units, "")
-                pipe = f"{c} {concatdir}/{primary_var}_{MIDDLE}_{timespan}.nc" if c \
-                       else f"{concatdir}/{primary_var}_{MIDDLE}_{timespan}.nc"
-                sec  = sec_inputs()
-                cmd  = (f"cdo {op} {pipe}"
-                        + (f" {sec}" if sec else "")
-                        + tail(final_out))
-                emit(cmd_files["indices"], final_out, cmd)
-
-                # Seasonal output (in addition to annual): only for indices
-                # whose operator is a plain year* summary (yearmean, yearsum,
-                # yearmin, yearmax, ...); annual_loop/eca_*/etccdi_* indices
-                # are out of scope here.
-                if op.startswith("year"):
-                    year_indexes.add(idx)
-                    seas_op   = "seas" + op[len("year"):]
-                    seas_base = rawdir / f"{idx}_{MIDDLE}_{timespan}_"
-                    seas_outs = [Path(f"{seas_base}{s}.nc") for s in SEASONS]
-                    seas_cmd  = (f"cdo splitseas -{seas_op} {pipe}"
-                                 + (f" {sec}" if sec else "")
-                                 + tail(seas_base))
-                    emit_multi(cmd_files["seasonal"], seas_outs, seas_cmd)
-
-            elif freq == "annual_loop":
-                c       = UNIT_CONV.get(units, "")
-                yr_outs = []
-
-                for yr in range(sim_start, sim_end + 1):
-                    yf = year_file(indir, primary_var, yr)
-                    if yf is None:
-                        print(f"    WARNING: no file for {primary_var} "
-                              f"year {yr}; skipping", file=sys.stderr)
-                        continue
-                    yr_out = anndir / f"{idx}_{MIDDLE}_{yr}.nc"
-                    sec    = sec_inputs(yr=yr)
-                    cmd    = (f"cdo {op} {f'{c} ' if c else ''}-selyear,{yr} {yf}"
-                              + (f" {sec}" if sec else "")
-                              + tail(yr_out))
-                    emit(cmd_files["annual"], yr_out, cmd)
-                    yr_outs.append(yr_out)
-
-                if yr_outs:
-                    yr_list = " ".join(str(y) for y in yr_outs)
-                    emit(cmd_files["merge"], final_out,
-                         f"cdo mergetime {yr_list} {final_out}")
-
-            else:
-                print(f"    WARNING: unknown output_frequency '{freq}' "
-                      f"for {idx}; skipping", file=sys.stderr)
-
-    # ------------------------------------------------------------------
-    # Pass 3: emit cleanup.cmd from gis_cleanup.tsv.
-    # One call to clean_index.sh per row (== per output file).
-    # Raw index file is keyed on source_file column, not index, since
-    # secondary variables (e.g. CDDn) live in the primary index's raw file.
-    # ------------------------------------------------------------------
-    with open(cleanup_tsv, newline="") as fh:
-        for row in csv.DictReader(fh, delimiter="\t"):
-            idx        = row["index"].strip()
-            src        = row["source_file"].strip()
-            if selected is not None and src not in selected:
-                continue
-            raw_in     = rawdir  / f"{src}_{MIDDLE}_{timespan}.nc"
-            clean_out  = outdir  / f"{idx}_{MIDDLE}_{timespan}.nc"
-            cmd = (f"./clean_index.sh {idx} {raw_in} {clean_out} {setupdir}")
-            emit(cmd_files["cleanup"], clean_out, cmd)
-
-            # Matching per-season cleanup calls, if this index has seasonal
-            # (splitseas) output from seasonal.cmd.
-            if src in year_indexes:
-                for s in SEASONS:
-                    seas_raw_in  = rawdir / f"{src}_{MIDDLE}_{timespan}_{s}.nc"
-                    seas_clean   = outdir / f"{idx}_{MIDDLE}_{timespan}_{s}.nc"
-                    seas_cmd = (f"./clean_index.sh {idx} {seas_raw_in} "
-                                f"{seas_clean} {setupdir}")
-                    emit(cmd_files["cleanup"], seas_clean, seas_cmd)
-
-    # Close commandfiles; remove any that are empty
+    # Close flat commandfiles; remove any that are empty
     for name, fh in cmd_files.items():
+        if name in bundlers:
+            continue
         fh.close()
         p = cmd_paths[name]
         if p.stat().st_size == 0:
             p.unlink()
 
-    # Count commands (lines not starting with 'export') in each commandfile
-    def count_cmds(p):
-        if not p.exists():
-            return 0
-        return sum(1 for ln in p.read_text().splitlines()
-                   if ln and not ln.startswith("export"))
+    # Write out bundled commandfiles (subfiles + dispatcher)
+    for bundler in bundlers.values():
+        bundler.write_all()
 
-    counts = {name: count_cmds(cmd_paths[name]) for name in CMDFILES}
+    def count_cmds(p):
+        return sum(1 for _ in p.read_text().splitlines()) if p.exists() else 0
+
+    counts = {name: count_cmds(cmd_paths[name]) for name in FLAT_CMDFILES}
+    counts.update({name: b.count() for name, b in bundlers.items()})
 
     print()
     print("Commandfile generation complete.")
-    print(f"  TSV:                     {tsv}")
-    print(f"  Cleanup TSV:             {cleanup_tsv}")
-    print(f"  Commandfiles:            {cmddir}")
-    print(f"  Concatenated inputs:     {concatdir}")
-    print(f"  Reference files:         {pctldir}")
-    print(f"  Per-year temp files:     {anndir}")
-    print(f"  Raw index files:         {rawdir}")
-    print(f"  Final index files:       {outdir}")
+    print(f"  TSV:              {tsv}")
+    print(f"  Commandfiles:     {cmddir}")
+    print(f"  Intermediates:    {tmpdir}")
+    print(f"  Final index files:{outdir}")
     print("  " + "  ".join(f"{n.capitalize()}: {counts[n]}" for n in CMDFILES))
     print()
+
+
+# ---------------------------------------------------------------------------
+# Per-simulation processing
+# ---------------------------------------------------------------------------
+
+def process_simulation(middle, varfiles, active_rows, active_derived,
+                        outdir, tmpdir, setupdir, cmd_files):
+    """Emit all commands for one simulation ('middle').
+
+    Returns (skipped_by_var, skipped_derived) for the caller to report:
+    {invar: [indexes skipped for lack of it]} and [derived indexes skipped].
+    """
+    all_files = [f for files in varfiles.values() for f in files]
+    ts = sim_timespan(sorted(all_files, key=lambda f: f.stem.split("_")[-1]))
+
+    # -- units: per-input-file unit conversion happens before concat
+    #    to avoid memory problems.
+    #
+    # units_dir[outvar] == list of converted per-file Paths, file-index-
+    #    aligned with varfiles[basevar], used by concat step
+
+    # If concat output already exists, we don't need to redo units
+    def concat_done(outvar):
+        out = tmpdir / "concat" / outvar / f"{outvar}_{middle}_{ts}.nc"
+        return not FORCE and out.exists()
+
+    # units_dir[outvar] contains the paths used in the concat step below,
+    # which needs them to tell whether or not to generate the units &
+    # concat commands.
+    units_dir = {}
+    for basevar, outs in UNIT_VARS.items():
+        if basevar not in varfiles:
+            continue
+        relabel = RELABEL_UNITS.get(basevar)
+
+        for outvar, unit in outs:
+            vardir = tmpdir / "units" / outvar
+            outfiles = [vardir / f.name for f in varfiles[basevar]]
+            units_dir[outvar] = outfiles
+
+            if concat_done(outvar):
+                continue
+            vardir.mkdir(parents=True, exist_ok=True)
+            for f, out in zip(varfiles[basevar], outfiles):
+                script_parts = []
+                if relabel:
+                    script_parts.append(f'{basevar}@units="{relabel}"')
+                script_parts.append(f'{outvar}=udunits({basevar},"{unit}")')
+                script_parts.append(f'{outvar}@units="{unit}"')
+                script = "; ".join(script_parts)
+                # Note: output file still has basevar; -v in concat drops it
+                if FORCE or not out.exists():
+                    cmd_files["units"].add(
+                        outvar, middle, f"ncap2 -O -s '{script}' {f} {out}")
+
+    # Symlink files that don't need units conversion
+    for var in PASSTHROUGH_VARS:
+        if var not in varfiles:
+            continue
+        vardir = tmpdir / "units" / var
+        links = [vardir / f.name for f in varfiles[var]]
+        units_dir[var] = links
+
+        if concat_done(var):
+            continue
+        vardir.mkdir(parents=True, exist_ok=True)
+        for f, link in zip(varfiles[var], links):
+            if not link.exists():
+                link.symlink_to(f.resolve())
+
+    # -- concat: one file per output variable actually present -----------
+    # -v drops the original input variable still hanging around after units
+    unit_files = {}
+    for outvar, files in units_dir.items():
+        cdir = tmpdir / "concat" / outvar
+        cdir.mkdir(parents=True, exist_ok=True)
+        out = cdir / f"{outvar}_{middle}_{ts}.nc"
+        indir = files[0].parent
+        concat = f"ncrcat -O -v {outvar} -p {indir} -o {out}"
+        loop = nco_loop_spec(files)
+        if loop:
+            first, n, ndigits = loop
+            emit(cmd_files["concat"], out,
+                 f"{concat} -n {n},{ndigits},1 {first}")
+        else:
+            filenames = " ".join(f.name for f in files)
+            emit(cmd_files["concat"], out, f"{concat} {filenames}")
+        unit_files[outvar] = out
+
+
+    # -- split: splitseas/splitmon on each units.cmd output ---------------
+    # split_files[var]["ann"] = unsplit path
+    # split_files[var]["seas"][SEASON] = path
+    # split_files[var]["mon"][MM] = path
+    split_files = {}
+    for var, f in unit_files.items():
+        entry = {"ann": f, "seas": {}, "mon": {}}
+
+        seas_base = tmpdir / f"{var}_{middle}_{ts}_"
+        seas_outs = [Path(f"{seas_base}{s}.nc") for s in SEASONS]
+        emit_multi(cmd_files["split"], seas_outs,
+                   f"cdo splitseas {f} {seas_base}")
+        entry["seas"] = dict(zip(SEASONS, seas_outs))
+
+        mon_base = tmpdir / f"{var}_{middle}_{ts}_"
+        mon_outs = [Path(f"{mon_base}{m}.nc") for m in MONTHS]
+        emit_multi(cmd_files["split"], mon_outs,
+                   f"cdo splitmon {f} {mon_base}")
+        entry["mon"] = dict(zip(MONTHS, mon_outs))
+
+        split_files[var] = entry
+
+    # -- indexes: run each formula on annual + seasonal + monthly ---------
+    # raw_index_files[idx]["ann"|SEASON|MM] -> Path, for use by derived step
+    raw_index_files = defaultdict(dict)
+    needs_cleanup = set()  # (idx, tag) pairs whose file was (re)computed
+    skipped_by_var = defaultdict(list)  # invar -> [idx, ...]; returned for reporting
+
+    for idx, row in active_rows.items():
+        invar = row["input_vars"].split("+")[0]  # DTR's only input is itself
+        if invar not in split_files:
+            skipped_by_var[invar].append(idx)
+            continue
+
+        formula = row["formula"]
+        if "$threshold" in formula:
+            formula = formula.replace("$threshold", row["threshold"])
+
+        for tag, infile in _tags(split_files[invar]):
+            outfile = _outfile(outdir, idx, tag, middle, ts)
+            if FORCE or not outfile.exists():
+                cmd = f"cdo {formula} {infile} {outfile}"
+                cmd_files["indexes"].add(idx, tag, cmd)
+                needs_cleanup.add((idx, tag))
+            raw_index_files[idx][tag] = outfile
+
+    # -- derived: combine other indexes' outputs ---------------------------
+    skipped_derived = []
+    for idx, (op, inputs) in active_derived.items():
+        in_a, in_b = inputs
+        if in_a not in raw_index_files or in_b not in raw_index_files:
+            skipped_derived.append(idx)
+            continue
+        tags = set(raw_index_files[in_a]) & set(raw_index_files[in_b])
+        for tag in tags:
+            outfile = _outfile(outdir, idx, tag, middle, ts)
+            fa = raw_index_files[in_a][tag]
+            fb = raw_index_files[in_b][tag]
+            cmd = f"cdo {op} {fa} {fb} {outfile}"
+            if emit(cmd_files["derived"], outfile, cmd):
+                needs_cleanup.add((idx, tag))
+            raw_index_files[idx][tag] = outfile
+
+    # -- cleanup: apply CF metadata, in place, one call per (index, tag) ---
+    # Cleanup mutates its file in place, so its own output can't be used to
+    # detect "already done" -- instead, piggyback on the indexes/derived
+    # existence check: only clean up files that were just (re)computed.
+    for idx, by_tag in raw_index_files.items():
+        for tag, f in by_tag.items():
+            if (idx, tag) not in needs_cleanup:
+                continue
+            cmd = f"./clean_index.sh {idx} {f} {setupdir}"
+            cmd_files["cleanup"].add(idx, tag, cmd)
+
+    return dict(skipped_by_var), skipped_derived
+
+
+def _freq(tag):
+    """Group splits (annual, seasonal, monthly) by tag."""
+    if tag == "ann":
+        return "ann"
+    return "seas" if tag in SEASONS else "mon"
+
+
+def _outfile(outdir, idx, tag, middle, ts):
+    """Output path for one (index, tag): OUTDIR/<idx>/<freq>/<name>.nc,
+    creating the directory if needed."""
+    d = outdir / idx / _freq(tag)
+    d.mkdir(parents=True, exist_ok=True)
+    return d / f"{idx}_{middle}_{ts}{_tagsuffix(tag)}.nc"
+
+
+def _tags(split_entry):
+    """Yield (tag, path) for annual + each season + each month of a
+    split_files[var] entry. tag is 'ann', a SEASON string, or an MM string."""
+    yield "ann", split_entry["ann"]
+    for s, f in split_entry["seas"].items():
+        yield s, f
+    for m, f in split_entry["mon"].items():
+        yield m, f
+
+
+def _tagsuffix(tag):
+    """Filename suffix for a tag: '' for annual, '_DJF' / '_01' otherwise."""
+    return "" if tag == "ann" else f"_{tag}"
+
 
 if __name__ == "__main__":
     main()
