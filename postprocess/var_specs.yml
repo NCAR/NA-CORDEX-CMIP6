@@ -453,15 +453,15 @@ hus300:
 hus200:
   <<: *pres_specs
   plev: 20000
-  quant: '.6'
+  quant: '.7'
 hus150:
   <<: *pres_specs
   plev: 15000
-  quant: '.6'
+  quant: '.7'
 hus100:
   <<: *pres_specs
   plev: 10000
-  quant: '.6'
+  quant: '.7'
 
 hur1000:
   <<: *pres_specs
