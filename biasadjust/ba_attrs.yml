@@ -1,0 +1,110 @@
+# Attribute rules for reformatting ISIMIP3BASD bias-adjusted output.
+# Read by ba_cmorize.py (via the copy ba_setup.py puts in SETUPDIR).
+#
+# Every global attribute found in an input file must be listed in exactly
+# one of keep_global, keep_ba, or drop_global.  Anything unlisted is an
+# error, so new attributes from the bias-adjustment code are never lost or
+# passed through silently.  Kept attributes must be identical across all
+# input files that go into one output file.
+
+# Copied unchanged from the input files.
+keep_global:
+  - activity_id
+  - contact
+  - domain
+  - driving_institution_id
+  - driving_source_id
+  - driving_variant_label
+  - frequency
+  - institution
+  - institution_id
+  - license
+  - mip_era
+  - references
+  - source
+  - source_id
+  - source_type
+  - version_realization
+  - bc_method_id
+  - bc_observation_id
+  - bc_period
+
+# ISIMIP3BASD method parameters that define the result.  Copied unchanged.
+keep_ba:
+  - ba_version
+  - ba_distribution
+  - ba_trend_preservation
+  - ba_detrend
+  - ba_n_quantiles
+  - ba_n_iterations
+  - ba_step_size
+  - ba_months
+  - ba_randomization_seed
+  - ba_lower_bound
+  - ba_lower_threshold
+  - ba_upper_bound
+  - ba_upper_threshold
+  - ba_halfwin_upper_bound_climatology
+  - ba_p_value_eps
+  - ba_max_change_factor
+  - ba_max_adjustment_factor
+  - ba_if_all_invalid_use
+  - ba_adjust_p_values
+  - ba_unconditional_ccs_transfer
+  - ba_trendless_bound_frequency
+  - ba_fit_mode
+
+# Kept ba_* attributes with an empty-string value are dropped.
+drop_empty_ba: true
+
+# Dropped: tool stamps, scratch paths, runtime-only settings, and
+# attributes that ba_cmorize.py rewrites (set_global or derived).
+drop_global:
+  - CDI
+  - CDO
+  - NCO
+  - history
+  - Conventions
+  - creation_date
+  - tracking_id
+  - title
+  - domain_id
+  - grid
+  - product
+  - project_id
+  - variable_id
+  - driving_experiment
+  - driving_experiment_id
+  - ba_obs_hist
+  - ba_sim_hist
+  - ba_sim_fut
+  - ba_sim_fut_ba
+  - ba_landmask
+  - ba_variable
+  - ba_n_processes
+  - ba_repeat_warnings
+  - ba_invalid_value_warnings
+
+# Set on every output file.  domain_id comes from the product config.
+set_global:
+  Conventions: "CF-1.11"
+  grid: "Regular latitude-longitude grid with 0.125 degree spacing (ERA5-Land grid)"
+  product: "bias-adjusted-output"
+  project_id: "CORDEX-Adjust"
+  bc_method: "ISIMIP3BASD trend-preserving parametric quantile mapping (Lange, 2019, Geosci. Model Dev., 12, 3055-3070, doi:10.5194/gmd-12-3055-2019)"
+  bc_observation: "ERA5-Land reanalysis, daily aggregates (Munoz-Sabater et al., 2021, Earth Syst. Sci. Data, 13, 4349-4383, doi:10.5194/essd-13-4349-2021)"
+
+# Name of the attribute holding the full bias-adjustment ID string
+# (version_realization-institution_id-ba_id, e.g.
+# v1-r1-NCAR-ISIMIP3BASD-ERA5Land-1985-2014).  This is the string that used
+# to be in the filename.  Attribute name is a convention choice; verify.
+id_attribute: "bc_info"
+
+# Units for the output time coordinate.  Should match the raw archive
+# (epoch in sim_config); verify the exact string against a raw day file.
+time_units: "days since 1950-01-01 00:00:00"
+
+# Templates; fields available: driving_source_id, driving_experiment_id,
+# domain_id, source_id, bc_method_id, bc_observation_id, bc_period
+title: "Bias-adjusted WRF downscaling of {driving_source_id} {driving_experiment_id} for CORDEX-CMIP6 {domain_id}"
+bias_adjustment: "Daily {source_id} output regridded to the 0.125 degree ERA5-Land grid and bias-adjusted with {bc_method_id} against {bc_observation_id} over {bc_period}."

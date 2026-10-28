@@ -1,0 +1,57 @@
+# Bias-adjusted product: EC-Earth3-Veg historical + ssp370,
+# ISIMIP3BASD calibrated on ERA5-Land 1985-2014.
+#
+# One config = one published product (one ba_id).  All experiments in the
+# product are processed together; filenames differ by experiment, so they
+# can share the flat <var>.day staging directories.
+
+id: "ece-370"
+
+# Root of the bias-adjusted tree for this driving model.
+source_root: "/lustre/desc1/p/nral0053/na-cordex-cmip6/biascorrection/isimip_basd/EC-Earth3-Veg"
+
+# A setup directory from the raw postprocessing of this simulation.
+# Provides var_table.tsv (refh, positive, quant) and the ncrepack-cordex
+# scripts.  Any of the simulation's setup dirs works (var_table is shared).
+# TODO: verify path.
+raw_setupdir: "/glade/derecho/scratch/mcginnis/jacob/na-cordex/ece-hist/setup"
+
+# Short ID for the bias adjustment: goes in the DRS path and (prefixed
+# with version_realization and institution_id) in the id_attribute.
+ba_id: "ISIMIP3BASD-ERA5Land-1985-2014"
+
+# Filename / metadata components.  ba_cmorize.py checks these against the
+# input file attributes and stops on any mismatch.
+domain_id: "NAM-12i"
+driving_source_id: "EC-Earth3-Veg"
+driving_variant_label: "r1i1p1f1"
+institution_id: "NCAR"
+source_id: "WRF461S-SN"
+version_realization: "v1-r1"
+calendar: "proleptic_gregorian"
+
+# DRS root components (relocate_ba.sh).  Convention choice; verify.
+drs_project: "CORDEX-Adjust"
+drs_activity: "DD"
+
+# Daily output file length in years; chunks end on years divisible by this
+# (same rule as postprocess/aggregate.sh).
+chunk_years: 5
+
+# Which years each source directory contributes to which experiment.
+# path is relative to source_root and ends at the simh-* level; every
+# simf-* directory under it is scanned.  Years found in a source but not
+# listed under any experiment are skipped (and recorded in the manifest).
+# Every listed year must be found, and no (experiment, var, year) may come
+# from more than one source.
+sources:
+  - path: "historical_v20260731/obs-era5land_1985-2014/simh-1985-2014"
+    experiments:
+      historical: [1953, 2009]
+  - path: "historical-ssp370_v20260731-v20260804/obs-era5land_1985-2014/simh-1985-2014"
+    experiments:
+      historical: [2010, 2014]
+      ssp370: [2015, 2039]
+  - path: "ssp370_v20260804/obs-era5land_1985-2014/simh-1985-2014"
+    experiments:
+      ssp370: [2040, 2099]
