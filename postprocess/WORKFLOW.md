@@ -316,6 +316,47 @@ end
 cd $topdir
 
 
+################
+# Step 10 alternate: bias-corrected indexes
+
+set bcroot = /glade/derecho/scratch/mcginnis/jacob/na-cordex-ba/ece/CORDEX-Adjust/bias-adjusted-output/NAM-12i/NCAR
+
+set bcind = $scratch/bc-index
+
+# symlink files into flat directories
+
+foreach gcm (EC-Earth3-Veg MPI-ESM1-2-HR)
+foreach scen (ssp245 ssp370)
+foreach var (hurs pr ps rlds rsds sfcWind tas tasmax tasmin uas vas)
+set outdir = $bcind/flat/$gcm/$scen/$var.day
+echo $outdir
+mkdir -p $outdir; cd $outdir
+foreach chunk (historical $scen)
+ln -s $bcroot/$gcm/$chunk/*/*/*/day/${var}Adjust/*/${var}Adjust*nc .
+end
+end
+end
+end
+
+cd $bcind
+
+set gcm = EC-Earth3-Veg
+set scen = ssp370
+set bindir = $bcind/flat/$gcm/$scen
+set boutdir = $bcind/data/$gcm/$scen
+set bcmddir = $bcind/cmd/$gcm/$scen
+set brundir = $bcind/run/$gcm/$scen
+set btmpdir = $bcind/tmp
+
+python $post/index.py --preset gis --badj $bindir $boutdir $post $bcmddir
+
+$post/launch_multi --run $brundir --tmp $btmpdir --wall 00:30:00 --mem 50GB\
+                   --copy $post/clean_index.sh --chain --skip-missing\
+                   $bcmddir/units.cmd $bcmddir/concat.cmd \
+                   $bcmddir/split.cmd $bcmddir/indexes.cmd \
+                   $bcmddir/derived.cmd $bcmddir/cleanup.cmd
+
+
 
 ################
 # Step 10.5: climate index running-means for GIS
