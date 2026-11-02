@@ -40,7 +40,7 @@ clt,hfls,hfss,rlds,rlus,rsus,\
 ua50m,va50m,ua100m,va100m,ua150m,va150m,\
 ua700,ua500,ua250,va700,va500,va250,\
 hus700,hus500,hus250,ta700,ta500,ta250,zg700,zg500,zg250,\
-wbgt"
+wbgt,wbgtmax"
 
 usage() {
     cat >&2 <<EOF

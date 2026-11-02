@@ -1,0 +1,31 @@
+{
+    "Header": {
+        "table_id": "Table NCAR-day",
+        "table_date": "21 October 2026",
+        "missing_value": "1e20",
+        "int_missing_value": "-999",
+        "product": "model-output",
+        "approx_interval": "1.0",
+        "mip_era": "CMIP6",
+        "Conventions": "CF-1.11"
+    },
+    "variable_entry": {
+        "wbgtmax": {
+            "frequency": "day",
+            "standard_name": "wet_bulb_globe_temperature",
+            "units": "K",
+            "cell_methods": "area: mean time: maximum",
+            "cell_measures": "area: areacella",
+            "long_name": "Daily Maximum Wet Bulb Globe Temperature",
+            "comment": "maximum near-surface (usually, 2 meter) WBGT (ISO 7243), computed from hourly WRF output using the thermofeel package.",
+            "dimensions": "longitude latitude time height2m",
+            "out_name": "wbgtmax",
+            "type": "real",
+            "positive": "",
+            "valid_min": "",
+            "valid_max": "",
+            "ok_min_mean_abs": "",
+            "ok_max_mean_abs": ""
+        }
+    }
+}
