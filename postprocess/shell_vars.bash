@@ -43,7 +43,8 @@ end_year=$(grep end_year $simconfig | cut -f2 -d: | xargs)
 years=${start_year}-${end_year}
 
 ## Where the raw data lives
-base=/glade/campaign/ral/risc/collections/na-cordex-cmip6/raw
+#base=/glade/campaign/ral/risc/collections/na-cordex-cmip6/raw
+base=/lustre/desc1/p/nral0053/na-cordex-cmip6/raw
 raw=$base/$(grep '^path:' $simconfig | cut -f2 -d: | tr -d ' "')
 
 

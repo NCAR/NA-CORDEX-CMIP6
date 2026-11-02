@@ -257,11 +257,32 @@ else
     coords="lat lon"
 fi
 
+# Soil-layer variables (e.g. mrsol) carry a depth dimension coordinate and
+# depth_bnds from the extract step; bring depth_bnds along explicitly
+# (ncks picks up depth automatically as a coordinate variable).
+extract_vars="$var"
+[[ "$levels" == "soil" ]] && extract_vars="$var,depth_bnds"
+
 # Step 2: Append data variable with sponge zone trimmed.
 # Chunking (--chunk_map rd1) is important for downstream CDO/NCO performance.
 ncks -h -A --mk_rec_dmn time --chunk_map rd1 \
-     -d x,$x_trim -d y,$y_trim -v "$var" \
+     -d x,$x_trim -d y,$y_trim -v "$extract_vars" \
     "$infile" "$outfile"
+
+# Soil depth coordinate attributes, per CORDEX-CMIP6 sdepth axis entry.
+# depth is a dimension coordinate, so it is not listed in "coordinates".
+if [[ "$levels" == "soil" ]]; then
+    ncatted -h -a _FillValue,depth,d,, -a _FillValue,depth_bnds,d,, \
+        "$outfile" 2>/dev/null || true
+    ncatted -h \
+        -a units,depth,o,c,m \
+        -a long_name,depth,o,c,depth \
+        -a standard_name,depth,o,c,depth \
+        -a positive,depth,o,c,down \
+        -a axis,depth,o,c,Z \
+        -a bounds,depth,o,c,depth_bnds \
+        "$outfile"
+fi
 
 # Step 3: Write all CF and CORDEX attributes
 write_attributes "$outfile" "$coords"
