@@ -151,6 +151,13 @@ FORCE = False
 BADJ = False  # input variable names have "Adjust" appended (--badj)
 
 
+# For the ncap2 commands in the units step, applying compression early
+# is cheap and will speed up everything downstream by a lot.  We also
+# need to explicitly define the chunking or (for some reason) it tries
+# to write everything out in a single chunk and runs out of memory.
+
+uflags = "--cnk_map=rd1 -L1"
+
 # ---------------------------------------------------------------------------
 # TSV checker
 # ---------------------------------------------------------------------------
@@ -679,7 +686,7 @@ def process_simulation(middle, varfiles, active_rows, active_derived,
                 # Note: output file still has inname; -v in concat drops it
                 if FORCE or not out.exists():
                     cmd_files["units"].add(
-                        outvar, middle, f"ncap2 -O -s '{script}' {f} {out}")
+                        outvar, middle, f"ncap2 -O {uflags} -s '{script}' {f} {out}")
 
     # Symlink files that don't need units conversion
     for var in PASSTHROUGH_VARS:

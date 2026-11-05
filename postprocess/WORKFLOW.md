@@ -358,9 +358,10 @@ set bcmddir = $bcind/cmd/$gcm/$scen
 set brundir = $bcind/run/$gcm/$scen
 set btmpdir = $bcind/tmp
 
-python $post/index.py --preset gis --badj $bindir $boutdir $post $bcmddir
+python $post/index.py --preset gis --badj  --tmp $btmpdir \
+                      $bindir $boutdir $post $bcmddir
 
-$post/launch_multi --run $brundir --tmp $btmpdir --wall 00:30:00 --mem 50GB\
+$post/launch_multi --run $brundir --wall 01:00:00 --mem 50GB\
                    --copy $post/clean_index.sh --chain --skip-missing\
                    $bcmddir/units.cmd $bcmddir/concat.cmd \
                    $bcmddir/split.cmd $bcmddir/indexes.cmd \
