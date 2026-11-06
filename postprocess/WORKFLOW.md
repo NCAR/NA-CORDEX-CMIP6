@@ -377,9 +377,18 @@ $post/launch_multi --run $brundir --wall 01:00:00 --mem 50GB\
 # & future runs to make them.)  These get put in $scratch/index/$id.
 # Requires corresponding -hist directory to exist alongside $topdir .
 
-$post/indrun.sh $scratch $id
 
+
+# for raw data:
+$post/indrun.sh $scratch $id
 set indrundir = $scratch/index/$id
+
+# for bias-corrected data:
+set bcinddir = $scratch/bc-index/data/$gcm/$scen
+set indrundir = $scratch/index/bias-corrected/$id
+$post/indrun.sh --badj $bcinddir $indrundir
+
+
 set rundiri = $indrundir/run
 set cmddiri = $indrundir/cmd
 
