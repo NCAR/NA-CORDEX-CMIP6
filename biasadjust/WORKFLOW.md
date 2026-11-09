@@ -99,7 +99,8 @@ $post/launch_multi --workflow cordex --run $rundir1 \
   --copy $ba/ba_cmorize.py $cmddir1/*cmd
 
 ## wait until it finishes, check everything ran correctly
-## (WARNING lines for relabeled driving_experiment_id are expected)
+## (WARNING lines for relabeled driving_experiment_id and
+## driving_institution_id are expected)
 cd $rundir1
 for i in *; do
   printf "%s\t" "$i"

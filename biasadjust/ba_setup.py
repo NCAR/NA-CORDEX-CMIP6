@@ -140,11 +140,30 @@ def main():
     if unknown:
         sys.exit(f"Error: experiments not in {exp_info}: {sorted(unknown)}")
 
+    # driving_institution_id per experiment from postprocess/sim_config/
+    # sim-info.tsv.  It can differ by experiment (MPI-ESM1-2-HR: MPI-M for
+    # historical, DKRZ for the scenarios), and inputs from combined
+    # historical-ssp* runs carry the historical value for scenario years.
+    sim_info = os.path.join(post, "sim_config", "sim-info.tsv")
+    insts = {}
+    with open(sim_info, newline="") as f:
+        for r in csv.DictReader(f, delimiter="\t"):
+            if r["driving_source_id"] == cfg["driving_source_id"]:
+                insts.setdefault(r["driving_experiment_id"], set()).add(
+                    r["driving_institution_id"])
+    bad = [e for e in sorted(used) if len(insts.get(e, ())) != 1]
+    if bad:
+        sys.exit(f"Error: no unique driving_institution_id in {sim_info} for "
+                 f"{cfg['driving_source_id']} experiments {bad}")
+    driving_inst = {e: insts[e].pop() for e in sorted(used)}
+
     with open(meta_path, "w") as f:
         yaml.safe_dump({"creation_date": creation_date,
-                        "driving_experiment": {e: exp_names[e] for e in sorted(used)}},
+                        "driving_experiment": {e: exp_names[e] for e in sorted(used)},
+                        "driving_institution_id": driving_inst},
                        f, sort_keys=False)
-    print(f"  ba_meta.yml (creation_date={creation_date})")
+    print(f"  ba_meta.yml (creation_date={creation_date}, "
+          f"driving_institution_id={driving_inst})")
 
     # ba.env for relocate_ba.sh
     with open(os.path.join(setupdir, "ba.env"), "w") as f:

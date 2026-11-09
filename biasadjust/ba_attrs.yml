@@ -11,7 +11,6 @@
 keep_global:
   - contact
   - domain
-  - driving_institution_id
   - driving_source_id
   - driving_variant_label
   - frequency
@@ -75,6 +74,7 @@ drop_global:
   - variable_id
   - driving_experiment
   - driving_experiment_id
+  - driving_institution_id
   - ba_obs_hist
   - ba_sim_hist
   - ba_sim_fut

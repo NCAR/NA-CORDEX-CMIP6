@@ -11,8 +11,9 @@ for one variable and writes a single multi-year file that:
   - rebuilds the coordinates: lat/lon with attributes and bounds, time at
     12:00 with time_bnds (00:00 to 00:00), scalar height from var_table
   - replaces the dangling grid_mapping with a latitude_longitude crs
-  - sets driving_experiment(_id) from the assigned experiment (fixes
-    mislabeled inputs), plus new tracking_id, creation_date, title
+  - sets driving_experiment(_id) and driving_institution_id from the
+    assigned experiment (fixes mislabeled inputs), plus new tracking_id,
+    creation_date, title
   - sets activity_id, bc_method_id, and the id_attribute (bc_info) from
     the config, and checks the config ba_id against the input's
     bc_observation_id and bc_period
@@ -89,7 +90,7 @@ def load_setup(setupdir, var):
     return cfg, rules, meta, row
 
 
-def check_inputs(dsets, infiles, var, exp, cfg, rules):
+def check_inputs(dsets, infiles, var, exp, cfg, rules, meta):
     """Validate inputs; return (kept global attrs, var attrs, lat, lon)."""
     keep = set(rules["keep_global"])
     keep_ba = set(rules["keep_ba"])
@@ -129,6 +130,10 @@ def check_inputs(dsets, infiles, var, exp, cfg, rules):
         if attrs.get("driving_experiment_id") != exp:
             print(f"WARNING: {name}: driving_experiment_id="
                   f"{attrs.get('driving_experiment_id')!r}, set to {exp!r}")
+        inst = meta["driving_institution_id"][exp]
+        if attrs.get("driving_institution_id") != inst:
+            print(f"WARNING: {name}: driving_institution_id="
+                  f"{attrs.get('driving_institution_id')!r}, set to {inst!r}")
 
         this_v = {a: ds[var].getncattr(a) for a in VAR_ATTRS if a in ds[var].ncattrs()}
         if vattrs is None:
@@ -199,7 +204,7 @@ def main():
     for ds in dsets:
         ds.set_auto_maskandscale(False)
 
-    kept, vattrs, lat, lon = check_inputs(dsets, infiles, var, exp, cfg, rules)
+    kept, vattrs, lat, lon = check_inputs(dsets, infiles, var, exp, cfg, rules, meta)
     tvals = build_time(dsets, cal, units, outfile)
 
     # --- Units: must match var_table.tsv, or have a known conversion ---------
@@ -232,6 +237,7 @@ def main():
         "domain_id": cfg["domain_id"],
         "driving_experiment": meta["driving_experiment"][exp],
         "driving_experiment_id": exp,
+        "driving_institution_id": meta["driving_institution_id"][exp],
         "title": rules["title"].format(**fields),
         "tracking_id": f"hdl:21.14103/{uuid.uuid4()}",
         "variable_id": var,
