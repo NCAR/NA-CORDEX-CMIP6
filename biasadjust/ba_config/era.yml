@@ -18,9 +18,16 @@ source_root: "/lustre/desc1/p/nral0053/na-cordex-cmip6/biascorrection/isimip_bas
 # the same for every simulation, so all configs share this one.
 raw_setupdir: "/glade/derecho/scratch/mcginnis/jacob/na-cordex/ece-370/setup"
 
-# Short ID for the bias adjustment: goes in the DRS path and (prefixed
-# with version_realization and institution_id) in the id_attribute.
-ba_id: "ISIMIP3BASD-ERA5Land-1985-2014"
+# Bias-adjustment ID, <BCname>-<OBSname>-<REFperiod> (CORDEX-CMIP5 Adjust
+# convention; no CORDEX-CMIP6 spec yet).  BCname is institution-method:
+# PIK (Potsdam Institute for Climate Impact Research, which wrote ISIMIP3)
+# and ISIMIP3 (bias adjustment only; the statistical downscaling part of
+# ISIMIP3BASD is not used).  Appended to version_realization in the
+# filename, the DRS path, and the id_attribute, e.g.
+# v1-r1-PIK-ISIMIP3-ERA5Land-1985-2014.  ba_cmorize.py checks that it
+# equals bc_method_id-<input bc_observation_id>-<input bc_period>.
+bc_method_id: "PIK-ISIMIP3"
+ba_id: "PIK-ISIMIP3-ERA5Land-1985-2014"
 
 # Filename / metadata components.  ba_cmorize.py checks these against the
 # input file attributes and stops on any mismatch.
@@ -32,9 +39,10 @@ source_id: "WRF461S-SN"
 version_realization: "v1-r1"
 calendar: "standard"
 
-# DRS root components (relocate_ba.sh).  Convention choice; verify.
+# DRS root components (relocate_ba.sh).  drs_activity replaces DD (CORDEX-
+# CMIP5 Adjust convention) and is also written to the activity_id attribute.
 drs_project: "CORDEX-Adjust"
-drs_activity: "DD"
+drs_activity: "bias-adjusted-output"
 
 # Daily output file length in years; chunks end on years divisible by this
 # (same rule as postprocess/aggregate.sh).
@@ -46,22 +54,27 @@ chunk_years: 5
 # listed under any experiment are skipped (and recorded in the manifest).
 # Every listed year must be found, and no (experiment, var, year) may come
 # from more than one source.
-# TODO: year ranges and simf layout are guesses (contents below the simh
-# level were not inspected).  ba_format.py stops on missing years.
+#
+# Historical years adjusted in a combined historical-ssp* run (simf window
+# 2010-2039) are labeled with that scenario, not historical, and go in the
+# scenario's DRS branch (CORDEX-CMIP5 Adjust convention).  So historical
+# ends in 2009 and each scenario starts in 2010; with several scenarios,
+# 2010-2014 appears once per scenario.
+# The only simf under this calibration is simf-1980-2023.  The old_pr/
+# subdirectory inside it is not read (ba_format.py globs simf-*/*.nc).
 sources:
   - path: "v20260608/obs-era5land_1985-2014/simh-1985-2014"
     experiments:
-      evaluation: [1953, 2023]
+      evaluation: [1980, 2023]
 
-# The in-period calibrations (obs-era5land_historical/simh-1953-1979 and
-# simh-1980-2009) are a different product.  If published, give them their
-# own config (e.g. ba_config/era-inperiod.yml) with a distinct ba_id:
+# obs-era5land_historical/simh-1953-1979 and simh-1980-2009 also apply to
+# simf-1980-2023: same method, different calibration periods.  If
+# published, each gets its own config with its own ba_id, e.g.
+# ba_config/era-1953-1979.yml:
 #
-# ba_id: "ISIMIP3BASD-ERA5Land-inperiod"
+# id: "era-1953-1979"
+# ba_id: "PIK-ISIMIP3-ERA5Land-1953-1979"
 # sources:
 #   - path: "v20260608/obs-era5land_historical/simh-1953-1979"
 #     experiments:
-#       evaluation: [1953, 1979]
-#   - path: "v20260608/obs-era5land_historical/simh-1980-2009"
-#     experiments:
-#       evaluation: [1980, 2009]
+#       evaluation: [1980, 2023]

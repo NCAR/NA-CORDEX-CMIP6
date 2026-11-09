@@ -13,6 +13,9 @@ for one variable and writes a single multi-year file that:
   - replaces the dangling grid_mapping with a latitude_longitude crs
   - sets driving_experiment(_id) from the assigned experiment (fixes
     mislabeled inputs), plus new tracking_id, creation_date, title
+  - sets activity_id, bc_method_id, and the id_attribute (bc_info) from
+    the config, and checks the config ba_id against the input's
+    bc_observation_id and bc_period
   - filters global attributes by the rules in ba_attrs.yml
   - writes uncompressed NETCDF4_CLASSIC; compression is done afterwards by
     postprocess/compress.sh
@@ -116,6 +119,11 @@ def check_inputs(dsets, infiles, var, exp, cfg, rules):
         for k in CONFIG_CHECK:
             if attrs.get(k) != cfg[k]:
                 die(f"{name}: {k}={attrs.get(k)!r}, config says {cfg[k]!r}")
+        want_ba_id = (f"{cfg['bc_method_id']}-{attrs.get('bc_observation_id')}-"
+                      f"{attrs.get('bc_period')}")
+        if cfg["ba_id"] != want_ba_id:
+            die(f"{name}: config ba_id {cfg['ba_id']!r} does not match "
+                f"bc_method_id-bc_observation_id-bc_period {want_ba_id!r}")
         if attrs.get("frequency") != "day":
             die(f"{name}: frequency={attrs.get('frequency')!r}, expected 'day'")
         if attrs.get("driving_experiment_id") != exp:
@@ -212,12 +220,14 @@ def main():
     fields = {"driving_source_id": cfg["driving_source_id"],
               "driving_experiment_id": exp, "domain_id": cfg["domain_id"],
               "source_id": cfg["source_id"],
-              "bc_method_id": kept.get("bc_method_id", ""),
+              "bc_method_id": cfg["bc_method_id"],
               "bc_observation_id": kept.get("bc_observation_id", ""),
               "bc_period": kept.get("bc_period", "")}
     gattrs = dict(kept)
     gattrs.update(rules["set_global"])
     gattrs.update({
+        "activity_id": cfg["drs_activity"],
+        "bc_method_id": cfg["bc_method_id"],
         "creation_date": meta["creation_date"],
         "domain_id": cfg["domain_id"],
         "driving_experiment": meta["driving_experiment"][exp],
@@ -225,8 +235,7 @@ def main():
         "title": rules["title"].format(**fields),
         "tracking_id": f"hdl:21.14103/{uuid.uuid4()}",
         "variable_id": var,
-        rules["id_attribute"]: (f"{cfg['version_realization']}-"
-                                f"{cfg['institution_id']}-{cfg['ba_id']}"),
+        rules["id_attribute"]: f"{cfg['version_realization']}-{cfg['ba_id']}",
         "bias_adjustment": rules["bias_adjustment"].format(**fields),
     })
     now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

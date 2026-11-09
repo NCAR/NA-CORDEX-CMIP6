@@ -9,7 +9,10 @@
 #   - PROJECT and ACTIVITY_ID come from ba.env (drs_project, drs_activity)
 #     instead of being hardcoded
 #   - version comes from creation_date in ba.env (not sim.env)
-#   - one extra DRS level, ba_id (from ba.env), after version_realization
+#   - no extra DRS level for the bias adjustment: the BA ID is already
+#     part of the version element in the filename (e.g.
+#     v1-r1-PIK-ISIMIP3-ERA5Land-1985-2014, CORDEX-CMIP5 Adjust
+#     convention), so the same 13 DRS levels as relocate.sh
 # If relocate.sh changes upstream, diff against it and port fixes.
 #
 # Input is organized in <var>.<freq> subdirectories (the repack OUTDIR).
@@ -85,8 +88,7 @@ BA_ENV="$SETUPDIR/ba.env"
 get_env() { grep "^$1=" "$BA_ENV" | cut -d= -f2-; }
 PROJECT="$(get_env drs_project)"
 ACTIVITY_ID="$(get_env drs_activity)"
-BA_ID="$(get_env ba_id)"
-for v in PROJECT ACTIVITY_ID BA_ID; do
+for v in PROJECT ACTIVITY_ID; do
     [[ -z "${!v}" ]] && { echo "Error: $v not set in $BA_ENV" >&2; exit 1; }
 done
 
@@ -122,7 +124,7 @@ nfailed=0
 
 echo "Scanning input directory: $INDIR"
 echo "Version: $VERSION"
-echo "DRS root: $OUTDIR/$PROJECT/$ACTIVITY_ID (ba_id level: $BA_ID)"
+echo "DRS root: $OUTDIR/$PROJECT/$ACTIVITY_ID"
 [[ $DRY -eq 1 ]] && echo "(dry run)"
 
 for vardir in "$INDIR"/*/; do
@@ -148,8 +150,8 @@ for vardir in "$INDIR"/*/; do
 
         # DRS: PROJECT/activity_id/domain_id/institution_id/driving_source_id/
         #      driving_experiment_id/driving_variant_label/source_id/
-        #      version_realization/ba_id/frequency/variable_id/version/
-        drsdir="$OUTDIR/$PROJECT/$ACTIVITY_ID/$domain/$inst/$drvsrc/$drvexp/$drvvar/$src/$verreal/$BA_ID/$freq/$varname/$VERSION"
+        #      version_realization-ba_id/frequency/variable_id/version/
+        drsdir="$OUTDIR/$PROJECT/$ACTIVITY_ID/$domain/$inst/$drvsrc/$drvexp/$drvvar/$src/$verreal/$freq/$varname/$VERSION"
         outpath="$drsdir/$fname"
 
         if [[ -f "$outpath" ]]; then

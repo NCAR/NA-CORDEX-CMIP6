@@ -37,7 +37,7 @@ import sys
 import yaml
 
 REQUIRED_KEYS = [
-    "id", "source_root", "raw_setupdir", "ba_id", "domain_id",
+    "id", "source_root", "raw_setupdir", "bc_method_id", "ba_id", "domain_id",
     "driving_source_id", "driving_variant_label", "institution_id",
     "source_id", "version_realization", "calendar", "drs_project",
     "drs_activity", "chunk_years", "sources",
@@ -152,7 +152,6 @@ def main():
         f.write(f"creation_date={creation_date}\n")
         f.write(f"drs_project={cfg['drs_project']}\n")
         f.write(f"drs_activity={cfg['drs_activity']}\n")
-        f.write(f"ba_id={cfg['ba_id']}\n")
     print("  ba.env")
 
     print("=== ba_setup complete ===")

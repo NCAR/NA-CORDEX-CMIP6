@@ -17,6 +17,19 @@ scenario later, add its sources to the model's config and re-run from
 Step 0; files that already exist are skipped (except by repack.sh, which
 repacks everything again).
 
+Naming follows the CORDEX-CMIP5 Adjust convention (CORDEX_adjust_drs.pdf;
+no CORDEX-CMIP6 bias-adjustment spec exists yet):
+
+- The BA ID, `<BCname>-<OBSname>-<REFperiod>` with BCname =
+  institution-method, is appended to version_realization in the filename
+  and the DRS path: `v1-r1` becomes `v1-r1-PIK-ISIMIP3-ERA5Land-1985-2014`.
+  No extra DRS level, so the tree has the same depth as the raw archive.
+- DRS activity `DD` becomes `bias-adjusted-output` (also the `activity_id`
+  attribute).
+- Historical years adjusted in a combined historical-ssp* run (2010-2014)
+  are labeled with that scenario and stored in its DRS branch, so
+  historical ends in 2009.
+
 Steps:
 
 0. Setup
@@ -49,7 +62,7 @@ upstream changes):
 
 | Copy | Original | Copied at | Changes |
 |---|---|---|---|
-| `relocate_ba.sh` | `relocate.sh` | c8d7a95 | DRS project/activity/version from `ba.env`; extra `ba_id` level |
+| `relocate_ba.sh` | `relocate.sh` | c8d7a95 | DRS project/activity/version from `ba.env` |
 
 Used from `postprocess/` unmodified: `launch_multi`, `config_env.sh`,
 `compress.sh`, `repack.sh`, `qa.sh`, `sim_config/exp-info.tsv`.  Also reads
@@ -134,7 +147,7 @@ $ba/relocate_ba.sh $indir4 $sdir $outdir4
 # per experiment.
 drsroot=$outdir4/$(grep '^drs_project=' $sdir/ba.env | cut -d= -f2)
 for node in $(find $drsroot -type d -name day -printf '%h\n' | sort -u); do
-  exp=$(echo $node | awk -F/ '{print $(NF-4)}')
+  exp=$(echo $node | awk -F/ '{print $(NF-3)}')
   $post/qa.sh $node $indir5flat $sdir $outdir5/$exp $cmddir5/$exp
 done
 
@@ -143,8 +156,9 @@ for c in $cmddir5/*/; do
 done
 
 # Expected: the CORDEX-CMIP6 checker flags the *Adjust variable names,
-# NAM-12i, and the CORDEX-Adjust project, since they are not in the
-# CORDEX-CMIP6 controlled vocabulary.
+# NAM-12i, the CORDEX-Adjust project, bias-adjusted-output, and the long
+# version_realization element, since they are not in the CORDEX-CMIP6
+# controlled vocabulary.
 ```
 
 ## Open items
@@ -153,7 +167,10 @@ done
   suffix, `project_id`, `bc_info`, and the DRS layout follow the
   CORDEX-CMIP5 Adjust convention and are set in the config and
   `ba_attrs.yml` so they are easy to change.
+- The `version_realization` attribute stays `v1-r1`; the long string is in
+  `bc_info`, the filename, and the DRS path.  Check against the CMIP5
+  Adjust spec.
 - `time_units` in `ba_attrs.yml` should match the raw daily files exactly.
-- MPI: decide which combined run supplies historical 2010-2014.
-- ERA5 evaluation: confirm year ranges and which calibrations are published.
+- ERA5 evaluation: confirm `driving_variant_label`, and whether the
+  alternate calibrations (simh-1953-1979, simh-1980-2009) are published.
 - `raw_setupdir` paths in the configs are unverified.

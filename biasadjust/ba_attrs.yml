@@ -9,7 +9,6 @@
 
 # Copied unchanged from the input files.
 keep_global:
-  - activity_id
   - contact
   - domain
   - driving_institution_id
@@ -25,7 +24,6 @@ keep_global:
   - source_id
   - source_type
   - version_realization
-  - bc_method_id
   - bc_observation_id
   - bc_period
 
@@ -64,6 +62,8 @@ drop_global:
   - CDO
   - NCO
   - history
+  - activity_id
+  - bc_method_id
   - Conventions
   - creation_date
   - tracking_id
@@ -94,10 +94,12 @@ set_global:
   bc_method: "ISIMIP3BASD trend-preserving parametric quantile mapping (Lange, 2019, Geosci. Model Dev., 12, 3055-3070, doi:10.5194/gmd-12-3055-2019)"
   bc_observation: "ERA5-Land reanalysis, daily aggregates (Munoz-Sabater et al., 2021, Earth Syst. Sci. Data, 13, 4349-4383, doi:10.5194/essd-13-4349-2021)"
 
-# Name of the attribute holding the full bias-adjustment ID string
-# (version_realization-institution_id-ba_id, e.g.
-# v1-r1-NCAR-ISIMIP3BASD-ERA5Land-1985-2014).  This is the string that used
-# to be in the filename.  Attribute name is a convention choice; verify.
+# Name of the attribute holding the full version + bias-adjustment ID
+# (version_realization-ba_id, e.g. v1-r1-PIK-ISIMIP3-ERA5Land-1985-2014),
+# the same string used as the version element in the filename and DRS
+# path.  activity_id (from drs_activity) and bc_method_id (BCname,
+# institution-method) are also set from the model config.
+# Attribute name is a convention choice; verify.
 id_attribute: "bc_info"
 
 # Units for the output time coordinate.  Should match the raw archive

@@ -19,7 +19,11 @@ Mapping rules (all from the config's `sources` list):
 Any violation stops the script before commandfiles are written.
 
 Chunks end on years divisible by chunk_years (as in aggregate.sh), so
-1953-2014 becomes 1953-1955, 1956-1960, ..., 2011-2014.
+1953-2009 becomes 1953-1955, 1956-1960, ..., 2006-2009.
+
+Output filenames use version_realization-ba_id as the version element
+(e.g. v1-r1-PIK-ISIMIP3-ERA5Land-1985-2014), per the CORDEX-CMIP5 Adjust
+convention.
 
 Outputs:
   CMDDIR/<var>.day.cmd  one ba_cmorize.py command per output file
@@ -172,11 +176,13 @@ def main():
     os.makedirs(cmddir, exist_ok=True)
     cmds = defaultdict(list)  # var -> command lines
     nskip = 0
+    # CORDEX Adjust: the BA ID is appended to version_realization
+    verreal = f"{cfg['version_realization']}-{cfg['ba_id']}"
     for (exp, var), years in sorted(years_by.items()):
         for a, b in chunk_ranges(years[0], years[-1], cfg["chunk_years"]):
             fname = (f"{var}_{cfg['domain_id']}_{cfg['driving_source_id']}_{exp}_"
                      f"{cfg['driving_variant_label']}_{cfg['institution_id']}_"
-                     f"{cfg['source_id']}_{cfg['version_realization']}_day_"
+                     f"{cfg['source_id']}_{verreal}_day_"
                      f"{a}0101-{b}1231.nc")
             outfile = os.path.join(outdir, f"{var}.day", fname)
             rows = [manifest[selected[(exp, var, y)]] for y in range(a, b + 1)]
