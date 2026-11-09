@@ -54,6 +54,14 @@ VAR_ATTRS = ["standard_name", "long_name", "units", "cell_methods"]
 CONFIG_CHECK = ["driving_source_id", "driving_variant_label", "institution_id",
                 "source_id", "version_realization"]
 
+# Input units that differ from var_table.tsv and can be converted:
+# (input units, var_table units) -> multiplicative factor.  Any other
+# mismatch is an error.  mm/day of water = kg m-2 per day; / 86400 s.
+UNIT_CONVERSIONS = {
+    ("mm day-1", "kg m-2 s-1"): 1.0 / 86400.0,
+    ("mm d-1", "kg m-2 s-1"): 1.0 / 86400.0,
+}
+
 
 def die(msg):
     sys.exit(f"Error: {msg}")
@@ -186,6 +194,18 @@ def main():
     kept, vattrs, lat, lon = check_inputs(dsets, infiles, var, exp, cfg, rules)
     tvals = build_time(dsets, cal, units, outfile)
 
+    # --- Units: must match var_table.tsv, or have a known conversion ---------
+    in_units, want_units = vattrs.get("units", ""), vrow.get("units", "")
+    factor = None
+    if in_units != want_units:
+        factor = UNIT_CONVERSIONS.get((in_units, want_units))
+        if factor is None:
+            die(f"{var} units {in_units!r} differ from var_table.tsv "
+                f"{want_units!r}, and no conversion is defined")
+        vattrs["units"] = want_units
+        print(f"NOTE: converting {var} from {in_units} to {want_units} "
+              f"(x {factor:.6g})")
+
     # --- Global attributes ----------------------------------------------------
     if rules.get("drop_empty_ba", True):
         kept = {a: v for a, v in kept.items() if not (a.startswith("ba_") and v == "")}
@@ -212,6 +232,8 @@ def main():
     now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     gattrs["history"] = (f"{now}: reformatted from {len(infiles)} annual "
                          f"ISIMIP3BASD output files by ba_cmorize.py")
+    if factor is not None:
+        gattrs["history"] += f"; converted {var} from {in_units} to {vattrs['units']}"
 
     ba_order = [a for a in rules["keep_ba"] if a in gattrs]
     head = [a for a in GLOBAL_ORDER if a in gattrs]
@@ -280,6 +302,9 @@ def main():
             block[nan] = FILL
             if fv is not None and np.float32(fv) != FILL:
                 block[block == np.float32(fv)] = FILL
+            if factor is not None:
+                valid = block != FILL
+                block[valid] = (block[valid].astype("f8") * factor).astype("f4")
             dv[i0 + j:i0 + j + block.shape[0]] = block
         i0 += src.shape[0]
 
