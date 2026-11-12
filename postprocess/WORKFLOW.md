@@ -1,4 +1,4 @@
-# NA-CORDEX-CMIP6 Postprocessing Workflow
+# NA-CORDEX-CMIP6 Postprocessing Workflow (tcsh)
 
 This file contains the commands for running the post-processing
 workflow pipeline on NCAR's Casper system.
@@ -15,8 +15,7 @@ each step, you need to run that step, wait for it to finish, check
 whether everything processed correctly, and fix any errors before
 moving on to the next one.
 
-Shell variables, loops, etc, are written for tcsh; bash equivalents
-are available where noted.
+The shell syntax below is for tcsh; for bash, see [WORKFLOW_BASH.md](WORKFLOW_BASH.md).
 
 The workflow steps are:
 
@@ -301,14 +300,14 @@ cd $topdir
 ## all indexes:
 python $post/index.py $indir10 $outdir10 $sdir $cmddir10
 
-## gis indexes only:
+## GIS indexes only:
 python $post/index.py --preset gis $indir10 $outdir10 $sdir $cmddir10
 
 $post/launch_multi --run $rundir10 --wall 00:30:00 --mem 50GB\
-		   --copy $post/clean_index.sh --chain --skip-missing\
-		   $cmddir10/units.cmd $cmddir10/concat.cmd \
-		   $cmddir10/split.cmd $cmddir10/indexes.cmd \
-		   $cmddir10/derived.cmd $cmddir10/cleanup.cmd
+                   --copy $post/clean_index.sh --chain --skip-missing\
+                   $cmddir10/units.cmd $cmddir10/concat.cmd \
+                   $cmddir10/split.cmd $cmddir10/indexes.cmd \
+                   $cmddir10/derived.cmd $cmddir10/cleanup.cmd
 
 
 ## check everything ran correctly
@@ -327,6 +326,48 @@ end
 cd $topdir
 
 
+################
+# Step 10 alternate: bias-corrected indexes
+
+set bcroot = /glade/derecho/scratch/mcginnis/jacob/na-cordex-ba/ece/CORDEX-Adjust/bias-adjusted-output/NAM-12i/NCAR
+
+set bcind = $scratch/bc-index
+
+# symlink files into flat directories
+
+foreach gcm (EC-Earth3-Veg MPI-ESM1-2-HR)
+foreach scen (ssp245 ssp370)
+foreach var (hurs pr ps rlds rsds sfcWind tas tasmax tasmin uas vas)
+set outdir = $bcind/flat/$gcm/$scen/$var.day
+echo $outdir
+mkdir -p $outdir; cd $outdir
+foreach chunk (historical $scen)
+ln -s $bcroot/$gcm/$chunk/*/*/*/day/${var}Adjust/*/${var}Adjust*nc .
+end
+end
+end
+end
+
+cd $bcind
+
+set gcm = EC-Earth3-Veg
+set scen = ssp370
+set bindir = $bcind/flat/$gcm/$scen
+set boutdir = $bcind/data/$gcm/$scen
+set bcmddir = $bcind/cmd/$gcm/$scen
+set brundir = $bcind/run/$gcm/$scen
+set btmpdir = $bcind/tmp
+
+python $post/index.py --preset gis --badj  --tmp $btmpdir \
+                      $bindir $boutdir $post $bcmddir
+
+$post/launch_multi --run $brundir --wall 01:00:00 --mem 50GB\
+                   --copy $post/clean_index.sh --chain --skip-missing\
+                   $bcmddir/units.cmd $bcmddir/concat.cmd \
+                   $bcmddir/split.cmd $bcmddir/indexes.cmd \
+                   $bcmddir/derived.cmd $bcmddir/cleanup.cmd
+
+
 
 ################
 # Step 10.5: climate index running-means for GIS
@@ -334,12 +375,20 @@ cd $topdir
 # If this is a future run, also generate 21- and 31-year running means
 # for use in GIS.  (Only future runs, since we concatenate historical
 # & future runs to make them.)  These get put in $scratch/index/$id.
-# Runs fast enough it can run interactively.  Requires corresponding
-# -hist directory to exist alongside $topdir .
+# Requires corresponding -hist directory to exist alongside $topdir .
 
+
+
+# for raw data:
 $post/indrun.sh $scratch $id
-
 set indrundir = $scratch/index/$id
+
+# for bias-corrected data:
+set bcinddir = $scratch/bc-index/data/$gcm/$scen
+set indrundir = $scratch/index/bias-corrected/$id
+$post/indrun.sh --badj $bcinddir $indrundir
+
+
 set rundiri = $indrundir/run
 set cmddiri = $indrundir/cmd
 

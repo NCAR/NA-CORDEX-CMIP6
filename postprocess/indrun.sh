@@ -12,58 +12,76 @@
 #
 # Usage:
 #   ./indrun.sh <scratch> <id> [outdir] [--histdir DIR]
+#   ./indrun.sh --badj <indir> <outdir>
+#
+#   Standard mode:
 #   # <id> must be a scenario run, e.g. mpi-245
 #   # outdir defaults to <scratch>/index/<id>; holds cmd/ and data/
 #   # --histdir overrides the historical index/data dir, e.g. if the
 #   # historical run has already been moved to campaign
+#
+#   --badj mode (bias-adjusted indexes):
+#   # historical and scenario files sit side by side under
+#   # <indir>/<idx>/<freq>/, with one scenario per tree
+#   # <indir> is the folder containing <idx>/<freq>; <outdir> is required
+#   # and holds cmd/ and data/
+#   # --histdir is not allowed
 
 set -euo pipefail
 
-scratch=""
-id=""
-outdir=""
+usage() {
+    echo "Usage: $0 <scratch> <id> [outdir] [--histdir DIR]"
+    echo "       $0 --badj <indir> <outdir>"
+    exit 1
+}
+
+badj=0
 histdir=""
+pos=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --badj)
+            badj=1
+            shift
+            ;;
         --histdir)
+            [[ $# -ge 2 ]] || usage
             histdir=$2
             shift 2
             ;;
         *)
-            if [[ -z $scratch ]]; then
-                scratch=$1
-            elif [[ -z $id ]]; then
-                id=$1
-            elif [[ -z $outdir ]]; then
-                outdir=$1
-            else
-                echo "Usage: $0 <scratch> <id> [outdir] [--histdir DIR]"
-                exit 1
-            fi
+            pos+=("$1")
             shift
             ;;
     esac
 done
 
-if [[ -z $scratch || -z $id ]]; then
-    echo "Usage: $0 <scratch> <id> [outdir] [--histdir DIR]"
-    exit 1
-fi
+if [[ $badj -eq 1 ]]; then
+    [[ ${#pos[@]} -eq 2 && -z $histdir ]] || usage
+    scendir=${pos[0]}
+    histdir=$scendir
+    outdir=${pos[1]}
+else
+    [[ ${#pos[@]} -ge 2 && ${#pos[@]} -le 3 ]] || usage
+    scratch=${pos[0]}
+    id=${pos[1]}
+    outdir=${pos[2]:-}
 
-scendir=$scratch/$id/index/data
-outdir=${outdir:-$scratch/index/$id}
+    scendir=$scratch/$id/index/data
+    outdir=${outdir:-$scratch/index/$id}
 
-if [[ -z $histdir ]]; then
-    ## Historical run is named by convention: <model>-hist
-    histid=${id%-*}-hist
+    if [[ -z $histdir ]]; then
+        ## Historical run is named by convention: <model>-hist
+        histid=${id%-*}-hist
 
-    if [[ "$histid" == "$id" ]]; then
-        echo "Error: $id has no '-<scenario>' suffix; can't derive historical id"
-        exit 1
+        if [[ "$histid" == "$id" ]]; then
+            echo "Error: $id has no '-<scenario>' suffix; can't derive historical id"
+            exit 1
+        fi
+
+        histdir=$scratch/$histid/index/data
     fi
-
-    histdir=$scratch/$histid/index/data
 fi
 
 for d in "$scendir" "$histdir"; do
@@ -125,10 +143,18 @@ for scenfile in "$scendir"/*/{ann,seas,mon}/*.nc; do
     fi
     IFS=$'\t' read -r idx middle tstart tend seas <<<"$fields"
 
+    ## --badj: historical files share the scenario tree; they are only
+    ## ever paired as the historical half, so skip them silently here.
+    if [[ $badj -eq 1 && $middle == *_historical_* ]]; then
+        continue
+    fi
+
     ## freq dir (ann/seas/mon) is the scenario file's own parent dir; the
     ## historical file lives under the same <idx>/<freq>/ dir, but
     ## middle/timespan differ (e.g. "historical" vs "ssp245"), so it
     ## still needs to be found by season/month match within that dir.
+    ## In --badj mode that dir also holds the scenario file itself, so a
+    ## candidate must additionally end before the scenario file starts.
     freq=${scenfile%/*}
     freq=${freq##*/}
     histfile=""
@@ -136,6 +162,9 @@ for scenfile in "$scendir"/*/{ann,seas,mon}/*.nc; do
         [[ -e $cand ]] || continue
         if hfields=$(parse_fname "${cand##*/}"); then
             IFS=$'\t' read -r hidx hmiddle htstart htend hseas <<<"$hfields"
+            if [[ $badj -eq 1 && ! $htend < $tstart ]]; then
+                continue
+            fi
             if [[ "$hseas" == "$seas" ]]; then
                 histfile=$cand
                 break

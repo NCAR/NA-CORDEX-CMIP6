@@ -95,16 +95,16 @@ heatidx:
   <<: *defaults
   refh: 2
 
-# --- Derived thermal comfort variable (supplemental, local CMOR table) ---
-wbgt:
+# --- Derived thermal comfort variables (supplemental, local CMOR table) ---
+wbgt: &wbgt_specs
   <<: *defaults
   refh: 2
+wbgtmax:
+  <<: *wbgt_specs
 utci:
-  <<: *defaults
-  refh: 2
+  <<: *wbgt_specs
 humidex:
-  <<: *defaults
-  refh: 2
+  <<: *wbgt_specs
 
 # --- Hydrology / soil / snow variables (6-hourly) ---
 mrro:

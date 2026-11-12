@@ -51,7 +51,7 @@ hfso,lai,clivi,capemu,cinmu,li,zlfc,\
 ua50m,va50m,ua100m,va100m,ua150m,va150m,\
 $(plev_list ua),$(plev_list va),$(plev_list ta),\
 $(plev_list zg),$(plev_list hus),$(plev_list hur),\
-wbgt"
+wbgt, wbgtmax"
 
 usage() {
     cat >&2 <<EOF

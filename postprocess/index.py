@@ -9,6 +9,12 @@ where <middle> uniquely identifies all the files from a single
 simulation and that timespan lexically sorts into the correct ordering
 for ncrcat.
 
+Bias-adjusted data: if variable names (in both filenames and files)
+have "Adjust" appended, e.g. tasmaxAdjust_<middle>_<timespan>.nc, use
+--badj.  The suffix is stripped from variable names, so outputs use the
+usual names, and "_badj" is appended to <middle> so that it appears in
+output filenames.  With --badj, every input file must have the suffix.
+
 Two input layouts are recognized automatically (see find_inputs):
   flat:   INDIR/<var>_<middle>_<timespan>.nc  (e.g., yearly files)
   nested: INDIR/<var>.day/<var>_<middle>_<timespan>.nc  (e.g., 5-year
@@ -142,7 +148,15 @@ REQUIRED_COLS = ["index", "formula", "threshold", "th_units", "out_units",
 
 # Set after argument parsing; effectively read-only thereafter.
 FORCE = False
+BADJ = False  # input variable names have "Adjust" appended (--badj)
 
+
+# For the ncap2 commands in the units step, applying compression early
+# is cheap and will speed up everything downstream by a lot.  We also
+# need to explicitly define the chunking or (for some reason) it tries
+# to write everything out in a single chunk and runs out of memory.
+
+uflags = "--cnk_map=rd1 -L1"
 
 # ---------------------------------------------------------------------------
 # TSV checker
@@ -263,8 +277,12 @@ def group_simulations(files):
 
     Returns dict: middle -> {var: [sorted Paths]} (sorted lexically by
     timespan, which is opaque but assumed sortable).
+
+    With BADJ, the trailing "Adjust" is stripped from var and "_badj" is
+    appended to middle.  Files lacking the suffix are an error.
     """
     sims = defaultdict(lambda: defaultdict(list))
+    noadj = []
     for f in files:
         parsed = parse_fname(f)
         if parsed is None:
@@ -272,7 +290,17 @@ def group_simulations(files):
                   file=sys.stderr)
             continue
         var, middle, _ts = parsed
+        if BADJ:
+            if not var.endswith("Adjust"):
+                noadj.append(f.name)
+                continue
+            var = var.removesuffix("Adjust")
+            middle += "_badj"
         sims[middle][var].append(f)
+    if noadj:
+        shown = ", ".join(noadj[:5]) + (", ..." if len(noadj) > 5 else "")
+        sys.exit(f"Error: --badj given, but {len(noadj)} file(s) lack the "
+                 f"'Adjust' suffix on the variable name: {shown}")
     for middle in sims:
         for var in sims[middle]:
             sims[middle][var].sort()  # lexical == timespan order
@@ -440,7 +468,7 @@ class DocAction(argparse.Action):
 
 
 def main():
-    global FORCE
+    global FORCE, BADJ
     ap = argparse.ArgumentParser(
         description="Generate commandfiles for computing climate indexes.",
         formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -461,6 +489,10 @@ def main():
     ap.add_argument("-v", "--verbose", action="store_true",
                     help="Report per simulation, with full names, instead "
                          "of consolidated summaries")
+    ap.add_argument("--badj", action="store_true",
+                    help="Input variable names have 'Adjust' appended "
+                         "(bias-adjusted data); strips it and appends "
+                         "'_badj' to the simulation name")
     ap.add_argument("--force", action="store_true",
                     help="Overwrite existing output files")
     sel = ap.add_mutually_exclusive_group()
@@ -517,6 +549,7 @@ def main():
     cmddir = cmddir.resolve()
 
     FORCE = args.force
+    BADJ = args.badj
 
     layout, infiles = find_inputs(indir)
     sims = group_simulations(infiles)
@@ -627,11 +660,13 @@ def process_simulation(middle, varfiles, active_rows, active_derived,
     # units_dir[outvar] contains the paths used in the concat step below,
     # which needs them to tell whether or not to generate the units &
     # concat commands.
+    sfx = "Adjust" if BADJ else ""
     units_dir = {}
     for basevar, outs in UNIT_VARS.items():
         if basevar not in varfiles:
             continue
         relabel = RELABEL_UNITS.get(basevar)
+        inname = basevar + sfx  # variable name as it appears in the file
 
         for outvar, unit in outs:
             vardir = tmpdir / "units" / outvar
@@ -644,14 +679,14 @@ def process_simulation(middle, varfiles, active_rows, active_derived,
             for f, out in zip(varfiles[basevar], outfiles):
                 script_parts = []
                 if relabel:
-                    script_parts.append(f'{basevar}@units="{relabel}"')
-                script_parts.append(f'{outvar}=udunits({basevar},"{unit}")')
+                    script_parts.append(f'{inname}@units="{relabel}"')
+                script_parts.append(f'{outvar}=udunits({inname},"{unit}")')
                 script_parts.append(f'{outvar}@units="{unit}"')
                 script = "; ".join(script_parts)
-                # Note: output file still has basevar; -v in concat drops it
+                # Note: output file still has inname; -v in concat drops it
                 if FORCE or not out.exists():
                     cmd_files["units"].add(
-                        outvar, middle, f"ncap2 -O -s '{script}' {f} {out}")
+                        outvar, middle, f"ncap2 -O {uflags} -s '{script}' {f} {out}")
 
     # Symlink files that don't need units conversion
     for var in PASSTHROUGH_VARS:
@@ -669,22 +704,27 @@ def process_simulation(middle, varfiles, active_rows, active_derived,
                 link.symlink_to(f.resolve())
 
     # -- concat: one file per output variable actually present -----------
-    # -v drops the original input variable still hanging around after units
+    # -v drops the original input variable still hanging around after units.
+    # Bias-adjusted passthrough variables are still named <var>Adjust, so
+    # they're concatenated without -v and then renamed in the same command.
     unit_files = {}
     for outvar, files in units_dir.items():
         cdir = tmpdir / "concat" / outvar
         cdir.mkdir(parents=True, exist_ok=True)
         out = cdir / f"{outvar}_{middle}_{ts}.nc"
         indir = files[0].parent
-        concat = f"ncrcat -O -v {outvar} -p {indir} -o {out}"
+        rename = BADJ and outvar in PASSTHROUGH_VARS
+        vsel = "" if rename else f" -v {outvar}"
+        tail = f" && ncrename -v {outvar}{sfx},{outvar} {out}" if rename else ""
+        concat = f"ncrcat -O{vsel} -p {indir} -o {out}"
         loop = nco_loop_spec(files)
         if loop:
             first, n, ndigits = loop
             emit(cmd_files["concat"], out,
-                 f"{concat} -n {n},{ndigits},1 {first}")
+                 f"{concat} -n {n},{ndigits},1 {first}{tail}")
         else:
             filenames = " ".join(f.name for f in files)
-            emit(cmd_files["concat"], out, f"{concat} {filenames}")
+            emit(cmd_files["concat"], out, f"{concat} {filenames}{tail}")
         unit_files[outvar] = out
 
 
