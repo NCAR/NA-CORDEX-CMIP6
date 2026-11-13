@@ -17,12 +17,15 @@
 #   can be launched as a chain without interfering with the main *.cmd glob:
 #     launch_multi --workflow cordex --run RUNDIR CMDDIR/*.cmd
 #     launch_multi --chain --workflow cordex --run RUNDIR \
-#         CMDDIR/wbgt/wbgt.cmd CMDDIR/wbgt/wbgt_cat.cmd
+#         CMDDIR/wbgt/wbgt_mon.cmd CMDDIR/wbgt/wbgt_cat.cmd \
+#         CMDDIR/wbgt/wbgtmax.cmd
 #
 #   Per-day output files are staged in OUTDIR/_temp/<var>.1hr/<year>/ to
 #   keep them separate from the annual files that aggregate.sh expects.
 #   After wbgt_cat.cmd runs, annual files land in OUTDIR/wbgt.1hr/ and
 #   OUTDIR/utci.1hr/ alongside all other extracted variables.
+#   wbgtmax.cmd then derives daily-maximum WBGT (OUTDIR/wbgtmax.day/)
+#   from the annual wbgt files.
 
 set -euo pipefail
 
@@ -40,7 +43,8 @@ plev_list() {
 #
 # Note: utci is produced automatically when wbgt runs; submitting utci as
 # a standalone job will cause a file conflict. Use --vars wbgt to get both.
-# Note also: tasmin & tasmax are produced automatically when tas is run.
+# Note also: tasmin & tasmax are produced automatically when tas is run,
+# and wbgtmax is produced automatically when wbgt is run.
 DEFAULT_VARS="fx,pr,tas,\
 hurs,huss,ps,psl,rsds,sfcWind,uas,vas,\
 cape,cin,prw,fzra,wchill,heatidx,humidex,\
@@ -51,7 +55,7 @@ hfso,lai,clivi,capemu,cinmu,li,zlfc,\
 ua50m,va50m,ua100m,va100m,ua150m,va150m,\
 $(plev_list ua),$(plev_list va),$(plev_list ta),\
 $(plev_list zg),$(plev_list hus),$(plev_list hur),\
-wbgt, wbgtmax"
+wbgt"
 
 usage() {
     cat >&2 <<EOF
@@ -188,6 +192,15 @@ for var in "${VARLIST[@]}"; do
         echo "Note: utci is produced automatically when wbgt runs; skipping standalone utci job."
         continue
     fi
+    if [[ "$var" == "wbgtmax" ]]; then
+        echo "Note: wbgtmax is produced automatically when wbgt runs; skipping standalone wbgtmax job."
+        continue
+    fi
+
+    # wbgt: extraction (wbgt/utci) and the derived wbgtmax are checked
+    # independently, so wbgtmax can be added without redoing extraction.
+    skip_wbgt=0
+    skip_wbgtmax=0
 
     # Skip if output directory exists and is non-empty, unless --force
     if [[ $FORCE -eq 0 ]]; then
@@ -200,9 +213,14 @@ for var in "${VARLIST[@]}"; do
         elif [[ "$var" == "wbgt" ]]; then
             if [[ -d "$OUTDIR/wbgt.1hr" && -n "$(ls -A "$OUTDIR/wbgt.1hr" 2>/dev/null)" ]] && \
                [[ -d "$OUTDIR/utci.1hr" && -n "$(ls -A "$OUTDIR/utci.1hr" 2>/dev/null)" ]]; then
-                echo "Skipping wbgt: output directories (wbgt.1hr, utci.1hr) already exist and are non-empty"
-                continue
+                echo "Skipping wbgt extraction: output directories (wbgt.1hr, utci.1hr) already exist and are non-empty"
+                skip_wbgt=1
             fi
+            if [[ -d "$OUTDIR/wbgtmax.day" && -n "$(ls -A "$OUTDIR/wbgtmax.day" 2>/dev/null)" ]]; then
+                echo "Skipping wbgtmax: output directory (wbgtmax.day) already exists and is non-empty"
+                skip_wbgtmax=1
+            fi
+            [[ $skip_wbgt -eq 1 && $skip_wbgtmax -eq 1 ]] && continue
         elif [[ -d "$OUTDIR/$var" && -n "$(ls -A "$OUTDIR/$var" 2>/dev/null)" ]]; then
             echo "Skipping $var: output directory already exists and is non-empty"
             continue
@@ -219,6 +237,7 @@ for var in "${VARLIST[@]}"; do
         > "$cmdfile"
 
         for (( year = START_YEAR; year <= END_YEAR; year++ )); do
+            [[ $skip_wbgt -eq 1 ]] && break
             chunk="$WRFDIR/$(chunk_dir_for_year "$year")"
             tmpdir="$OUTDIR/_temp"
             for month in $( seq -w 12 ); do
@@ -232,6 +251,7 @@ for var in "${VARLIST[@]}"; do
         > "$cat_cmdfile"
 
         for (( year = START_YEAR; year <= END_YEAR; year++ )); do
+            [[ $skip_wbgt -eq 1 ]] && break
             for wvar in wbgt utci; do
                 # $wvar.1hr/$year subdir is created by postproc_wbgt
                 tmpvardir="$OUTDIR/_temp/${wvar}.1hr/$year"
@@ -240,6 +260,22 @@ for var in "${VARLIST[@]}"; do
                 ann_out="$outvardir/${wvar}_${fname_base}_1hr_${year}01010000-${year}12312300.nc"
                 echo "ncrcat -h $tmpvardir/\*.nc $ann_out" >> "$cat_cmdfile"
             done
+        done
+
+        # afterwards, derive daily-maximum WBGT from each annual hourly
+        # file.  Time is rounded to the day midpoint (and bounds to the
+        # day edges), then the variable is renamed, as for tasmax.
+        max_cmdfile="$wbgt_cmddir/wbgtmax.cmd"
+        > "$max_cmdfile"
+        maxvardir="$OUTDIR/wbgtmax.day"
+        roundtime="time=round(time*2)/2;time_bnds=round(time_bnds)"
+
+        for (( year = START_YEAR; year <= END_YEAR; year++ )); do
+            [[ $skip_wbgtmax -eq 1 ]] && break
+            mkdir -p "$maxvardir"
+            ann_in="$OUTDIR/wbgt.1hr/wbgt_${fname_base}_1hr_${year}01010000-${year}12312300.nc"
+            max_out="$maxvardir/wbgtmax_${fname_base}_day_${year}0101-${year}1231.nc"
+            echo "bash -c \"cdo -O daymax $ann_in $max_out && ncap2 -h -O -s '${roundtime}' $max_out $max_out && ncrename -h -v wbgt,wbgtmax $max_out\"" >> "$max_cmdfile"
         done
         continue
     fi

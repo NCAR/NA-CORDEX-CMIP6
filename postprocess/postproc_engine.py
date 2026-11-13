@@ -538,10 +538,17 @@ _PREFIX_FREQ = {
     wrfout_zlev_fname: '6hr',
 }
 
-# Variables derived from tas via cdo after extraction, rather than being
-# extracted directly.  Requesting them as standalone jobs is an error;
-# run tas instead.
-_DERIVED_FROM_TAS = {'tasmin', 'tasmax'}
+# Variables derived from another variable's output after extraction,
+# rather than being extracted directly.  Requesting them as standalone
+# jobs is an error; the value says how they actually get produced.
+# tasmin/tasmax are derived here (see derive_tasmin / derive_tasmax);
+# wbgtmax is derived in extract.sh from the annual wbgt files.
+_DERIVED = {
+    'tasmin':  'derived from tas; run tas instead.',
+    'tasmax':  'derived from tas; run tas instead.',
+    'wbgtmax': 'derived from wbgt by extract.sh (wbgtmax.cmd); '
+               'it is not produced by postproc_engine.py.',
+}
 
 # wbgt and utci both resolve to extract_wbgt_utci, which loads its own
 # files one day at a time and writes output directly (returning an empty
@@ -582,8 +589,8 @@ def _fail(msg):
 
 variables = variable.split('+')
 
-if len(variables) == 1 and variable in _DERIVED_FROM_TAS:
-    print(f'{variable} is derived from tas; run tas instead.')
+if len(variables) == 1 and variable in _DERIVED:
+    print(f'{variable} is {_DERIVED[variable]}')
     sys.exit(0)
 
 for v in variables:
@@ -591,7 +598,7 @@ for v in variables:
         _fail(f'{v} not found in var_table')
     if get_extract_fn(v) is None:
         _fail(f'no extract function found for {v}')
-    if len(variables) > 1 and (v in _SELF_LOADING or v in _DERIVED_FROM_TAS):
+    if len(variables) > 1 and (v in _SELF_LOADING or v in _DERIVED):
         _fail(f'{v} cannot be run as part of a group')
 
 if variables[0] in _SELF_LOADING:

@@ -72,9 +72,12 @@ $post/extract.sh $raw $sdir $outdir1 $years $cmddir1
 $post/launch_multi --workflow cordex --run $rundir1 $cmddir1/*cmd
 
 ## wbgt (+utci) runs extra parallel, else it takes forever
+## (wbgtmax is derived from the annual wbgt files at the end of the chain;
+## --skip-missing covers the case where some stages were skipped)
 
-$post/launch_multi --workflow cordex --run $rundir1 --chain \
-  $cmddir1/wbgt/wbgt_mon.cmd $cmddir1/wbgt/wbgt_cat.cmd
+$post/launch_multi --workflow cordex --run $rundir1 --chain --skip-missing \
+  $cmddir1/wbgt/wbgt_mon.cmd $cmddir1/wbgt/wbgt_cat.cmd \
+  $cmddir1/wbgt/wbgtmax.cmd
 
 
 ## wait until it finishes, check everything ran correctly
@@ -235,6 +238,7 @@ https://cmiphub.dkrz.de/info/display_qc_results.html
 ## FAILs for [CDXT001] Time Chunking and [FILE003] Compression:
 ##   1hr: fzra heatidx humidex wchill wbgt utci capemu cinmu alb rsdsdiff
 ##   6hr: zlfc lai ustar hur{1000..100}
+##   day: wbgtmax
 
 ## We also get [CDXT001] Time Chunking FAILs for the variables that we
 ## are providing 6-hourly but are requested 1-hourly (hfls hfso li clivi
