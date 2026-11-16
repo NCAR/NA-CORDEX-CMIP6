@@ -77,6 +77,11 @@ Options:
                         that loads the WRF files once.
   --scripts PATH        Directory containing the postprocess scripts
                         (default: directory containing extract.sh)
+  --check DIR           Look in DIR instead of OUTDIR to decide which
+                        variables already exist (flat layout only).  For use
+                        when extract output has been deleted but output from
+                        a later step (e.g., compress or repack) remains.
+                        Matches both <var> and <var>.<freq> directories.
   --force               Overwrite existing output (default: skip variables
                         whose output directory already exists and is non-empty)
   -h, --help            Show this help message
@@ -109,11 +114,13 @@ chunk_dir_for_year() {
 VARS="$DEFAULT_VARS"
 SCRIPTS_DIR="$(dirname "$(realpath "$0")")"
 FORCE=0
+CHECKDIR=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --vars)    VARS="$2"; shift 2 ;;
         --scripts) SCRIPTS_DIR="$(realpath "$2")"; shift 2 ;;
+        --check)   CHECKDIR="$(realpath "$2")"; shift 2 ;;
         --force)   FORCE=1; shift ;;
         -h|--help) usage ;;
         -*) echo "Error: Unknown option $1" >&2; usage ;;
@@ -150,7 +157,10 @@ if [[ $START_YEAR -gt $END_YEAR ]]; then
     exit 1
 fi
 
+CHECKDIR="${CHECKDIR:-$OUTDIR}"
+
 # Validate inputs
+[[ ! -d "$CHECKDIR" ]] && { echo "Error: --check directory not found: $CHECKDIR" >&2; exit 1; }
 [[ ! -d "$WRFDIR" ]]   && { echo "Error: WRFDIR not found: $WRFDIR" >&2; exit 1; }
 [[ ! -d "$SETUPDIR" ]] && { echo "Error: SETUPDIR not found: $SETUPDIR" >&2; exit 1; }
 [[ ! -f "$SETUPDIR/sim.env" ]] && { echo "Error: sim.env not found in $SETUPDIR" >&2; exit 1; }
@@ -182,6 +192,16 @@ for (( year = START_YEAR; year <= END_YEAR; year++ )); do
     fi
 done
 
+# True if CHECKDIR holds a non-empty directory for name, either bare
+# (<name>) or with a frequency suffix (<name>.<freq>, as in later steps).
+has_output() {
+    local d
+    for d in "$CHECKDIR/$1" "$CHECKDIR/$1".*; do
+        [[ -d "$d" && -n "$(ls -A "$d" 2>/dev/null)" ]] && return 0
+    done
+    return 1
+}
+
 # Split comma-separated var list into an array
 IFS=',' read -ra VARLIST <<< "$VARS"
 
@@ -202,26 +222,24 @@ for var in "${VARLIST[@]}"; do
     skip_wbgt=0
     skip_wbgtmax=0
 
-    # Skip if output directory exists and is non-empty, unless --force
+    # Skip if output directory exists and is non-empty in CHECKDIR, unless --force
     if [[ $FORCE -eq 0 ]]; then
         if [[ "$var" == "fx" ]]; then
-            if [[ -d "$OUTDIR/sftlf" && -n "$(ls -A "$OUTDIR/sftlf" 2>/dev/null)" ]] && \
-               [[ -d "$OUTDIR/orog"  && -n "$(ls -A "$OUTDIR/orog"  2>/dev/null)" ]]; then
+            if has_output sftlf && has_output orog; then
                 echo "Skipping fx: output directories (sftlf, orog) already exist and are non-empty"
                 continue
             fi
         elif [[ "$var" == "wbgt" ]]; then
-            if [[ -d "$OUTDIR/wbgt.1hr" && -n "$(ls -A "$OUTDIR/wbgt.1hr" 2>/dev/null)" ]] && \
-               [[ -d "$OUTDIR/utci.1hr" && -n "$(ls -A "$OUTDIR/utci.1hr" 2>/dev/null)" ]]; then
+            if has_output wbgt && has_output utci; then
                 echo "Skipping wbgt extraction: output directories (wbgt.1hr, utci.1hr) already exist and are non-empty"
                 skip_wbgt=1
             fi
-            if [[ -d "$OUTDIR/wbgtmax.day" && -n "$(ls -A "$OUTDIR/wbgtmax.day" 2>/dev/null)" ]]; then
+            if has_output wbgtmax; then
                 echo "Skipping wbgtmax: output directory (wbgtmax.day) already exists and is non-empty"
                 skip_wbgtmax=1
             fi
             [[ $skip_wbgt -eq 1 && $skip_wbgtmax -eq 1 ]] && continue
-        elif [[ -d "$OUTDIR/$var" && -n "$(ls -A "$OUTDIR/$var" 2>/dev/null)" ]]; then
+        elif has_output "$var"; then
             echo "Skipping $var: output directory already exists and is non-empty"
             continue
         fi
@@ -269,11 +287,15 @@ for var in "${VARLIST[@]}"; do
         > "$max_cmdfile"
         maxvardir="$OUTDIR/wbgtmax.day"
         roundtime="time=round(time*2)/2;time_bnds=round(time_bnds)"
+        # If wbgt extraction was skipped, its annual files live in CHECKDIR
+        # (same filenames as extract output), not necessarily OUTDIR.
+        wbgtindir="$OUTDIR/wbgt.1hr"
+        [[ $skip_wbgt -eq 1 ]] && wbgtindir="$CHECKDIR/wbgt.1hr"
 
         for (( year = START_YEAR; year <= END_YEAR; year++ )); do
             [[ $skip_wbgtmax -eq 1 ]] && break
             mkdir -p "$maxvardir"
-            ann_in="$OUTDIR/wbgt.1hr/wbgt_${fname_base}_1hr_${year}01010000-${year}12312300.nc"
+            ann_in="$wbgtindir/wbgt_${fname_base}_1hr_${year}01010000-${year}12312300.nc"
             max_out="$maxvardir/wbgtmax_${fname_base}_day_${year}0101-${year}1231.nc"
             echo "bash -c \"cdo -O daymax $ann_in $max_out && ncap2 -h -O -s '${roundtime}' $max_out $max_out && ncrename -h -v wbgt,wbgtmax $max_out\"" >> "$max_cmdfile"
         done
