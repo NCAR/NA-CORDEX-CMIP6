@@ -61,12 +61,20 @@ python $post/setup.py $sdir $post/sim_config/$id.yml
 
 $post/extract.sh $raw $sdir $outdir1 $years $cmddir1
 
+## Casper caps queued jobs per user (~5000, array subjobs counted
+## individually).  launch_multi waits for room before each submission
+## (--max-queued, default 4500), so it can block for hours: run it
+## inside tmux or screen.
+
 $post/launch_multi --workflow cordex --run $rundir1 $cmddir1/*cmd
 
 ## wbgt (+utci) runs extra parallel, else it takes forever
+## (wbgtmax is derived from the annual wbgt files at the end of the chain;
+## --skip-missing covers the case where some stages were skipped)
 
-$post/launch_multi --workflow cordex --run $rundir1 --chain \
-  $cmddir1/wbgt/wbgt_mon.cmd $cmddir1/wbgt/wbgt_cat.cmd
+$post/launch_multi --workflow cordex --run $rundir1 --chain --skip-missing \
+  $cmddir1/wbgt/wbgt_mon.cmd $cmddir1/wbgt/wbgt_cat.cmd \
+  $cmddir1/wbgt/wbgtmax.cmd
 
 
 ## wait until it finishes, check everything ran correctly
@@ -221,16 +229,27 @@ https://cmiphub.dkrz.de/info/display_qc_results.html
 ## day files get a WARN for chunksize 1 along time, which is necessary
 ## b/c leap years + xarray can't handle different chunk sizes in a dataset
 
-## Some of the variables in the NCAR-CORDEX-CMIP6_1hr.json files (fzra
-## heatidz humidex wchill) aren't in the controlled vocabulary CMOR
-## tables, which means that the CORDEX-CMIP6 plugin can't identify the
-## main variable, which gives FAILs for [CDXT001] Time Chunking and
-## [FILE003] Compression.
+## Some of the variables in the NCAR-CORDEX-CMIP6_*.json files aren't
+## in the controlled vocabulary CMOR tables, which means that the
+## CORDEX-CMIP6 plugin can't identify the main variable, which gives
+## FAILs for [CDXT001] Time Chunking and [FILE003] Compression:
+##   1hr: fzra heatidx humidex wchill wbgt utci capemu cinmu alb rsdsdiff
+##   6hr: zlfc lai ustar hur{1000..100}
+##   day: wbgtmax
 
 ## We also get [CDXT001] Time Chunking FAILs for the variables that we
-## are providing 6-hourly but are requested 1-hourly (hfls hfss rlus
-## fsus [ua,va][50,100,150]m), because it can't find an entry for that
-## var+freq in the CMOR tables.
+## are providing 6-hourly but are requested 1-hourly (hfls hfso li clivi
+## mrsos [ua,va][50,100,150]m), because it can't find an entry for that
+## var+freq in the CMOR tables.  (rsus, rlus and hfss are now hourly.)
+
+## Instantaneous fields labeled with CORDEX "time: mean" cell_methods,
+## because the data request takes precedence over the local tables:
+## hfls hfss rlut rsdsdir.
+
+## When re-running extract on a simulation processed before the
+## 2026-10 variable batch, delete the old rsus.6hr, rlus.6hr and
+## hfss.6hr directories (extract, format, aggregate data) first, or both
+## the 6hr and 1hr versions will flow downstream.
 
 ## fzra & humidex don't have a CF standard_name (yet)
 
@@ -308,6 +327,48 @@ done
 cd $topdir
 
 
+################
+# Step 10 alternate: bias-corrected indexes
+
+bcroot=/glade/derecho/scratch/mcginnis/jacob/na-cordex-ba/ece/CORDEX-Adjust/bias-adjusted-output/NAM-12i/NCAR
+
+bcind=$scratch/bc-index
+
+# symlink files into flat directories
+
+for gcm in EC-Earth3-Veg MPI-ESM1-2-HR; do
+for scen in ssp245 ssp370; do
+for var in hurs pr ps rlds rsds sfcWind tas tasmax tasmin uas vas; do
+outdir=$bcind/flat/$gcm/$scen/$var.day
+echo $outdir
+mkdir -p $outdir; cd $outdir
+for chunk in historical $scen; do
+ln -s $bcroot/$gcm/$chunk/*/*/*/day/${var}Adjust/*/${var}Adjust*nc .
+done
+done
+done
+done
+
+cd $bcind
+
+gcm=EC-Earth3-Veg
+scen=ssp370
+bindir=$bcind/flat/$gcm/$scen
+boutdir=$bcind/data/$gcm/$scen
+bcmddir=$bcind/cmd/$gcm/$scen
+brundir=$bcind/run/$gcm/$scen
+btmpdir=$bcind/tmp
+
+python $post/index.py --preset gis --badj  --tmp $btmpdir \
+                      $bindir $boutdir $post $bcmddir
+
+$post/launch_multi --run $brundir --wall 01:00:00 --mem 50GB\
+                   --copy $post/clean_index.sh --chain --skip-missing\
+                   $bcmddir/units.cmd $bcmddir/concat.cmd \
+                   $bcmddir/split.cmd $bcmddir/indexes.cmd \
+                   $bcmddir/derived.cmd $bcmddir/cleanup.cmd
+
+
 
 ################
 # Step 10.5: climate index running-means for GIS
@@ -317,9 +378,15 @@ cd $topdir
 # future runs to make them.) These get put in $scratch/index/$id.
 # Requires corresponding -hist directory to exist alongside $topdir .
 
+# for raw data:
 $post/indrun.sh $scratch $id
-
 indrundir=$scratch/index/$id
+
+# for bias-corrected data:
+bcinddir=$scratch/bc-index/data/$gcm/$scen
+indrundir=$scratch/index/bias-corrected/$id
+$post/indrun.sh --badj $bcinddir $indrundir
+
 rundiri=$indrundir/run
 cmddiri=$indrundir/cmd
 

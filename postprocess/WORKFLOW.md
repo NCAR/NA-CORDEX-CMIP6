@@ -69,6 +69,11 @@ python $post/setup.py $sdir $post/sim_config/$id.yml
 
 $post/extract.sh $raw $sdir $outdir1 $years $cmddir1
 
+## Casper caps queued jobs per user (~5000, array subjobs counted
+## individually).  launch_multi waits for room before each submission
+## (--max-queued, default 4500), so it can block for hours: run it
+## inside tmux or screen.
+
 $post/launch_multi --workflow cordex --run $rundir1 $cmddir1/*cmd
 
 ## wbgt (+utci) runs extra parallel, else it takes forever
