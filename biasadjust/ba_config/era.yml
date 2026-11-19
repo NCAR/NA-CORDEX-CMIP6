@@ -33,7 +33,7 @@ ba_id: "PIK-ISIMIP3-ERA5Land-1985-2014"
 # input file attributes and stops on any mismatch.
 domain_id: "NAM-12i"
 driving_source_id: "ERA5"
-driving_variant_label: "r1i1pi1"  # TODO: copied from sim-info.tsv; CORDEX expects r1i1p1f1 for ERA5? verify
+driving_variant_label: "r1i1p1f1"  # TODO: copied from sim-info.tsv; CORDEX expects r1i1p1f1 for ERA5? verify
 institution_id: "NCAR"
 source_id: "WRF461S-SN"
 version_realization: "v1-r1"
