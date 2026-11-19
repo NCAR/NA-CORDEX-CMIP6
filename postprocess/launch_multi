@@ -25,7 +25,13 @@
 #                         (Useful for chains with some steps already done)
 #   --dry               Print commands without executing
 #   --sleep N           Delay in seconds between job submissions (default: 1)
-#   --wall TIME         Wallclock time limit (default: 00:20:00)
+#   --max-queued N      Before each submission, wait until (your queued jobs
+#                         + steps in the commandfile) <= N.  Array subjobs
+#                         count individually, as they do for Casper's
+#                         per-user limit.  0 disables.  (default: 4500, or
+#                         $LAUNCH_MULTI_MAX_QUEUED if set)
+#   --poll N            Seconds between queue checks while waiting (default: 120)
+#   --wall TIME        Wallclock time limit (default: 00:20:00)
 #   --mem MEM           Memory (e.g. 25GB) (default: none; --mem is not passed)
 #   -A ACCOUNT          PBS account (default: $PROJECT)
 #   -N NAME             Job name or prefix (default: basename of cmdfile)
@@ -59,8 +65,10 @@ dry=0
 jobprefix=""
 join="oe"
 mail="a"
+max_queued="${LAUNCH_MULTI_MAX_QUEUED:-4500}"
 mem=""
 passthrough=()
+poll=120
 queue="casper"
 runpath=""
 scripts_dir="$(dirname "$(realpath "$0")")"
@@ -169,6 +177,14 @@ while [[ $# -gt 0 ]]; do
             sleep="$2"
             shift 2
             ;;
+        --max-queued)
+            max_queued="$2"
+            shift 2
+            ;;
+        --poll)
+            poll="$2"
+            shift 2
+            ;;
         -N)
             jobprefix="$2"
             shift 2
@@ -252,6 +268,49 @@ for cf in "${cmdfiles[@]}"; do
     [[ -f "$cf" ]] || die "Commandfile not found: $cf"
 done
 
+[[ "$max_queued" =~ ^[0-9]+$ ]] || die "--max-queued must be a non-negative integer"
+[[ "$poll" =~ ^[0-9]+$ && $poll -gt 0 ]] || die "--poll must be a positive integer"
+
+# Number of steps (non-blank, non-comment lines) in a commandfile; each
+# becomes one PBS array subjob.
+count_steps() {
+    grep -cvE '^[[:space:]]*(#|$)' "$1" || true
+}
+
+# A commandfile larger than the queue limit can never be submitted;
+# catch that before submitting anything.
+if [[ $max_queued -gt 0 ]]; then
+    for cf in "${cmdfiles[@]}" ${finalfile:+"$finalfile"}; do
+        n=$(count_steps "$cf")
+        [[ $n -le $max_queued ]] || die "$cf has $n steps, more than --max-queued ($max_queued).
+Split it first, e.g.: split -l 2000 --additional-suffix=.cmd $cf ${cf%.cmd}_part_"
+    done
+fi
+
+# Count this user's queued + running jobs, counting array subjobs
+# individually and skipping array parents ("123[]") and finished
+# subjobs (state X/F).  Returns nonzero if qstat fails.
+queued_jobs() {
+    local out
+    out=$(qstat -t -u "$USER" 2>/dev/null) || return 1
+    awk '$1 ~ /^[0-9]/ && $1 !~ /\[\]/ && $10 !~ /^[XF]$/ {n++} END {print n+0}' <<< "$out"
+}
+
+# Block until there is room in the queue for $1 more jobs.
+wait_for_room() {
+    local need="$1" n
+    [[ $max_queued -le 0 || $dry -eq 1 ]] && return 0
+    while :; do
+        if n=$(queued_jobs); then
+            (( n + need <= max_queued )) && return 0
+            echo "  Waiting: $n queued + $need new > $max_queued; rechecking in ${poll}s ($(date +%H:%M))"
+        else
+            echo "  Waiting: qstat failed; rechecking in ${poll}s ($(date +%H:%M))"
+        fi
+        sleep "$poll"
+    done
+}
+
 # Check config file
 if [[ ! -f "$config" ]]; then
     if [[ $config_specified -eq 1 ]]; then
@@ -301,6 +360,8 @@ submit_job() {
     rundir="$runpath/$jobname"
     echo "=== ${jobname}${label} ==="
 
+    wait_for_room "$(count_steps "$cmdfile_abs")"
+
     run_cmd "rm -rf $(printf %q "$rundir")"
     run_cmd "mkdir -p $(printf %q "$rundir")"
     run_cmd "cp $(printf %q "$cmdfile_abs") $(printf %q "$rundir/")"
@@ -335,7 +396,14 @@ submit_job() {
         echo "  $launch_cmd"
         last_jobid="DRY_JOBID_${jobname}"
     else
-        last_jobid=$(eval "$launch_cmd" | tee /dev/stderr | tail -1)
+        local out rc=0
+        out=$(eval "$launch_cmd") || rc=$?
+        echo "$out" >&2
+        last_jobid=$(tail -1 <<< "$out")
+        if [[ $rc -ne 0 || ! "$last_jobid" =~ ^[0-9]+(\[\])?\.[[:alnum:]._-]+$ ]]; then
+            die "Submission failed for $cmd (no job ID returned).
+This and any later commandfiles were NOT submitted.  Already submitted: ${all_jobids[*]:-none}"
+        fi
         echo "  Submitted: $last_jobid"
     fi
 
