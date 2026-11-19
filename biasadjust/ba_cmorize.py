@@ -17,6 +17,9 @@ for one variable and writes a single multi-year file that:
   - sets activity_id, bc_method_id, and the id_attribute (bc_info) from
     the config, and checks the config ba_id against the input's
     bc_observation_id and bc_period
+  - writes the config calendar; inputs may use another Gregorian-family
+    calendar (standard / gregorian / proleptic_gregorian) if all their
+    dates are on or after 1582-10-15, where those calendars agree
   - filters global attributes by the rules in ba_attrs.yml
   - writes uncompressed NETCDF4_CLASSIC; compression is done afterwards by
     postprocess/compress.sh
@@ -142,7 +145,7 @@ def check_inputs(dsets, infiles, var, exp, cfg, rules, meta):
             die(f"{name}: {var} attributes differ from first input")
 
         cal = ds["time"].getncattr("calendar")
-        if cal != cfg["calendar"]:
+        if cal != cfg["calendar"] and not gregorian_equiv(ds["time"], cfg["calendar"]):
             die(f"{name}: calendar {cal!r}, config says {cfg['calendar']!r}")
 
         lat, lon = ds["lat"][:].astype("f8"), ds["lon"][:].astype("f8")
@@ -156,6 +159,26 @@ def check_inputs(dsets, infiles, var, exp, cfg, rules, meta):
         if not (np.all(d > 0) and np.allclose(d, d[0], rtol=0, atol=1e-5)):
             die(f"{axis} is not ascending with uniform spacing")
     return kept, vattrs, lat0, lon0
+
+
+# Calendars that give identical dates on and after 1582-10-15
+GREGORIAN = {"standard", "gregorian", "proleptic_gregorian"}
+GREGORIAN_START = cftime.datetime(1582, 10, 15, calendar="proleptic_gregorian")
+
+
+def gregorian_equiv(t, cfg_cal):
+    """True if time variable t uses a Gregorian-family calendar other than
+    cfg_cal (also Gregorian-family) and its reference date and all values
+    are on or after 1582-10-15, where those calendars agree.  The output
+    then carries cfg_cal (e.g. ERA5: inputs say proleptic_gregorian, the
+    raw archive says standard)."""
+    cal, units = t.getncattr("calendar"), t.getncattr("units")
+    if cal not in GREGORIAN or cfg_cal not in GREGORIAN:
+        return False
+    vals = t[:]
+    ref, lo = cftime.num2date([0, np.min(vals)], units, "proleptic_gregorian",
+                              only_use_cftime_datetimes=True)
+    return min(ref, lo) >= GREGORIAN_START
 
 
 def build_time(dsets, cal, units, outfile):
